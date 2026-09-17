@@ -1,0 +1,54 @@
+services:
+  nginx:
+    image: nginx:stable
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+      - ${CERTBOT_WEBROOT:-./certbot/www}:/var/www/certbot:ro
+      - ${LETSENCRYPT_DIR:-./certbot/conf}:/etc/letsencrypt:ro
+    networks: [web]
+    logging:
+      driver: local
+
+  frontend:
+    profiles: [app]
+    image: ${FE_IMAGE:?Set FE_IMAGE in .env}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      API_INTERNAL_URL: http://backend:8080
+    expose: ["3000"]
+    networks: [web]
+    logging:
+      driver: local
+
+  backend:
+    profiles: [app]
+    image: ${BE_IMAGE:?Set BE_IMAGE in .env}
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8080"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      SPRING_DATASOURCE_URL: jdbc:mysql://${DB_HOST:?Set DB_HOST to the DB EC2 private address}:${DB_PORT:-3306}/${MYSQL_DATABASE:?Set MYSQL_DATABASE}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:?Set MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    expose: ["8080"]
+    networks: [web]
+    logging:
+      driver: local
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: [tools]
+    volumes:
+      - ${CERTBOT_WEBROOT:-./certbot/www}:/var/www/certbot
+      - ${LETSENCRYPT_DIR:-./certbot/conf}:/etc/letsencrypt
+
+networks:
+  web:
