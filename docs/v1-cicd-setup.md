@@ -48,9 +48,9 @@ GitHub Environments 권한을 사용하지 않는다. BE·FE 각각 Settings →
 | SSH_PRIVATE_KEY | 공통 배포 사용자 SSH 개인 키 |
 | DEV_SSH_KNOWN_HOSTS | 별도 신뢰 경로로 확인한 개발 서버 공개 호스트 키의 known_hosts 행 |
 | PROD_SSH_KNOWN_HOSTS | 별도 신뢰 경로로 확인한 운영 서버 공개 호스트 키의 known_hosts 행 |
-| APP_ENV | 해당 저장소 서비스의 실행 환경설정. FE 저장소와 BE 저장소가 서로 다른 값을 가짐 |
+| APP_ENV | BE와 DB의 실행 환경설정. BE 저장소에만 등록 |
 
-FE 저장소의 `APP_ENV`는 `env/frontend.env.example`, BE 저장소의 `APP_ENV`는 `env/backend.env.example` 형식으로 등록한다. 두 저장소는 Secret 저장 공간이 분리되어 있으므로 같은 이름을 사용해도 값이 섞이지 않는다. 각 설정은 한 줄 `KEY=VALUE` 형식이어야 하고 이미지 키는 넣지 않는다.
+현재 FE에는 실행 시점 환경변수가 없으므로 FE 저장소에 `APP_ENV`를 등록하지 않는다. 공개 API 주소는 FE 저장소의 `DEV_API_BASE_URL`, `PROD_API_BASE_URL`로 관리하고 이미지 빌드 시 주입한다. BE 저장소의 `APP_ENV`는 `env/backend.env.example` 형식으로 등록하며, 각 설정은 한 줄 `KEY=VALUE` 형식이어야 하고 이미지 키는 넣지 않는다.
 
 BE의 `APP_ENV`는 Spring Boot와 MySQL 설정을 한 파일에서 관리한다. 개발 Compose는 데이터소스 주소만 `mysql:3306/app`으로 덮어쓰고, 운영 Compose는 Secret에 등록한 운영 DB EC2 주소를 사용한다. DB 비밀번호 변경은 DB 계정 변경과 함께 별도로 조율한다. MySQL 초기화 환경변수만 바꿔도 기존 DB 계정 비밀번호가 자동 변경되는 것은 아니다.
 
@@ -68,7 +68,7 @@ BE의 `APP_ENV`는 Spring Boot와 MySQL 설정을 한 파일에서 관리한다.
 Ubuntu 서버에 Docker Engine·Compose 플러그인, bash, python3, flock이 필요하다. 배포 사용자는 sudo 입력 없이 Docker를 실행할 수 있어야 한다. SSH 방화벽은 실제 실행 러너가 접근 가능한 경로로 준비한다.
 
 1. 서버에 이 CLOUD 저장소의 변경 파일을 반영한다. 배포 스크립트는 앱 워크플로가 자동으로 내려받지 않는다.
-2. 실제 운영 디렉터리에서 `.env.example`을 `.env`로 복사하고 실제 이미지 SHA와 인증서 경로를 입력한 뒤 `chmod 600 .env`를 실행한다. 서비스 설정은 첫 배포 때 각각 `env/frontend.env`, `env/backend.env`로 생성된다.
+2. 실제 운영 디렉터리에서 `.env.example`을 `.env`로 복사하고 실제 이미지 SHA와 인증서 경로를 입력한 뒤 `chmod 600 .env`를 실행한다. 첫 FE 배포에서는 빈 `env/frontend.env`가 생성되고, 첫 BE 배포에서는 BE 저장소의 `APP_ENV`로 `env/backend.env`가 생성된다.
 3. dev는 `nginx-dev/default.conf`와 `dev.dameokja.com` 인증서를 사용하고, prod는 `nginx-prod/default.conf`와 `dameokja.com` 인증서를 사용한다. 두 환경의 Nginx 디렉터리를 서로 바꾸지 않는다.
 4. BE의 `src/main/resources/db/schema.sql`과 동일한 파일을 개발 서버의 `/home/ubuntu/app/db/schema.sql`에 배치한다. 개발 Compose는 이 파일을 MySQL 초기화 디렉터리에 읽기 전용으로 연결한다.
 5. prod DB에는 같은 SQL을 검토하여 적용한다. 기존 데이터가 있다면 해당 SQL을 무작정 재실행하지 않는다. 운영 Compose의 validate는 스키마를 생성하지 않는다.

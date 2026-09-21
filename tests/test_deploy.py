@@ -133,10 +133,7 @@ class DeployTest(unittest.TestCase):
                     "MYSQL_ROOT_PASSWORD=new-root-secret\n"
                 )
             else:
-                incoming = (
-                    "NODE_ENV=production\nPORT=3000\nHOSTNAME=0.0.0.0\n"
-                    "API_INTERNAL_URL=http://backend:8080\n"
-                )
+                incoming = ""
             result = subprocess.run(
                 [BASH, str(ROOT / "scripts/deploy-v1.sh").replace("\\", "/"),
                  service, image, "test", "prod-compose.yaml"],
@@ -167,7 +164,7 @@ class DeployTest(unittest.TestCase):
         self.assertEqual(running, NEW)
         self.assertIn("FE_IMAGE=" + NEW, env)
         self.assertIn("BE_IMAGE=" + OLD, env)
-        self.assertIn("API_INTERNAL_URL=http://backend:8080", service_env)
+        self.assertEqual(service_env.strip(), "")
 
     def test_pull_failure_preserves_configuration(self):
         result, env, service_env, running, _, original, original_service = self.run_deploy("pull_failure")

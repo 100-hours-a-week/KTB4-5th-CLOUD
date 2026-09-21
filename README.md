@@ -15,7 +15,7 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-`.env`의 GHCR 주소와 인증서 경로를 실제 값으로 수정한다. FE 실행 설정은 FE 저장소의 `APP_ENV`에서 `env/frontend.env`로, BE와 DB 설정은 BE 저장소의 `APP_ENV`에서 `env/backend.env`로 배포된다. 인증서는 이미 발급된 `dameokja.com` 인증서를 사용하며, `LETSENCRYPT_DIR`에는 `live/`와 `archive/`가 포함된 기존 Certbot 저장 폴더를 지정한다. 갱신 시에는 저장된 webroot 경로 `/var/www/certbot`을 사용한다.
+`.env`의 GHCR 주소와 인증서 경로를 실제 값으로 수정한다. FE 공개 API 주소는 FE 저장소의 Repository Variable로 빌드 시 주입하고, BE와 DB 설정은 BE 저장소의 `APP_ENV`에서 `env/backend.env`로 배포된다. 인증서는 이미 발급된 `dameokja.com` 인증서를 사용하며, `LETSENCRYPT_DIR`에는 `live/`와 `archive/`가 포함된 기존 Certbot 저장 폴더를 지정한다. 갱신 시에는 저장된 webroot 경로 `/var/www/certbot`을 사용한다.
 
 BE 저장소의 `APP_ENV`에서 `SPRING_DATASOURCE_URL`을 DB EC2의 프라이빗 IP 또는 프라이빗 DNS로 지정하고 기존 DB 이름과 애플리케이션 계정을 입력한다. 운영 주소에는 `localhost`나 Compose 서비스명 `mysql`을 사용하지 않는다.
 

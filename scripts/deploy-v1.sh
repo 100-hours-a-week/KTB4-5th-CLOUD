@@ -28,7 +28,9 @@ flock -w 600 9 || { echo "다른 배포가 진행 중입니다."; exit 1; }
 work=$(mktemp -d .deploy/release.XXXXXXXX)
 trap 'rm -rf -- "$work"' EXIT
 cat > "$work/incoming-service.env"
-test -s "$work/incoming-service.env"
+if [[ "$service" == backend ]]; then
+    test -s "$work/incoming-service.env"
+fi
 cp .env "$work/previous.env"
 had_service_env=false
 if [[ -f "$service_env" ]]; then
@@ -76,7 +78,8 @@ def parse_service_env(source):
             raise SystemExit(f"환경설정 키가 중복되었습니다: {key}")
         keys[key] = value
     required = {
-        "frontend": ("NODE_ENV", "PORT", "HOSTNAME", "API_INTERNAL_URL"),
+        # FE는 현재 실행 시점 환경변수가 없으므로 빈 설정을 허용한다.
+        "frontend": (),
         "backend": (
             "SERVER_PORT",
             "SPRING_DATASOURCE_URL",
