@@ -1,0 +1,95 @@
+services:
+  nginx:
+    image: nginx:stable
+    restart: "no"
+    ports: ["80:80", "443:443"]
+    volumes:
+      # 개발 도메인과 개발 인증서 설정만 마운트한다.
+      - ./nginx-dev:/etc/nginx/conf.d:ro
+      - ${CERTBOT_WEBROOT:-./certbot/www}:/var/www/certbot:ro
+      - ${LETSENCRYPT_DIR:-./certbot/conf}:/etc/letsencrypt:ro
+    networks: [default]
+    logging:
+      driver: local
+
+  frontend:
+    profiles: [app]
+    image: ${FE_IMAGE:?FE_IMAGE를 설정하세요}
+    restart: "no"
+    env_file:
+      - path: ./env/frontend.env
+        required: false
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    networks: [default]
+    logging:
+      driver: local
+
+  backend:
+    profiles: [app]
+    image: ${BE_IMAGE:?BE_IMAGE를 설정하세요}
+    restart: "no"
+    env_file:
+      # 백엔드와 개발 DB 설정은 BE 저장소의 APP_ENV에서 함께 관리한다.
+      - path: ./env/backend.env
+        required: false
+    environment:
+      # 공통 APP_ENV의 운영 DB 주소 대신 개발 MySQL 컨테이너를 사용한다.
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/app
+      # MySQL 초기화 전용 값은 백엔드 컨테이너에 전달하지 않는다.
+      MYSQL_DATABASE: ""
+      MYSQL_USER: ""
+      MYSQL_PASSWORD: ""
+      MYSQL_ROOT_PASSWORD: ""
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose: ["8080"]
+    # 현재 앱에 전용 헬스 API가 없어 Swagger 명세 응답으로 기동 상태를 확인한다.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/v3/api-docs"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    networks: [default]
+    logging:
+      driver: local
+
+  mysql:
+    image: mysql:8.4
+    restart: "no"
+    env_file:
+      # backend와 동일한 파일을 사용해 DB 계정 값을 한 곳에서 관리한다.
+      - path: ./env/backend.env
+        required: false
+    # 개발 DB는 영속 볼륨을 사용하지 않으며 컨테이너가 제거되면 데이터도 사라진다.
+    tmpfs:
+      - /var/lib/mysql
+    volumes:
+      # 빈 데이터 디렉터리를 초기화할 때 서버의 DDL을 한 번 실행한다.
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [default]
+    logging:
+      driver: local
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: [tools]
+    volumes:
+      - ${CERTBOT_WEBROOT:-./certbot/www}:/var/www/certbot
+      - ${LETSENCRYPT_DIR:-./certbot/conf}:/etc/letsencrypt
+
+networks:
+  default:

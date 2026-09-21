@@ -6,7 +6,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx:/etc/nginx/conf.d:ro
+      # 운영 도메인과 운영 인증서 설정만 마운트한다.
+      - ./nginx-prod:/etc/nginx/conf.d:ro
       - ${CERTBOT_WEBROOT:-./certbot/www}:/var/www/certbot:ro
       - ${LETSENCRYPT_DIR:-./certbot/conf}:/etc/letsencrypt:ro
     networks: [web]
@@ -17,12 +18,16 @@ services:
     profiles: [app]
     image: ${FE_IMAGE:?Set FE_IMAGE in .env}
     restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-      HOSTNAME: "0.0.0.0"
-      API_INTERNAL_URL: http://backend:8080
+    env_file:
+      - path: ./env/frontend.env
+        required: false
     expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     networks: [web]
     logging:
       driver: local
@@ -31,14 +36,24 @@ services:
     profiles: [app]
     image: ${BE_IMAGE:?Set BE_IMAGE in .env}
     restart: unless-stopped
+    env_file:
+      # 운영 백엔드와 외부 DB 연결 설정은 BE 저장소의 APP_ENV에서 함께 관리한다.
+      - path: ./env/backend.env
+        required: false
     environment:
-      SERVER_PORT: "8080"
-      SERVER_FORWARD_HEADERS_STRATEGY: framework
-      SPRING_DATASOURCE_URL: jdbc:mysql://${DB_HOST:?Set DB_HOST to the DB EC2 private address}:${DB_PORT:-3306}/${MYSQL_DATABASE:?Set MYSQL_DATABASE}
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:?Set MYSQL_USER}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # 개발 MySQL 초기화 전용 값은 운영 백엔드 컨테이너에 전달하지 않는다.
+      MYSQL_DATABASE: ""
+      MYSQL_USER: ""
+      MYSQL_PASSWORD: ""
+      MYSQL_ROOT_PASSWORD: ""
     expose: ["8080"]
+    # 현재 앱에 전용 헬스 API가 없어 Swagger 명세 응답으로 기동 상태를 확인한다.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/v3/api-docs"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     networks: [web]
     logging:
       driver: local
