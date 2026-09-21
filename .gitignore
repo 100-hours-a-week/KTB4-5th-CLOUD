@@ -3,3 +3,6 @@
 !.env.example
 certbot/
 *.log
+.deploy/
+env/*.env
+!env/*.env.example
