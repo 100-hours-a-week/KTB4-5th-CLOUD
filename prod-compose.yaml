@@ -16,7 +16,8 @@ services:
 
   frontend:
     profiles: [app]
-    image: ${FE_IMAGE:?Set FE_IMAGE in .env}
+    # 첫 배포 전에는 자리표시자를 사용하고, FE 배포 시 실제 digest로 교체한다.
+    image: ${FE_IMAGE:-ghcr.io/100-hours-a-week/ktb4-5th-fe:not-deployed}
     restart: unless-stopped
     env_file:
       - path: ./env/frontend.env
@@ -34,7 +35,8 @@ services:
 
   backend:
     profiles: [app]
-    image: ${BE_IMAGE:?Set BE_IMAGE in .env}
+    # 첫 배포 전에는 자리표시자를 사용하고, BE 배포 시 실제 digest로 교체한다.
+    image: ${BE_IMAGE:-ghcr.io/100-hours-a-week/ktb4-5th-be:not-deployed}
     restart: unless-stopped
     env_file:
       # 운영 백엔드와 외부 DB 연결 설정은 BE 저장소의 APP_ENV에서 함께 관리한다.
