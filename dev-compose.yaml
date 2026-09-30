@@ -14,7 +14,8 @@ services:
 
   frontend:
     profiles: [app]
-    image: ${FE_IMAGE:?FE_IMAGE를 설정하세요}
+    # 첫 배포 전에는 자리표시자를 사용하고, FE 배포 시 실제 digest로 교체한다.
+    image: ${FE_IMAGE:-ghcr.io/100-hours-a-week/ktb4-5th-fe:not-deployed}
     restart: "no"
     env_file:
       - path: ./env/frontend.env
@@ -32,7 +33,8 @@ services:
 
   backend:
     profiles: [app]
-    image: ${BE_IMAGE:?BE_IMAGE를 설정하세요}
+    # 첫 배포 전에는 자리표시자를 사용하고, BE 배포 시 실제 digest로 교체한다.
+    image: ${BE_IMAGE:-ghcr.io/100-hours-a-week/ktb4-5th-be:not-deployed}
     restart: "no"
     env_file:
       # 백엔드와 개발 DB 설정은 BE 저장소의 APP_ENV에서 함께 관리한다.
@@ -52,7 +54,7 @@ services:
     expose: ["8080"]
     # 현재 앱에 전용 헬스 API가 없어 Swagger 명세 응답으로 기동 상태를 확인한다.
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/v3/api-docs"]
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
       interval: 10s
       timeout: 5s
       start_period: 60s
@@ -68,10 +70,9 @@ services:
       # backend와 동일한 파일을 사용해 DB 계정 값을 한 곳에서 관리한다.
       - path: ./env/backend.env
         required: false
-    # 개발 DB는 영속 볼륨을 사용하지 않으며 컨테이너가 제거되면 데이터도 사라진다.
-    tmpfs:
-      - /var/lib/mysql
+    # 기존 mysql_data 볼륨과 구분하여 개발 DB 데이터를 디스크에 보존한다.
     volumes:
+      - dev_mysql_data:/var/lib/mysql
       # 빈 데이터 디렉터리를 초기화할 때 서버의 DDL을 한 번 실행한다.
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
@@ -93,3 +94,6 @@ services:
 
 networks:
   default:
+
+volumes:
+  dev_mysql_data:
