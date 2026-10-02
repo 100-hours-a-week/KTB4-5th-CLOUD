@@ -1,0 +1,4 @@
+__pycache__/
+instances.json
+discord-alerts.template.json
+generated/

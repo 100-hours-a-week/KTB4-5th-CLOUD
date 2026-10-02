@@ -1,0 +1,17 @@
+[
+  "dev-v1 서버 중단 알람",
+  "awsec2-i-0eced2b65959c4faf-GreaterThanOrEqualToThreshold-CPUUtilization",
+  "dameokja-dev-http-5xx-ticket",
+  "dameokja-dev-memory-ticket",
+  "dameokja-dev-disk-ticket",
+  "dameokja-prod-slo-ingredient-create-fast-burn-page",
+  "dameokja-prod-slo-ingredient-create-slow-burn-ticket",
+  "dameokja-prod-slo-ingredient-read-fast-burn-page",
+  "dameokja-prod-slo-ingredient-read-slow-burn-ticket",
+  "dameokja-prod-slo-notification-poll-fast-burn-page",
+  "dameokja-prod-slo-notification-poll-slow-burn-ticket",
+  "dameokja-prod-http-5xx-ticket",
+  "dameokja-prod-http-4xx-surge-ticket",
+  "dameokja-prod-memory-ticket",
+  "dameokja-prod-disk-ticket"
+]

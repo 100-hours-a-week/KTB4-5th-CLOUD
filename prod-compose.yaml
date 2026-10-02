@@ -7,9 +7,12 @@ services:
       - "443:443"
     volumes:
       # 운영 도메인과 운영 인증서 설정만 마운트한다.
-      - ./nginx-prod:/etc/nginx/conf.d:ro
+      - ./nginx:/etc/nginx/conf.d:ro
       - ${CERTBOT_WEBROOT:-./certbot/www}:/var/www/certbot:ro
       - ${LETSENCRYPT_DIR:-./certbot/conf}:/etc/letsencrypt:ro
+      - /etc/localtime:/etc/localtime:ro
+      # SLI용 JSON 접근 로그를 CloudWatch Agent가 읽도록 호스트에 남긴다.
+      - /var/log/dameokja/nginx:/var/log/nginx/app
     networks: [web]
     logging:
       driver: local
@@ -49,9 +52,9 @@ services:
       MYSQL_PASSWORD: ""
       MYSQL_ROOT_PASSWORD: ""
     expose: ["8080"]
-    # 현재 앱에 전용 헬스 API가 없어 Swagger 명세 응답으로 기동 상태를 확인한다.
+    # Spring Boot Actuator 헬스 엔드포인트로 기동 상태를 확인한다.
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/v3/api-docs"]
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
       interval: 10s
       timeout: 5s
       start_period: 60s
@@ -59,6 +62,12 @@ services:
     networks: [web]
     logging:
       driver: local
+    volumes:
+      - /app/sentry-opentelemetry-agent-8.58.0.jar:/app/sentry-opentelemetry-agent-8.58.0.jar:ro
+      - /etc/localtime:/etc/localtime:ro
+      # BE가 application.yml의 logging.file.name(/var/log/dameokja/backend.log)에 쓰는 로그를 호스트에 남긴다.
+      # 호스트 폴더 권한이 적용되므로 소유자를 uid 10001로 맞춰야 한다(setup-host.sh).
+      - /var/log/dameokja:/var/log/dameokja
 
   certbot:
     image: certbot/certbot:latest

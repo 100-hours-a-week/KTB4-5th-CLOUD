@@ -35,7 +35,9 @@ jobs:
               -keyout "$certs/live/$domain/privkey.pem" \
               -out "$certs/live/$domain/fullchain.pem" 2>/dev/null
           done
+          logs=$(mktemp -d)
+          trap 'rm -rf "$certs" "$logs"' EXIT
           docker run --rm -v "$PWD/nginx-prod:/etc/nginx/conf.d:ro" \
-            -v "$certs:/etc/letsencrypt:ro" nginx:stable nginx -t
+            -v "$certs:/etc/letsencrypt:ro" -v "$logs:/var/log/nginx/app" nginx:stable nginx -t
           docker run --rm -v "$PWD/nginx-dev:/etc/nginx/conf.d:ro" \
-            -v "$certs:/etc/letsencrypt:ro" nginx:stable nginx -t
+            -v "$certs:/etc/letsencrypt:ro" -v "$logs:/var/log/nginx/app" nginx:stable nginx -t
