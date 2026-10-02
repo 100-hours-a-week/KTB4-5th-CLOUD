@@ -36,8 +36,7 @@ flowchart LR
 | `cloudwatch-agent/prometheus.{env}.yaml` | Agent가 BE `/actuator/prometheus`를 읽는 설정(서버 `/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml`) |
 | `host/setup-host.sh` | 로그 디렉터리·소유자, logrotate, Agent 설치·설정 적용 |
 | `host/logrotate-dameokja-nginx` | nginx JSON 로그 회전(BE는 Spring Boot가 회전) |
-| `build_template.py` | 환경별 CloudFormation 템플릿 생성기 |
-| `generated/` | 생성 결과(Git 제외) |
+| `cloudformation/slo-monitoring.{env}.template.json` | 환경별 CloudFormation 템플릿(지표 필터·알람·복합 알람·대시보드·저장 쿼리) |
 
 ## 알람 목록
 
@@ -59,14 +58,11 @@ Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지
 
 1. **EC2 IAM 역할**: dev·prod 앱 서버 인스턴스 역할에 `CloudWatchAgentServerPolicy`를 추가한다(로그 전송·지표 전송 권한).
 2. **Discord 알림 스택 업데이트**: `existing-alarms.json`에 새 알람 이름이 추가되었고 Lambda가 바뀌었으므로 템플릿을 다시 만들어 `damuckja-v1-discord-alerts`를 업데이트한다([AWS 안내](../discord-alerts/aws/README.md) 6장).
-3. **모니터링 스택 생성**: CLOUD 저장소 루트에서 템플릿을 만든 뒤, 서울 리전 CloudFormation에서 환경별 스택을 만든다.
-   ```powershell
-   python infra/monitoring/build_template.py
-   ```
+3. **모니터링 스택 생성**: 서울 리전 CloudFormation에서 `cloudformation/` 폴더의 템플릿으로 환경별 스택을 만든다.
    | 스택 이름 | 템플릿 | 필수 파라미터 |
    |---|---|---|
-   | `dameokja-v1-dev-monitoring` | `generated/slo-monitoring.dev.template.json` | `AlarmTopicArn`(Discord 스택 Outputs의 `TopicArn`), `InstanceId`(dev 앱 서버) |
-   | `dameokja-v1-prod-monitoring` | `generated/slo-monitoring.prod.template.json` | 위와 같음(prod 앱 서버) + `DiscordFunctionName`(Discord 스택 Outputs의 `FunctionName`), `DiscordFailureQueueName`(`FailureQueueUrl`의 마지막 경로) |
+   | `dameokja-v1-dev-monitoring` | `cloudformation/slo-monitoring.dev.template.json` | `AlarmTopicArn`(Discord 스택 Outputs의 `TopicArn`), `InstanceId`(dev 앱 서버) |
+   | `dameokja-v1-prod-monitoring` | `cloudformation/slo-monitoring.prod.template.json` | 위와 같음(prod 앱 서버) + `DiscordFunctionName`(Discord 스택 Outputs의 `FunctionName`), `DiscordFailureQueueName`(`FailureQueueUrl`의 마지막 경로) |
 4. **서버 준비**: 각 앱 서버에 이 폴더를 복사하고 실행한다.
    ```bash
    sudo bash infra/monitoring/host/setup-host.sh prod   # dev 서버에서는 dev
@@ -76,20 +72,20 @@ Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지
    - `/var/log/dameokja/nginx/access.json.log`에 JSON 한 줄이 쌓이는지, `route` 값이 맞는지 확인한다.
    - CloudWatch Logs의 두 로그 그룹에 `{instance_id}` 스트림이 생기는지 확인한다.
    - 1~2분 뒤 지표 `Dameokja/{env}`에 `Http4xx` 등이 보이는지 확인한다(요청이 있어야 생긴다).
-   - 대시보드 `dameokja-{env}-infra`에서 EC2·OS·BE 앱 그래프가 보이는지 확인한다(BE 앱 그래프는 [be-metrics-request.md](../../docs/observability/be-metrics-request.md) 반영 후).
+   - 대시보드 `dameokja-{env}-infra`에서 EC2·OS·BE 앱 그래프가 보이는지 확인한다(BE 앱 그래프는 [적용 기록](../../docs/observability/cloudwatch-agent-setup.md) 3.5의 BE 변경 반영 후).
    - 대시보드 `dameokja-prod-slo`의 시간 범위를 이번 달(KST)로 바꿔 성공률이 표시되는지 확인한다.
 
 ## 변경 사항별 반영
 
 | 변경 | 수정 위치 | 반영 |
 |---|---|---|
-| SLI 대상 API 추가·변경 | nginx `map $slo_route`, `build_template.py`의 `ROUTES` | nginx 재기동 → 템플릿 재생성·스택 업데이트 → `existing-alarms.json` 갱신·Discord 스택 업데이트 |
-| SLO 목표·소진율 기준 | `SLO_TARGET`, `BURN_RULES` | 템플릿 재생성·스택 업데이트 |
+| SLI 대상 API 추가·변경 | nginx `map $slo_route`, 템플릿의 지표 필터(`route` 값)·알람·대시보드 | nginx 재기동 → 템플릿 수정·스택 업데이트 → `existing-alarms.json` 갱신·Discord 스택 업데이트 |
+| SLO 목표·소진율 기준 | 템플릿의 소진율 하위 알람 `Threshold`(fast 72, slow 30 = 소진율 × 오류 예산 5%)·최소 건수 | 템플릿 수정·스택 업데이트 |
 | 5xx·4xx 기준 건수 | 스택 파라미터 | 파라미터만 업데이트 |
 | 앱 서버 교체(인스턴스 ID 변경) | 스택 `InstanceId` | 파라미터 업데이트 후 새 서버에서 `setup-host.sh` 실행 |
 | 로그 보관 기간 | CloudWatch 콘솔(로그 그룹 → 보존 설정 편집) | 템플릿은 로그 그룹을 만들지 않음. Agent가 만든 그룹을 이름으로 참조 |
 
-새 알람 이름을 추가하면 반드시 `python infra/monitoring/build_template.py --print-alarm-names`의 결과를 `existing-alarms.json`에 넣는다. 빠뜨리면 그 알람은 Discord로 전달되지 않는다.
+알림을 보내는 알람 이름은 템플릿 `Outputs.NotifiedAlarmNames`에 쉼표로 나열돼 있다. 알람을 추가·이름 변경하면 이 목록과 `existing-alarms.json`을 함께 고친다. 빠뜨리면 그 알람은 Discord로 전달되지 않는다.
 
 ## 운영 한계
 

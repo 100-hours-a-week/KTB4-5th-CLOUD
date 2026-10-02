@@ -119,14 +119,21 @@ BE 지표 수집을 위해 BE 포트를 서버 내부에만 엽니다.
 | 로그 ① | `/var/log/dameokja/nginx/access.json.log` → `/dameokja/{env}/nginx-access` |
 | 로그 ② | `/var/log/dameokja/backend.log` → `/dameokja/{env}/backend` (날짜로 시작하는 줄 기준으로 여러 줄 로그를 묶음) |
 | 스트림 이름 | 인스턴스 ID |
-| BE 앱 지표(Prometheus) | `127.0.0.1:8080/actuator/prometheus`를 1분마다 읽어 Tomcat·HikariCP·JVM 스레드·SLI API 요청 지표만 `Dameokja/{env}/App`으로 전송. 설정: `prometheus.{env}.yaml` → 서버 `/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml`. BE 쪽 변경은 [be-metrics-request.md](be-metrics-request.md) |
+| BE 앱 지표(Prometheus) | `127.0.0.1:8080/actuator/prometheus`를 1분마다 읽어 Tomcat·HikariCP·JVM 스레드·SLI API 요청 지표만 `Dameokja/{env}/App`으로 전송. 설정: `prometheus.{env}.yaml` → 서버 `/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml` |
 | 지표 | 메모리·디스크 사용률, 네트워크 오류·드롭(`ens5`), TCP 연결(ESTABLISHED·TIME_WAIT), 프로세스 상태(running·blocked), 프로세스별 CPU·메모리(`java`·`nginx`·`node`) — 서버당 16개 |
 
 네트워크 인터페이스 이름은 서버의 기본 NIC(`ip -br link`로 확인)와 같아야 합니다. 프로세스별 지표는 `docker stats`가 아니라 호스트에서 본 프로세스 이름 기준입니다.
 
 ### 3.5 BE 애플리케이션 지표 (Prometheus)
 
-BE(Spring Boot Actuator)가 Prometheus 형식으로 지표를 내놓고, Agent가 1분마다 읽어 필요한 것만 CloudWatch로 보냅니다. BE 쪽 변경 내용은 [be-metrics-request.md](be-metrics-request.md)에 있습니다.
+BE(Spring Boot Actuator)가 Prometheus 형식으로 지표를 내놓고, Agent가 1분마다 읽어 필요한 것만 CloudWatch로 보냅니다.
+
+| 위치 | 변경 |
+|---|---|
+| BE `build.gradle` | `io.micrometer:micrometer-registry-prometheus` 추가 |
+| BE `application.yml` | `management.endpoints.web.exposure.include: health, prometheus` |
+| BE `SecurityConfig` | `/actuator/prometheus` 인증 없이 허용 |
+| 인프라 compose(backend) | `SERVER_TOMCAT_MBEANREGISTRY_ENABLED: "true"` — Tomcat 스레드 지표에 필요. 비밀이 아니고 dev·prod 값이 같아 Git에 남는 compose에서 관리(BE `application.yml`에 같은 설정을 넣으면 compose 쪽 줄은 삭제) |
 
 | 파일 | 위치 |
 |---|---|
@@ -211,7 +218,7 @@ curl -O https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/arm64/latest/amaz
 sudo dpkg -i amazon-cloudwatch-agent.deb
 ```
 
-**⑤ BE 지표 확인** (BE에 [be-metrics-request.md](be-metrics-request.md) 반영 후)
+**⑤ BE 지표 확인** (3.5의 BE 변경 반영 후)
 
 ```bash
 curl -s http://127.0.0.1:8080/actuator/prometheus | grep -c -E "tomcat_threads_busy|hikaricp_connections_active|jvm_threads_live|http_server_requests"
@@ -236,14 +243,9 @@ sudo grep piping /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.l
 
 `piping log from …` 줄이 backend·nginx 각각 보이면 Agent가 전송 중입니다. 콘솔(서울) CloudWatch → 로그 그룹 `/dameokja/{env}/…`, 지표 `CWAgent`·`Dameokja/{env}/App`에서 확인합니다.
 
-**⑧ 모니터링 스택 업데이트** (로컬 PC)
+**⑧ 모니터링 스택 업데이트**
 
-```powershell
-cd C:\Users\yuuu5\Desktop\damuckja\KTB4-5th-CLOUD
-python infra/monitoring/build_template.py
-```
-
-CloudFormation → `dameokja-v1-{env}-monitoring` → 업데이트 → 현재 템플릿 교체 → `slo-monitoring.{env}.template.json` → 제출. prod는 3.6의 파라미터 2개를 입력합니다.
+CloudFormation → `dameokja-v1-{env}-monitoring` → 업데이트 → 현재 템플릿 교체 → `infra/monitoring/cloudformation/slo-monitoring.{env}.template.json` → 제출. prod는 3.6의 파라미터 2개를 입력합니다.
 
 ## 5. 트러블슈팅
 
