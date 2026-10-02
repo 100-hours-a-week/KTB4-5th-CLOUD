@@ -48,7 +48,12 @@ services:
       # BE가 application.yml의 logging.file.name(/var/log/dameokja/backend.log)에 쓰는 로그를 호스트에 남긴다.
       # 호스트 폴더 권한이 적용되므로 소유자를 uid 10001로 맞춰야 한다(setup-host.sh).
       - /var/log/dameokja:/var/log/dameokja
+    environment:
+      # Tomcat 스레드 풀 지표(tomcat_threads_*)를 Actuator에 노출한다. application.yml의 server.tomcat.mbeanregistry.enabled와 같다.
+      SERVER_TOMCAT_MBEANREGISTRY_ENABLED: "true"
     expose: ["8080"]
+    # CloudWatch Agent가 /actuator/prometheus를 읽도록 서버 내부(127.0.0.1)에만 연다. 외부에서는 접근 불가.
+    ports: ["127.0.0.1:8080:8080"]
     # Spring Boot Actuator 헬스 엔드포인트로 기동 상태를 확인한다.
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/actuator/health"]

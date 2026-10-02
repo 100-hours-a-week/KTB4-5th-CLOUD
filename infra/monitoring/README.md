@@ -15,20 +15,25 @@ flowchart LR
         BE --> AG
     end
     AG -->|"로그"| LG["Logs: /dameokja/{env}/nginx-access, backend"]
-    AG -->|"mem·disk"| CW["CWAgent 지표"]
+    BE -->|"127.0.0.1:8080 /actuator/prometheus"| AG
+    AG -->|"OS 지표"| CW["CWAgent 지표"]
+    AG -->|"BE 앱 지표"| AP["Dameokja/{env}/App 지표"]
+    AP --> DI
     LG -->|"지표 필터(1분)"| MF["Dameokja/{env} 지표"]
     MF --> AL["알람·복합 알람"]
     CW --> AL
     AL --> SNS["기존 Discord 알림 SNS 토픽"] --> LM["알림 Lambda"] --> DC["Discord"]
     MF --> DB["대시보드 dameokja-prod-slo"]
+    CW --> DI["대시보드 dameokja-{env}-infra"]
     LG --> Q["저장된 Logs Insights 쿼리"]
 ```
 
 | 파일 | 역할 |
 |---|---|
 | `../../nginx-*/default.conf` | `$slo_route` 분류 map, `slo_json` 로그 형식, 호스트 파일 로그 |
-| `../../*-compose.yaml` | nginx·BE 로그 디렉터리 마운트(BE는 컨테이너와 같은 경로 `/var/log/dameokja`) |
-| `cloudwatch-agent/amazon-cloudwatch-agent.{env}.json` | 수집할 로그 파일과 로그 그룹, mem·disk 지표 |
+| `../../*-compose.yaml` | nginx·BE 로그 디렉터리 마운트(BE는 컨테이너와 같은 경로 `/var/log/dameokja`), BE 포트 서버 내부 공개(`127.0.0.1:8080`) |
+| `cloudwatch-agent/amazon-cloudwatch-agent.{env}.json` | 수집할 로그 파일과 로그 그룹, OS 지표(메모리·디스크·네트워크·TCP·프로세스), Prometheus 수집에서 보낼 지표 |
+| `cloudwatch-agent/prometheus.{env}.yaml` | Agent가 BE `/actuator/prometheus`를 읽는 설정(서버 `/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml`) |
 | `host/setup-host.sh` | 로그 디렉터리·소유자, logrotate, Agent 설치·설정 적용 |
 | `host/logrotate-dameokja-nginx` | nginx JSON 로그 회전(BE는 Spring Boot가 회전) |
 | `build_template.py` | 환경별 CloudFormation 템플릿 생성기 |
@@ -61,7 +66,7 @@ Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지
    | 스택 이름 | 템플릿 | 필수 파라미터 |
    |---|---|---|
    | `dameokja-v1-dev-monitoring` | `generated/slo-monitoring.dev.template.json` | `AlarmTopicArn`(Discord 스택 Outputs의 `TopicArn`), `InstanceId`(dev 앱 서버) |
-   | `dameokja-v1-prod-monitoring` | `generated/slo-monitoring.prod.template.json` | 위와 같음(prod 앱 서버) |
+   | `dameokja-v1-prod-monitoring` | `generated/slo-monitoring.prod.template.json` | 위와 같음(prod 앱 서버) + `DiscordFunctionName`(Discord 스택 Outputs의 `FunctionName`), `DiscordFailureQueueName`(`FailureQueueUrl`의 마지막 경로) |
 4. **서버 준비**: 각 앱 서버에 이 폴더를 복사하고 실행한다.
    ```bash
    sudo bash infra/monitoring/host/setup-host.sh prod   # dev 서버에서는 dev
@@ -71,6 +76,7 @@ Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지
    - `/var/log/dameokja/nginx/access.json.log`에 JSON 한 줄이 쌓이는지, `route` 값이 맞는지 확인한다.
    - CloudWatch Logs의 두 로그 그룹에 `{instance_id}` 스트림이 생기는지 확인한다.
    - 1~2분 뒤 지표 `Dameokja/{env}`에 `Http4xx` 등이 보이는지 확인한다(요청이 있어야 생긴다).
+   - 대시보드 `dameokja-{env}-infra`에서 EC2·OS·BE 앱 그래프가 보이는지 확인한다(BE 앱 그래프는 [be-metrics-request.md](../../docs/observability/be-metrics-request.md) 반영 후).
    - 대시보드 `dameokja-prod-slo`의 시간 범위를 이번 달(KST)로 바꿔 성공률이 표시되는지 확인한다.
 
 ## 변경 사항별 반영

@@ -30,6 +30,7 @@ if [[ ! -x "$ctl" ]]; then
     dpkg -i "$tmp/agent.deb"
 fi
 install -m 0644 "$agent_config" /opt/aws/amazon-cloudwatch-agent/etc/dameokja.json
+install -m 0644 "$here/../cloudwatch-agent/prometheus.$env_name.yaml" /opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml
 "$ctl" -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/dameokja.json
 "$ctl" -a status
 echo "완료: nginx·BE 컨테이너를 다시 만들면(docker compose up -d) 파일 로그가 생성됩니다."

@@ -23,6 +23,67 @@
           }
         ]
       }
+    },
+    "metrics_collected": {
+      "prometheus": {
+        "log_group_name": "/dameokja/prod/prometheus",
+        "prometheus_config_path": "/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml",
+        "emf_processor": {
+          "metric_declaration_dedup": true,
+          "metric_namespace": "Dameokja/prod/App",
+          "metric_declaration": [
+            {
+              "source_labels": [
+                "job"
+              ],
+              "label_matcher": "^dameokja-backend$",
+              "dimensions": [
+                [
+                  "env"
+                ]
+              ],
+              "metric_selectors": [
+                "^tomcat_threads_(busy|current|config_max)_threads$",
+                "^hikaricp_connections_(active|idle|pending|max)$",
+                "^hikaricp_connections_timeout_total$",
+                "^jvm_threads_(live|daemon|peak)_threads$"
+              ]
+            },
+            {
+              "source_labels": [
+                "job"
+              ],
+              "label_matcher": "^dameokja-backend$",
+              "dimensions": [
+                [
+                  "env",
+                  "state"
+                ]
+              ],
+              "metric_selectors": [
+                "^jvm_threads_states_threads$"
+              ]
+            },
+            {
+              "source_labels": [
+                "job",
+                "uri"
+              ],
+              "label_matcher": "^dameokja-backend;/api/v1/(refrigerators/\\{refrigeratorId\\}/(ingredients|notifications|notifications/stream|notifications/unread-count)|ingredients/\\{ingredientId\\})$",
+              "dimensions": [
+                [
+                  "env",
+                  "method",
+                  "uri"
+                ]
+              ],
+              "metric_selectors": [
+                "^http_server_requests_seconds_(count|sum)$"
+              ]
+            }
+          ]
+        }
+      }
     }
   },
   "metrics": {
@@ -44,7 +105,53 @@
           "/"
         ],
         "drop_device": true
-      }
+      },
+      "net": {
+        "measurement": [
+          "err_in",
+          "err_out",
+          "drop_in",
+          "drop_out"
+        ],
+        "resources": [
+          "ens5"
+        ]
+      },
+      "netstat": {
+        "measurement": [
+          "tcp_established",
+          "tcp_time_wait"
+        ]
+      },
+      "processes": {
+        "measurement": [
+          "running",
+          "blocked"
+        ]
+      },
+      "procstat": [
+        {
+          "exe": "java",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ]
+        },
+        {
+          "exe": "nginx",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ]
+        },
+        {
+          "exe": "node",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ]
+        }
+      ]
     }
   }
 }

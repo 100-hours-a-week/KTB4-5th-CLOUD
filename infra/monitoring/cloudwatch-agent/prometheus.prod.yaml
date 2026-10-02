@@ -1,0 +1,18 @@
+# CloudWatch Agent가 BE의 Spring Boot Actuator(Prometheus 형식)를 1분마다 읽는다.
+# 서버 위치: /opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml
+global:
+  scrape_interval: 1m
+  scrape_timeout: 10s
+scrape_configs:
+  - job_name: dameokja-backend
+    metrics_path: /actuator/prometheus
+    sample_limit: 10000
+    static_configs:
+      - targets: ["127.0.0.1:8080"]   # compose에서 서버 내부에만 연 BE 포트
+        labels:
+          env: prod
+    # info 타입(jvm_info 등)은 Agent가 처리하지 못해 매분 오류 로그를 남기므로 수집 단계에서 버린다.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: ".*_info"
+        action: drop
