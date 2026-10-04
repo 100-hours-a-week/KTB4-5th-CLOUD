@@ -1,0 +1,6 @@
+{
+  "example-fe-user": {"discord_id": "111111111111111111", "part": "fe"},
+  "example-be-user": {"discord_id": "222222222222222222", "part": "be"},
+  "example-ai-user": {"discord_id": "333333333333333333", "part": "ai"},
+  "example-cloud-user": {"discord_id": "444444444444444444", "part": "cloud"}
+}
