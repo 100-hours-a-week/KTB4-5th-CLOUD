@@ -1,0 +1,4 @@
+[
+  {"name": "prod-app", "instance_id": "i-0123456789abcdef0"},
+  {"name": "prod-db", "instance_id": "i-0fedcba9876543210"}
+]

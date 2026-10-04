@@ -1,0 +1,157 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "root",
+    "omit_hostname": true
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/dameokja/nginx/access.json.log",
+            "log_group_name": "/dameokja/dev/nginx-access",
+            "log_stream_name": "{instance_id}",
+            "retention_in_days": -1
+          },
+          {
+            "file_path": "/var/log/dameokja/backend.log",
+            "log_group_name": "/dameokja/dev/backend",
+            "log_stream_name": "{instance_id}",
+            "retention_in_days": -1,
+            "multi_line_start_pattern": "^\\d{4}-\\d{2}-\\d{2}T"
+          }
+        ]
+      }
+    },
+    "metrics_collected": {
+      "prometheus": {
+        "log_group_name": "/dameokja/dev/prometheus",
+        "prometheus_config_path": "/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml",
+        "emf_processor": {
+          "metric_declaration_dedup": true,
+          "metric_namespace": "Dameokja/dev/App",
+          "metric_declaration": [
+            {
+              "source_labels": [
+                "job"
+              ],
+              "label_matcher": "^dameokja-backend$",
+              "dimensions": [
+                [
+                  "env"
+                ]
+              ],
+              "metric_selectors": [
+                "^tomcat_threads_(busy|current|config_max)_threads$",
+                "^hikaricp_connections_(active|idle|pending|max)$",
+                "^hikaricp_connections_timeout_total$",
+                "^jvm_threads_(live|daemon|peak)_threads$"
+              ]
+            },
+            {
+              "source_labels": [
+                "job"
+              ],
+              "label_matcher": "^dameokja-backend$",
+              "dimensions": [
+                [
+                  "env",
+                  "state"
+                ]
+              ],
+              "metric_selectors": [
+                "^jvm_threads_states_threads$"
+              ]
+            },
+            {
+              "source_labels": [
+                "job",
+                "uri"
+              ],
+              "label_matcher": "^dameokja-backend;/api/v1/(refrigerators/\\{refrigeratorId\\}/(ingredients|notifications|notifications/stream|notifications/unread-count)|ingredients/\\{ingredientId\\})$",
+              "dimensions": [
+                [
+                  "env",
+                  "method",
+                  "uri"
+                ]
+              ],
+              "metric_selectors": [
+                "^http_server_requests_seconds_(count|sum)$"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "metrics_collected": {
+      "mem": {
+        "measurement": [
+          "mem_used_percent"
+        ]
+      },
+      "disk": {
+        "measurement": [
+          "used_percent"
+        ],
+        "resources": [
+          "/"
+        ],
+        "drop_device": true
+      },
+      "net": {
+        "measurement": [
+          "err_in",
+          "err_out",
+          "drop_in",
+          "drop_out"
+        ],
+        "resources": [
+          "ens5"
+        ]
+      },
+      "netstat": {
+        "measurement": [
+          "tcp_established",
+          "tcp_time_wait"
+        ]
+      },
+      "processes": {
+        "measurement": [
+          "running",
+          "blocked"
+        ]
+      },
+      "procstat": [
+        {
+          "exe": "java",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ]
+        },
+        {
+          "exe": "nginx",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ]
+        },
+        {
+          "exe": "node",
+          "measurement": [
+            "cpu_usage",
+            "memory_rss"
+          ]
+        }
+      ]
+    }
+  }
+}

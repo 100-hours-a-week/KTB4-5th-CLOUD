@@ -1,0 +1,389 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "EC2 alarms to Discord through SNS and Lambda",
+  "Parameters": {
+    "WebhookSecretArn": {
+      "Type": "String",
+      "Description": "discord_webhook_url 키를 가진 Secrets Manager 비밀의 전체 ARN",
+      "AllowedPattern": "arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+"
+    },
+    "DiscordUserIds": {
+      "Type": "String",
+      "Default": "",
+      "MaxLength": 1149,
+      "AllowedPattern": "^$|[0-9]{15,22}(,[0-9]{15,22}){0,49}",
+      "Description": "장애 시 멘션할 Discord 사용자 ID, 쉼표로 구분(최대 50명)"
+    },
+    "SpotInstanceIds": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|i-(?:[0-9a-f]{8}|[0-9a-f]{17})(,i-(?:[0-9a-f]{8}|[0-9a-f]{17}))*",
+      "Description": "Spot 예고 대상 인스턴스 ID를 쉼표로 구분. 빈 값이면 사용하지 않음"
+    }
+  },
+  "Resources": {
+    "Topic": {
+      "Type": "AWS::SNS::Topic"
+    },
+    "TopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "Topics": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudwatch.amazonaws.com"
+              },
+              "Action": "sns:Publish",
+              "Resource": {
+                "Ref": "Topic"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dev-v1 ?? ?? ??"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:awsec2-i-0eced2b65959c4faf-GreaterThanOrEqualToThreshold-CPUUtilization"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-dev-http-5xx-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-dev-memory-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-dev-disk-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-ingredient-create-fast-burn-page"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-ingredient-create-slow-burn-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-ingredient-read-fast-burn-page"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-ingredient-read-slow-burn-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-notification-poll-fast-burn-page"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-notification-poll-slow-burn-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-http-5xx-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-http-4xx-surge-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-memory-ticket"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-disk-ticket"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "FailureQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true
+      }
+    },
+    "Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "DiscordAlertDelivery",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "secretsmanager:GetSecretValue",
+                  "Resource": {
+                    "Ref": "WebhookSecretArn"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "sqs:SendMessage",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "FailureQueue",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Function": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Runtime": "python3.13",
+        "Handler": "index.lambda_handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "Role",
+            "Arn"
+          ]
+        },
+        "Timeout": 30,
+        "MemorySize": 128,
+        "Environment": {
+          "Variables": {
+            "WEBHOOK_SECRET_ARN": {
+              "Ref": "WebhookSecretArn"
+            },
+            "TOPIC_ARN": {
+              "Ref": "Topic"
+            },
+            "DISCORD_USER_IDS": {
+              "Ref": "DiscordUserIds"
+            },
+            "ALLOWED_ALARM_NAMES": "[\"dev-v1 \\uc11c\\ubc84 \\uc911\\ub2e8 \\uc54c\\ub78c\", \"awsec2-i-0eced2b65959c4faf-GreaterThanOrEqualToThreshold-CPUUtilization\", \"dameokja-dev-http-5xx-ticket\", \"dameokja-dev-memory-ticket\", \"dameokja-dev-disk-ticket\", \"dameokja-prod-slo-ingredient-create-fast-burn-page\", \"dameokja-prod-slo-ingredient-create-slow-burn-ticket\", \"dameokja-prod-slo-ingredient-read-fast-burn-page\", \"dameokja-prod-slo-ingredient-read-slow-burn-ticket\", \"dameokja-prod-slo-notification-poll-fast-burn-page\", \"dameokja-prod-slo-notification-poll-slow-burn-ticket\", \"dameokja-prod-http-5xx-ticket\", \"dameokja-prod-http-4xx-surge-ticket\", \"dameokja-prod-memory-ticket\", \"dameokja-prod-disk-ticket\"]",
+            "SPOT_INSTANCE_IDS": {
+              "Ref": "SpotInstanceIds"
+            },
+            "EXPECTED_ACCOUNT": {
+              "Ref": "AWS::AccountId"
+            },
+            "EXPECTED_REGION": {
+              "Ref": "AWS::Region"
+            }
+          }
+        },
+        "Code": {
+          "ZipFile": "\"\"\"CloudWatch의 SNS 알림을 Discord로 전달한다.\"\"\"\n\nimport json\nimport os\nimport re\nfrom urllib.error import HTTPError, URLError\nfrom urllib.parse import quote\nfrom urllib.request import Request, urlopen\n\n\ndef build_payload(alarm, mention_ids):\n    state = alarm.get(\"NewStateValue\")\n    if state != \"ALARM\" and not (\n        state == \"OK\" and alarm.get(\"OldStateValue\") == \"ALARM\"\n    ):\n        return None\n    failed = state == \"ALARM\"\n    arn = alarm[\"AlarmArn\"].split(\":\", 5)\n    region = arn[3]\n    name = alarm[\"AlarmName\"]\n    instances = [\n        item[\"value\"] for item in alarm.get(\"Trigger\", {}).get(\"Dimensions\", [])\n        if item.get(\"name\") == \"InstanceId\"\n    ]\n    # 이름이 -ticket으로 끝나는 알람은 업무 시간에 확인할 알림이므로 멘션하지 않는다.\n    # 그 외(-page 포함, 기존 알람)는 이전과 같이 장애 시 멘션한다.\n    ticket = name.endswith(\"-ticket\")\n    users = list(dict.fromkeys(mention_ids)) if failed and not ticket else []\n    return {\n        \"content\": \" \".join(f\"<@{user}>\" for user in users),\n        \"allowed_mentions\": {\"parse\": [], \"users\": users},\n        \"embeds\": [{\n            \"title\": (\"🚨 장애 감지: \" if failed else \"✅ 복구: \") + name[:220],\n            \"url\": f\"https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}\"\n                   f\"#alarmsV2:alarm/{quote(name, safe='')}\",\n            \"color\": 15158332 if failed else 3066993,\n            \"description\": str(alarm.get(\"NewStateReason\", \"원인 정보 없음\"))[:3000],\n            \"fields\": [\n                {\"name\": \"상태\", \"value\": f\"{alarm.get('OldStateValue', '?')} → {state}\"},\n                {\"name\": \"심각도\", \"value\": \"확인 필요(멘션 없음)\" if ticket else \"즉시 대응\"},\n                {\"name\": \"인스턴스\", \"value\": \", \".join(instances)[:1024] or \"정보 없음\"},\n                {\"name\": \"발생 시각\", \"value\": str(alarm.get(\"StateChangeTime\", \"정보 없음\"))[:100]},\n            ],\n        }],\n    }\n\n\ndef get_webhook():\n    # 실행 시마다 읽으므로 웹훅 교체 시 재배포하지 않아도 된다.\n    import boto3\n    result = boto3.client(\"secretsmanager\").get_secret_value(\n        SecretId=os.environ[\"WEBHOOK_SECRET_ARN\"]\n    )\n    webhook = json.loads(result[\"SecretString\"])[\"discord_webhook_url\"]\n    if not re.fullmatch(r\"https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+\", webhook):\n        raise ValueError(\"Discord 웹훅 주소 형식이 올바르지 않습니다\")\n    return webhook\n\n\ndef send(webhook, payload):\n    request = Request(\n        webhook + \"?wait=true\",\n        data=json.dumps(payload, ensure_ascii=False).encode(\"utf-8\"),\n        headers={\"Content-Type\": \"application/json\", \"User-Agent\": \"Damuckja-CloudWatch/1.0\"},\n        method=\"POST\",\n    )\n    try:\n        with urlopen(request, timeout=10) as response:\n            if not 200 <= response.status < 300:\n                raise RuntimeError(\"Discord 전송 응답이 성공이 아닙니다\")\n    except HTTPError as error:\n        # 예외의 URL에는 웹훅 토큰이 있으므로 원본 예외를 출력하지 않는다.\n        raise RuntimeError(f\"Discord 전송 실패: HTTP {error.code}\") from None\n    except (URLError, TimeoutError, OSError):\n        raise RuntimeError(\"Discord 연결 실패 또는 시간 초과\") from None\n\n\ndef lambda_handler(event, context):\n    users = [value.strip() for value in os.environ.get(\"DISCORD_USER_IDS\", \"\").split(\",\") if value.strip()]\n    if len(users) > 50 or any(not re.fullmatch(r\"[0-9]{15,22}\", user) for user in users):\n        raise ValueError(\"Discord 사용자 ID는 최대 50개의 숫자 ID여야 합니다\")\n    if event.get(\"source\") == \"aws.ec2\":\n        return handle_spot(event, users)\n    sent = 0\n    webhook = None\n    for record in event[\"Records\"]:\n        if record.get(\"EventSource\") != \"aws:sns\" or record[\"Sns\"][\"TopicArn\"] != os.environ[\"TOPIC_ARN\"]:\n            raise ValueError(\"허용하지 않은 알림 출처입니다\")\n        alarm = json.loads(record[\"Sns\"][\"Message\"])\n        allowed_names = json.loads(os.environ.get(\"ALLOWED_ALARM_NAMES\", \"null\"))\n        if allowed_names is not None and alarm.get(\"AlarmName\") not in allowed_names:\n            continue\n        payload = build_payload(alarm, users)\n        if payload is None:\n            continue\n        if webhook is None:\n            webhook = get_webhook()\n        send(webhook, payload)\n        sent += 1\n    return {\"sent\": sent}\n\n\ndef handle_spot(event, users):\n    # Spot 중단 예고만 처리하며 일반적인 EC2 정지는 처리하지 않는다.\n    if event.get(\"detail-type\") != \"EC2 Spot Instance Interruption Warning\":\n        return {\"sent\": 0}\n    detail = event.get(\"detail\", {})\n    instance = detail.get(\"instance-id\")\n    allowed = os.environ.get(\"SPOT_INSTANCE_IDS\", \"\").split(\",\")\n    if not instance or instance not in allowed:\n        return {\"sent\": 0}\n    if event.get(\"account\") != os.environ.get(\"EXPECTED_ACCOUNT\") or event.get(\"region\") != os.environ.get(\"EXPECTED_REGION\"):\n        raise ValueError(\"허용하지 않은 AWS 계정 또는 리전입니다\")\n    action = detail.get(\"instance-action\")\n    if action not in (\"stop\", \"terminate\", \"hibernate\"):\n        raise ValueError(\"알 수 없는 Spot 중단 동작입니다\")\n    users = list(dict.fromkeys(users))\n    region = event[\"region\"]\n    payload = {\n        \"content\": \" \".join(f\"<@{user}>\" for user in users),\n        \"allowed_mentions\": {\"parse\": [], \"users\": users},\n        \"embeds\": [{\n            \"title\": \"🚨 Spot 인스턴스 중단 예고\",\n            \"color\": 15158332,\n            \"description\": (\"최대 절전 모드 전환이 시작됩니다. 2분의 사전 예고 시간이 없습니다.\"\n                            if action == \"hibernate\" else\n                            \"AWS에서 Spot 중단 예고를 보냈습니다. 일반적으로 중단 약 2분 전이며, 알림 전달 지연으로 남은 시간이 더 짧을 수 있습니다.\"),\n            \"url\": f\"https://{region}.console.aws.amazon.com/ec2/home?region={region}#InstanceDetails:instanceId={quote(instance, safe='')}\",\n            \"fields\": [\n                {\"name\": \"인스턴스\", \"value\": instance},\n                {\"name\": \"예정 동작\", \"value\": {\"stop\": \"정지\", \"terminate\": \"종료·삭제\", \"hibernate\": \"최대 절전\"}[action]},\n                {\"name\": \"이벤트 발생 시각\", \"value\": str(event.get(\"time\", \"정보 없음\"))[:100]},\n            ],\n        }],\n    }\n    send(get_webhook(), payload)\n    return {\"sent\": 1}\n"
+        }
+      }
+    },
+    "LogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${Function}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "AsyncDelivery": {
+      "Type": "AWS::Lambda::EventInvokeConfig",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "Function"
+        },
+        "Qualifier": "$LATEST",
+        "MaximumRetryAttempts": 2,
+        "MaximumEventAgeInSeconds": 3600,
+        "DestinationConfig": {
+          "OnFailure": {
+            "Destination": {
+              "Fn::GetAtt": [
+                "FailureQueue",
+                "Arn"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "InvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "DependsOn": [
+        "LogGroup",
+        "AsyncDelivery"
+      ],
+      "Properties": {
+        "FunctionName": {
+          "Ref": "Function"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "sns.amazonaws.com",
+        "SourceArn": {
+          "Ref": "Topic"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        }
+      }
+    },
+    "Subscription": {
+      "Type": "AWS::SNS::Subscription",
+      "DependsOn": "InvokePermission",
+      "Properties": {
+        "TopicArn": {
+          "Ref": "Topic"
+        },
+        "Protocol": "lambda",
+        "Endpoint": {
+          "Fn::GetAtt": [
+            "Function",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SpotWarningRule": {
+      "Type": "AWS::Events::Rule",
+      "Condition": "SpotEnabled",
+      "DependsOn": [
+        "LogGroup",
+        "AsyncDelivery"
+      ],
+      "Properties": {
+        "Description": "지정된 Spot 인스턴스의 중단 예고를 Discord로 전달",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": [
+            "aws.ec2"
+          ],
+          "detail-type": [
+            "EC2 Spot Instance Interruption Warning"
+          ],
+          "account": [
+            {
+              "Ref": "AWS::AccountId"
+            }
+          ],
+          "region": [
+            {
+              "Ref": "AWS::Region"
+            }
+          ],
+          "detail": {
+            "instance-id": {
+              "Fn::Split": [
+                ",",
+                {
+                  "Ref": "SpotInstanceIds"
+                }
+              ]
+            },
+            "instance-action": [
+              "stop",
+              "terminate",
+              "hibernate"
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "DiscordNotifier",
+            "Arn": {
+              "Fn::GetAtt": [
+                "Function",
+                "Arn"
+              ]
+            },
+            "RetryPolicy": {
+              "MaximumEventAgeInSeconds": 300,
+              "MaximumRetryAttempts": 2
+            }
+          }
+        ]
+      }
+    },
+    "SpotInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SpotEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "Function"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "SpotWarningRule",
+            "Arn"
+          ]
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "TopicArn": {
+      "Value": {
+        "Ref": "Topic"
+      }
+    },
+    "FunctionName": {
+      "Value": {
+        "Ref": "Function"
+      }
+    },
+    "FailureQueueUrl": {
+      "Value": {
+        "Ref": "FailureQueue"
+      }
+    }
+  },
+  "Conditions": {
+    "SpotEnabled": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "SpotInstanceIds"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  }
+}

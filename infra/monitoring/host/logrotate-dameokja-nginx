@@ -1,0 +1,12 @@
+# nginx SLI 접근 로그 회전. 컨테이너가 파일을 계속 열고 있으므로 copytruncate로 같은 파일을 비운다.
+# CloudWatch Agent는 파일 크기가 줄어들면 처음부터 다시 읽는다.
+/var/log/dameokja/nginx/*.log {
+    daily
+    rotate 7
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
