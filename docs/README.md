@@ -13,6 +13,7 @@
 | `observability/` | [SLI-SLO-design.md](observability/SLI-SLO-design.md) | SLI·SLO 설계 |
 | | [monitoring-alerting-design.md](observability/monitoring-alerting-design.md) | CloudWatch 모니터링·알림 설계(구현: `infra/monitoring`) |
 | | [cloudwatch-agent-setup.md](observability/cloudwatch-agent-setup.md) | CloudWatch 로그 수집(nginx·BE·Agent) 적용 기록 |
+| `../tests/k6/` | [V1-RESULTS.md](../tests/k6/V1-RESULTS.md) | v1 부하 테스트 결과: 시나리오별 처리량·응답시간·오류 및 배포 영향 분석 |
 | `assets/` | 이미지 | 문서에서 참조하는 그림 |
 
 `wiki/` 문서는 GitHub Wiki에 옮기는 원본입니다. 트러블슈팅 기록은 저장소 밖 `기술 문서` 폴더에서 관리합니다.
