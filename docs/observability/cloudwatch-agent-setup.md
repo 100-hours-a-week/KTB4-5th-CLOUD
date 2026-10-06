@@ -66,7 +66,7 @@ logging:
 
 ### 3.2 compose: 로그 폴더 연결
 
-컨테이너 안의 로그 폴더를 호스트 폴더와 연결합니다. 서버 파일: `/home/ubuntu/app/compose.yaml`, 저장소: `dev-compose.yaml`, `prod-compose.yaml`.
+컨테이너 안의 로그 폴더를 호스트 폴더와 연결합니다. 서버 파일: `/home/ubuntu/app/compose.yaml`, 저장소: `v1/dev/compose.yaml`, `v1/prod/compose.yaml`.
 
 ```yaml
   nginx:
@@ -93,7 +93,7 @@ BE 지표 수집을 위해 BE 포트를 서버 내부에만 엽니다.
 
 ### 3.3 nginx: JSON 접근 로그
 
-서버 파일: `/home/ubuntu/app/nginx/default.conf`, 저장소: `nginx-dev/default.conf`, `nginx-prod/default.conf`.
+서버 파일: `/home/ubuntu/app/nginx/default.conf`, 저장소: `v1/dev/nginx/default.conf`, `v1/prod/nginx/default.conf`.
 
 | 추가한 설정 | 역할 |
 |---|---|

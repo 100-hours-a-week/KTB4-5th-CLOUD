@@ -7,10 +7,12 @@ service="${1:?서비스 필요}"
 image="${2:?이미지 필요}"
 project="${3:?Compose 프로젝트명 필요}"
 compose_file="${4:?Compose 파일명 필요}"
+registry_user="${5:?GHCR 사용자 필요}"
 [[ "$service" == backend || "$service" == frontend ]] || exit 2
 [[ "$image" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || exit 2
 [[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || exit 2
 [[ "$compose_file" =~ ^[a-zA-Z0-9._-]+\.ya?ml$ ]] || exit 2
+[[ "$registry_user" =~ ^[a-zA-Z0-9_-]+(\[bot\])?$ ]] || exit 2
 test -f "$compose_file"
 test -f .env
 command -v python3 >/dev/null
@@ -26,7 +28,20 @@ exec 9>.deploy/lock
 flock -w 600 9 || { echo "다른 배포가 진행 중입니다."; exit 1; }
 
 work=$(mktemp -d .deploy/release.XXXXXXXX)
-trap 'rm -rf -- "$work"' EXIT
+docker_config=$(mktemp -d .deploy/docker-config.XXXXXXXX)
+cleanup() {
+    unset registry_token
+    rm -rf -- "$work" "$docker_config"
+}
+trap cleanup EXIT
+
+# Actions의 단기 GITHUB_TOKEN으로만 로그인하고 인증 파일은 배포 종료 시 삭제한다.
+IFS= read -r registry_token
+test -n "$registry_token"
+printf '%s' "$registry_token" | DOCKER_CONFIG="$docker_config" docker login ghcr.io --username "$registry_user" --password-stdin >/dev/null
+unset registry_token
+export DOCKER_CONFIG="$docker_config"
+
 cat > "$work/incoming-service.env"
 if [[ "$service" == backend ]]; then
     test -s "$work/incoming-service.env"
