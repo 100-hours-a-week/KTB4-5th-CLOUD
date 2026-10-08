@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: dameokja v2 dev (ECS on EC2, app instance nginx/FE/BE/Redis + AI API instance)
+Description: dameokja v2 dev (ECS on a single EC2 instance, nginx/FE/BE/Redis/AI API)
 
 Parameters:
   VpcId:
@@ -9,10 +9,7 @@ Parameters:
     Description: existing public subnet in ap-northeast-2b
   InstanceType:
     Type: String
-    Default: t3.medium
-  AiInstanceType:
-    Type: String
-    Default: t3.small
+    Default: t3.large
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
@@ -68,33 +65,6 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-dev-v2 }
 
-  # AI API 서버: 모델은 외부에서 돌고 이 서버는 API 처리만 함. 앱 인스턴스(BE)에서만 접근
-  AiSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 dev AI API (8000 from app instance)
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 8000, ToPort: 8000, SourceSecurityGroupId: !Ref InstanceSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-dev-v2-ai }
-
-  # 같은 ECS 클러스터에 등록. Task는 인스턴스 타입(attribute:ecs.instance-type)으로 앱/AI 인스턴스를 구분해 배치
-  AiInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: !Ref AmiId
-      InstanceType: !Ref AiInstanceType
-      SubnetId: !Ref SubnetId
-      SecurityGroupIds: [!Ref AiSecurityGroup]
-      IamInstanceProfile: !Ref InstanceProfile
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
-      Tags:
-        - { Key: Name, Value: dameokja-dev-v2-ai }
-
 Outputs:
   ClusterName:
     Value: !Ref Cluster
@@ -104,7 +74,3 @@ Outputs:
     Value: !GetAtt Instance.PublicIp
   InstanceSecurityGroupId:
     Value: !Ref InstanceSecurityGroup
-  AiInstanceId:
-    Value: !Ref AiInstance
-  AiPrivateIp:
-    Value: !GetAtt AiInstance.PrivateIp
