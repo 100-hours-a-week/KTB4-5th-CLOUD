@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: GitHub Actions OIDC roles for dameokja v2 CloudFormation deploys (deploy once by hand)
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: 100-hours-a-week
+  GitHubRepo:
+    Type: String
+    Default: KTB4-5th-CLOUD
+
+# OIDC 공급자(token.actions.githubusercontent.com)는 계정에 이미 있어(IAM 콘솔에서 수동 등록) 여기서 만들지 않음
+Resources:
+  # CloudFormation이 리소스를 실제로 만들 때 쓰는 역할 (GitHub은 이 역할을 넘겨주기만 함)
+  CfnExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-cfn-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudformation.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  # PR: change set 만들어 보기만 (적용 불가)
+  GitHubPlanRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-github-cfn-plan
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOrg}/${GitHubRepo}:pull_request"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Policies:
+        - PolicyName: cfn-change-set-only
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:ListChangeSets
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CfnExecutionRole.Arn
+
+  # main 머지: change set 만들고 실행
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-github-cfn-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/main"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Policies:
+        - PolicyName: cfn-deploy-dameokja-stacks
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplate
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:ListChangeSets
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/dameokja-*/*"
+              - Effect: Allow
+                Action: cloudformation:ValidateTemplate
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CfnExecutionRole.Arn
+
+Outputs:
+  CfnExecutionRoleArn: { Value: !GetAtt CfnExecutionRole.Arn }
+  GitHubPlanRoleArn: { Value: !GetAtt GitHubPlanRole.Arn }
+  GitHubDeployRoleArn: { Value: !GetAtt GitHubDeployRole.Arn }

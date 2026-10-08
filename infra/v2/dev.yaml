@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: dameokja v2 dev (ECS on a single EC2 instance, nginx/FE/BE/Redis)
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: existing public subnet in ap-northeast-2b
+  InstanceType:
+    Type: String
+    Default: t3.medium
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: dameokja-dev
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 dev instance (nginx 80/443)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+      Tags:
+        - { Key: Name, Value: dameokja-dev-v2 }
+
+  # ECS 에이전트가 클러스터에 등록하고, SSM으로 SSH 없이 접속하기 위한 역할
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: [!Ref InstanceSecurityGroup]
+      IamInstanceProfile: !Ref InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
+      Tags:
+        - { Key: Name, Value: dameokja-dev-v2 }
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  InstanceId:
+    Value: !Ref Instance
+  PublicIp:
+    Value: !GetAtt Instance.PublicIp
+  InstanceSecurityGroupId:
+    Value: !Ref InstanceSecurityGroup
