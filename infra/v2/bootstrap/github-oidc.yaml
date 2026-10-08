@@ -1,13 +1,15 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: GitHub Actions OIDC roles for dameokja v2 CloudFormation deploys (deploy once by hand)
 
+# 이 조직의 GitHub OIDC 토큰 sub는 이름 뒤에 ID가 붙는 형식
+# (예: repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:pull_request, 2026-10-08 CloudTrail 확인)
 Parameters:
   GitHubOrg:
     Type: String
-    Default: 100-hours-a-week
+    Default: 100-hours-a-week@167328634
   GitHubRepo:
     Type: String
-    Default: KTB4-5th-CLOUD
+    Default: KTB4-5th-CLOUD@1349507673
 
 # OIDC 공급자(token.actions.githubusercontent.com)는 계정에 이미 있어(IAM 콘솔에서 수동 등록) 여기서 만들지 않음
 Resources:
