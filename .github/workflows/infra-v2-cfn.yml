@@ -1,0 +1,74 @@
+name: v2 인프라 CloudFormation
+
+on:
+  pull_request:
+    paths:
+      - "infra/v2/**"
+      - ".github/workflows/infra-v2-cfn.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/v2/**"
+      - ".github/workflows/infra-v2-cfn.yml"
+
+env:
+  AWS_REGION: ap-northeast-2
+  STACK_NAME: dameokja-dev
+  TEMPLATE: infra/v2/dev.yaml
+  PARAMS: infra/v2/params/dev.json
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: cfn-lint
+        run: |
+          pipx install cfn-lint
+          cfn-lint --regions "$AWS_REGION" -- infra/v2/*.yaml infra/v2/bootstrap/*.yaml
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: change set 만들기 (적용하지 않음)
+        id: cs
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: create-only
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
+          change-set-name: pr-${{ github.event.pull_request.number }}-${{ github.run_number }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_NAMED_IAM
+      - name: PR에 미리보기 댓글
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.cs.outputs.changes-markdown || '변경 없음' }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body "$BODY"
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 적용
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_NAMED_IAM
