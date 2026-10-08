@@ -16,6 +16,12 @@ Parameters:
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: dameokja.com hosted zone
+  DbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: existing dev1 DB server security group
 
 Resources:
   Cluster:
@@ -94,6 +100,27 @@ Resources:
           echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
       Tags:
         - { Key: Name, Value: dameokja-dev-v2-ai }
+
+  # 고정 IP 없이 자동 할당 공인 IP를 가리킴. 인스턴스를 중지/시작하면 IP가 바뀌므로 스택을 다시 배포해야 갱신됨
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: v2.dameokja.com.
+      Type: A
+      TTL: "300"
+      ResourceRecords: [!GetAtt Instance.PublicIp]
+
+  # 기존 dev1 DB 보안그룹에 앱 인스턴스(BE)의 3306 접근만 추가. 스택 삭제 시 이 규칙만 제거됨
+  DbIngressFromApp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref InstanceSecurityGroup
+      Description: dameokja v2 dev app instance
 
 Outputs:
   ClusterName:

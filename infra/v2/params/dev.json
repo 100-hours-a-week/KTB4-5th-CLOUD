@@ -1,4 +1,6 @@
 [
   { "ParameterKey": "VpcId", "ParameterValue": "vpc-0dc397a47a708f727" },
-  { "ParameterKey": "SubnetId", "ParameterValue": "subnet-0bad53d02a1be9048" }
+  { "ParameterKey": "SubnetId", "ParameterValue": "subnet-0bad53d02a1be9048" },
+  { "ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9" },
+  { "ParameterKey": "DbSecurityGroupId", "ParameterValue": "sg-039d80e4bb3d2aa4d" }
 ]
