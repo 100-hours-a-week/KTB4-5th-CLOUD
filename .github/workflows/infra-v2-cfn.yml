@@ -55,6 +55,10 @@ jobs:
   deploy:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    # 같은 스택에 배포가 겹치면 뒤의 배포가 UPDATE_IN_PROGRESS로 실패하므로 하나씩 순서대로 실행 (BE·FE 이미지 갱신이 동시에 올 수 있음)
+    concurrency:
+      group: infra-v2-dev-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
