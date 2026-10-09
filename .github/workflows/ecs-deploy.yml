@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       service:
-        description: nginx, frontend, backend
+        description: nginx, frontend, backend, redis
         type: string
         required: true
       image:
@@ -46,7 +46,8 @@ jobs:
         run: |
           current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
             --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          if [ -z "$IMAGE" ] && [ "${{ inputs.service }}" != nginx ] && [ "$current" != None ]; then
+          # BE/FE는 이미지를 CI가 정하므로, 이미지 없이 호출되면 지금 돌고 있는 이미지를 유지
+          if [ -z "$IMAGE" ] && { [ "${{ inputs.service }}" = backend ] || [ "${{ inputs.service }}" = frontend ]; } && [ "$current" != None ]; then
             IMAGE=$(aws ecs describe-task-definition --task-definition "$current" \
               --query 'taskDefinition.containerDefinitions[0].image' --output text)
           fi

@@ -1,0 +1,23 @@
+{
+  "family": "dameokja-dev-redis",
+  "networkMode": "host",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "memory": "192",
+  "containerDefinitions": [
+    {
+      "name": "redis",
+      "image": "redis:7.4-alpine",
+      "essential": true,
+      "command": [
+        "redis-server",
+        "--bind", "127.0.0.1",
+        "--port", "6379",
+        "--maxmemory", "128mb",
+        "--save", "",
+        "--appendonly", "no"
+      ]
+    }
+  ]
+}
