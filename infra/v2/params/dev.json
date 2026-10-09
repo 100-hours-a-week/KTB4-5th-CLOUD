@@ -3,8 +3,5 @@
   { "ParameterKey": "SubnetId", "ParameterValue": "subnet-0bad53d02a1be9048" },
   { "ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9" },
   { "ParameterKey": "DbSecurityGroupId", "ParameterValue": "sg-039d80e4bb3d2aa4d" },
-  { "ParameterKey": "GhcrCredentialsArn", "ParameterValue": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef" },
-  { "ParameterKey": "FeImage", "ParameterValue": "ghcr.io/100-hours-a-week/ktb4-5th-fe:d76e6c3f2900bf9d9ac5e53b0cbff8a75758045e" },
-  { "ParameterKey": "BeImage", "ParameterValue": "ghcr.io/100-hours-a-week/ktb4-5th-be:835a50892ec7ccf8ce5be15a69249850ecd1a4d9" },
-  { "ParameterKey": "AppDesiredCount", "ParameterValue": "0" }
+  { "ParameterKey": "GhcrCredentialsArn", "ParameterValue": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef" }
 ]
