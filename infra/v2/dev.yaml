@@ -267,7 +267,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: ssm:GetParameters
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev/*"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev-fe/*"
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !Ref GhcrCredentialsArn
@@ -323,6 +325,8 @@ Resources:
           Image: !Ref FeImage
           Essential: true
           RepositoryCredentials: { CredentialsParameter: !Ref GhcrCredentialsArn }
+          Secrets:
+            - { Name: DISCORD_BUG_REPORT_WEBHOOK_URL, ValueFrom: /dameokja-v2-dev-fe/DISCORD_BUG_REPORT_WEBHOOK_URL }
         - Name: backend
           Image: !Ref BeImage
           Essential: true
@@ -377,6 +381,8 @@ Resources:
       DeploymentConfiguration:
         MinimumHealthyPercent: 0
         MaximumPercent: 100
+        # Task가 계속 실패하면 배포를 멈추고 실패로 끝냄 (없으면 CloudFormation이 몇 시간 동안 안정화를 기다림)
+        DeploymentCircuitBreaker: { Enable: true, Rollback: false }
       PlacementConstraints:
         - Type: memberOf
           Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
