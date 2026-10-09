@@ -26,16 +26,6 @@ Parameters:
   GhcrCredentialsArn:
     Type: String
     Description: Secrets Manager secret ARN with GHCR username/PAT (read:packages), created by hand
-  FeImage:
-    Type: String
-    Default: ghcr.io/100-hours-a-week/ktb4-5th-fe:not-deployed
-  BeImage:
-    Type: String
-    Default: ghcr.io/100-hours-a-week/ktb4-5th-be:not-deployed
-  AppDesiredCount:
-    Type: Number
-    Default: 0
-    Description: 0 until amd64 images exist
   S3BucketName:
     Type: String
     Default: dameokja-906462447513-ap-northeast-2-an
@@ -341,96 +331,58 @@ Resources:
                 Action: iam:PassRole
                 Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn]
 
-  # 앱 인스턴스 Task: nginx, FE, BE. host 네트워크라 포트를 인스턴스에서 직접 씀
-  AppTaskDefinition:
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      Family: dameokja-dev-app
-      NetworkMode: host
-      RequiresCompatibilities: [EC2]
-      # 인스턴스 등록 메모리 3839 중 OS·에이전트 몫을 남긴 Task 전체 한계 (컨테이너는 이 안에서 나눠 씀)
-      Memory: "3584"
-      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt BackendTaskRole.Arn
-      Volumes:
-        - { Name: letsencrypt, Host: { SourcePath: /etc/letsencrypt } }
-        - { Name: nginx-log, Host: { SourcePath: /var/log/dameokja/nginx } }
-        - { Name: backend-log, Host: { SourcePath: /var/log/dameokja } }
-        - { Name: localtime, Host: { SourcePath: /etc/localtime } }
-      ContainerDefinitions:
-        - Name: nginx
-          Image: nginx:stable
-          Essential: true
-          EntryPoint: [sh, -c]
-          Command: ['printf "%s" "$NGINX_CONF" > /etc/nginx/conf.d/default.conf && exec nginx -g "daemon off;"']
-          Secrets:
-            - { Name: NGINX_CONF, ValueFrom: !Ref NginxConfParameter }
-          MountPoints:
-            - { SourceVolume: letsencrypt, ContainerPath: /etc/letsencrypt, ReadOnly: true }
-            - { SourceVolume: nginx-log, ContainerPath: /var/log/nginx/app }
-            - { SourceVolume: localtime, ContainerPath: /etc/localtime, ReadOnly: true }
-        - Name: frontend
-          Image: !Ref FeImage
-          Essential: true
-          RepositoryCredentials: { CredentialsParameter: !Ref GhcrCredentialsArn }
-          Secrets:
-            - { Name: DISCORD_BUG_REPORT_WEBHOOK_URL, ValueFrom: /dameokja-v2-dev-fe/DISCORD_BUG_REPORT_WEBHOOK_URL }
-        - Name: backend
-          Image: !Ref BeImage
-          Essential: true
-          RepositoryCredentials: { CredentialsParameter: !Ref GhcrCredentialsArn }
-          Environment:
-            - { Name: SERVER_TOMCAT_MBEANREGISTRY_ENABLED, Value: "true" }
-          Secrets:
-            - { Name: SERVER_PORT, ValueFrom: /dameokja-v2-dev/SERVER_PORT }
-            - { Name: SERVER_FORWARD_HEADERS_STRATEGY, ValueFrom: /dameokja-v2-dev/SERVER_FORWARD_HEADERS_STRATEGY }
-            - { Name: SPRING_DATASOURCE_URL, ValueFrom: /dameokja-v2-dev/SPRING_DATASOURCE_URL }
-            - { Name: SPRING_DATASOURCE_USERNAME, ValueFrom: /dameokja-v2-dev/SPRING_DATASOURCE_USERNAME }
-            - { Name: SPRING_DATASOURCE_PASSWORD, ValueFrom: /dameokja-v2-dev/SPRING_DATASOURCE_PASSWORD }
-            - { Name: SPRING_JPA_HIBERNATE_DDL_AUTO, ValueFrom: /dameokja-v2-dev/SPRING_JPA_HIBERNATE_DDL_AUTO }
-            - { Name: DB_USERNAME, ValueFrom: /dameokja-v2-dev/DB_USERNAME }
-            - { Name: DB_PASSWORD, ValueFrom: /dameokja-v2-dev/DB_PASSWORD }
-            - { Name: JWT_SECRET, ValueFrom: /dameokja-v2-dev/JWT_SECRET }
-            - { Name: AUTH_COOKIE_SECURE, ValueFrom: /dameokja-v2-dev/AUTH_COOKIE_SECURE }
-            - { Name: PUSH_AUTH_ENCRYPTION_KEY, ValueFrom: /dameokja-v2-dev/PUSH_AUTH_ENCRYPTION_KEY }
-            - { Name: PUSH_AUTH_ENCRYPTION_KEY_VERSION, ValueFrom: /dameokja-v2-dev/PUSH_AUTH_ENCRYPTION_KEY_VERSION }
-            - { Name: PUSH_VAPID_PRIVATE_KEY, ValueFrom: /dameokja-v2-dev/PUSH_VAPID_PRIVATE_KEY }
-            - { Name: PUSH_VAPID_PUBLIC_KEY, ValueFrom: /dameokja-v2-dev/PUSH_VAPID_PUBLIC_KEY }
-            - { Name: PUSH_VAPID_KEY_VERSION, ValueFrom: /dameokja-v2-dev/PUSH_VAPID_KEY_VERSION }
-            - { Name: SENTRY_AUTO_INIT, ValueFrom: /dameokja-v2-dev/SENTRY_AUTO_INIT }
-            - { Name: OTEL_TRACES_EXPORTER, ValueFrom: /dameokja-v2-dev/OTEL_TRACES_EXPORTER }
-            - { Name: OTEL_METRICS_EXPORTER, ValueFrom: /dameokja-v2-dev/OTEL_METRICS_EXPORTER }
-            - { Name: OTEL_LOGS_EXPORTER, ValueFrom: /dameokja-v2-dev/OTEL_LOGS_EXPORTER }
-            - { Name: SENTRY_ENVIRONMENT, ValueFrom: /dameokja-v2-dev/SENTRY_ENVIRONMENT }
-            - { Name: S3_BUCKET, ValueFrom: /dameokja-v2-dev/S3_BUCKET }
-            - { Name: S3_REGION, ValueFrom: /dameokja-v2-dev/S3_REGION }
-            - { Name: S3_UPLOAD_PREFIX, ValueFrom: /dameokja-v2-dev/S3_UPLOAD_PREFIX }
-            - { Name: S3_PRESIGNED_URL_TTL, ValueFrom: /dameokja-v2-dev/S3_PRESIGNED_URL_TTL }
-            - { Name: S3_MAX_UPLOAD_BYTES, ValueFrom: /dameokja-v2-dev/S3_MAX_UPLOAD_BYTES }
-            - { Name: S3_ALLOWED_CONTENT_TYPES, ValueFrom: /dameokja-v2-dev/S3_ALLOWED_CONTENT_TYPES }
-            - { Name: AI_BASE_URL, ValueFrom: /dameokja-v2-dev/AI_BASE_URL }
-            - { Name: AI_INTERNAL_API_KEY, ValueFrom: /dameokja-v2-dev/AI_INTERNAL_API_KEY }
-            - { Name: AI_CONNECT_TIMEOUT, ValueFrom: /dameokja-v2-dev/AI_CONNECT_TIMEOUT }
-            - { Name: AI_READ_TIMEOUT, ValueFrom: /dameokja-v2-dev/AI_READ_TIMEOUT }
-            - { Name: ANALYSIS_JOB_TTL, ValueFrom: /dameokja-v2-dev/ANALYSIS_JOB_TTL }
-          MountPoints:
-            - { SourceVolume: backend-log, ContainerPath: /var/log/dameokja }
-            - { SourceVolume: localtime, ContainerPath: /etc/localtime, ReadOnly: true }
+  # 서비스별 Task Definition은 infra/v2/ecs/dev/*.json (ecs-deploy.yml이 등록)
+  # 인스턴스 1대·포트 직접 사용(host 네트워크)이라 옛 Task를 내리고 새 Task를 올림(배포 중 잠깐 끊김)
+  # 새 Task가 계속 실패하면 ECS가 이전 버전으로 되돌림
+  # TaskDefinition은 버전(revision) 없이 family만 적어 최신 버전을 씀. 새 버전은 ecs-deploy.yml이 올리고 스택은 건드리지 않음
 
-  # 인스턴스 1대·포트 직접 사용이라 옛 Task를 내리고 새 Task를 올림(배포 중 잠깐 끊김)
-  AppService:
+  # 80/443, TLS 종료 후 FE(3000)/BE(8080)로 전달
+  NginxService:
     Type: AWS::ECS::Service
     Properties:
-      ServiceName: dameokja-dev-app
+      ServiceName: dameokja-dev-nginx
       Cluster: !Ref Cluster
-      TaskDefinition: !Ref AppTaskDefinition
+      TaskDefinition: dameokja-dev-nginx
       LaunchType: EC2
-      DesiredCount: !Ref AppDesiredCount
+      DesiredCount: 1
       DeploymentConfiguration:
         MinimumHealthyPercent: 0
         MaximumPercent: 100
-        # Task가 계속 실패하면 배포를 멈추고 실패로 끝냄 (없으면 CloudFormation이 몇 시간 동안 안정화를 기다림)
-        DeploymentCircuitBreaker: { Enable: true, Rollback: false }
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      PlacementConstraints:
+        - Type: memberOf
+          Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
+
+  # FE (3000)
+  FrontendService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: dameokja-dev-frontend
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-dev-frontend
+      LaunchType: EC2
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      PlacementConstraints:
+        - Type: memberOf
+          Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
+
+  # BE (8080)
+  BackendService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: dameokja-dev-backend
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-dev-backend
+      LaunchType: EC2
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
       PlacementConstraints:
         - Type: memberOf
           Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
