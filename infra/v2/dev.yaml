@@ -297,12 +297,12 @@ Resources:
                 Action: [s3:PutObject, s3:GetObject]
                 Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
 
-  # 팀원(IAM 그룹 dameokja-iam-ai, 콘솔에서 관리)이 v2 dev 설정값(SSM)을 조회·생성·수정·삭제
+  # 팀원(IAM 그룹 dameokja-iam, 콘솔에서 관리)이 v2 dev 설정값(SSM)을 조회·생성·수정·삭제
   TeamSsmAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: dameokja-v2-dev-ssm-team
-      Groups: [dameokja-iam-ai]
+      Groups: [dameokja-iam]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
