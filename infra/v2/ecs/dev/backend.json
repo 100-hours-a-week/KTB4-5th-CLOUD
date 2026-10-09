@@ -159,6 +159,14 @@
         {
           "name": "ANALYSIS_JOB_TTL",
           "valueFrom": "/dameokja-v2-dev/ANALYSIS_JOB_TTL"
+        },
+        {
+          "name": "SPRING_DATA_REDIS_HOST",
+          "valueFrom": "/dameokja-v2-dev/SPRING_DATA_REDIS_HOST"
+        },
+        {
+          "name": "SPRING_DATA_REDIS_PORT",
+          "valueFrom": "/dameokja-v2-dev/SPRING_DATA_REDIS_PORT"
         }
       ],
       "mountPoints": [
