@@ -1,0 +1,177 @@
+{
+  "family": "dameokja-dev-backend",
+  "networkMode": "host",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "memory": "2560",
+  "executionRoleArn": "arn:aws:iam::906462447513:role/dameokja-dev-ecs-task-execution",
+  "taskRoleArn": "arn:aws:iam::906462447513:role/dameokja-dev-backend-task",
+  "volumes": [
+    {
+      "name": "backend-log",
+      "host": {
+        "sourcePath": "/var/log/dameokja"
+      }
+    },
+    {
+      "name": "localtime",
+      "host": {
+        "sourcePath": "/etc/localtime"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "ghcr.io/100-hours-a-week/ktb4-5th-be:835a50892ec7ccf8ce5be15a69249850ecd1a4d9",
+      "essential": true,
+      "repositoryCredentials": {
+        "credentialsParameter": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef"
+      },
+      "environment": [
+        {
+          "name": "SERVER_TOMCAT_MBEANREGISTRY_ENABLED",
+          "value": "true"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "SERVER_PORT",
+          "valueFrom": "/dameokja-v2-dev/SERVER_PORT"
+        },
+        {
+          "name": "SERVER_FORWARD_HEADERS_STRATEGY",
+          "valueFrom": "/dameokja-v2-dev/SERVER_FORWARD_HEADERS_STRATEGY"
+        },
+        {
+          "name": "SPRING_DATASOURCE_URL",
+          "valueFrom": "/dameokja-v2-dev/SPRING_DATASOURCE_URL"
+        },
+        {
+          "name": "SPRING_DATASOURCE_USERNAME",
+          "valueFrom": "/dameokja-v2-dev/SPRING_DATASOURCE_USERNAME"
+        },
+        {
+          "name": "SPRING_DATASOURCE_PASSWORD",
+          "valueFrom": "/dameokja-v2-dev/SPRING_DATASOURCE_PASSWORD"
+        },
+        {
+          "name": "SPRING_JPA_HIBERNATE_DDL_AUTO",
+          "valueFrom": "/dameokja-v2-dev/SPRING_JPA_HIBERNATE_DDL_AUTO"
+        },
+        {
+          "name": "DB_USERNAME",
+          "valueFrom": "/dameokja-v2-dev/DB_USERNAME"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "/dameokja-v2-dev/DB_PASSWORD"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "/dameokja-v2-dev/JWT_SECRET"
+        },
+        {
+          "name": "AUTH_COOKIE_SECURE",
+          "valueFrom": "/dameokja-v2-dev/AUTH_COOKIE_SECURE"
+        },
+        {
+          "name": "PUSH_AUTH_ENCRYPTION_KEY",
+          "valueFrom": "/dameokja-v2-dev/PUSH_AUTH_ENCRYPTION_KEY"
+        },
+        {
+          "name": "PUSH_AUTH_ENCRYPTION_KEY_VERSION",
+          "valueFrom": "/dameokja-v2-dev/PUSH_AUTH_ENCRYPTION_KEY_VERSION"
+        },
+        {
+          "name": "PUSH_VAPID_PRIVATE_KEY",
+          "valueFrom": "/dameokja-v2-dev/PUSH_VAPID_PRIVATE_KEY"
+        },
+        {
+          "name": "PUSH_VAPID_PUBLIC_KEY",
+          "valueFrom": "/dameokja-v2-dev/PUSH_VAPID_PUBLIC_KEY"
+        },
+        {
+          "name": "PUSH_VAPID_KEY_VERSION",
+          "valueFrom": "/dameokja-v2-dev/PUSH_VAPID_KEY_VERSION"
+        },
+        {
+          "name": "SENTRY_AUTO_INIT",
+          "valueFrom": "/dameokja-v2-dev/SENTRY_AUTO_INIT"
+        },
+        {
+          "name": "OTEL_TRACES_EXPORTER",
+          "valueFrom": "/dameokja-v2-dev/OTEL_TRACES_EXPORTER"
+        },
+        {
+          "name": "OTEL_METRICS_EXPORTER",
+          "valueFrom": "/dameokja-v2-dev/OTEL_METRICS_EXPORTER"
+        },
+        {
+          "name": "OTEL_LOGS_EXPORTER",
+          "valueFrom": "/dameokja-v2-dev/OTEL_LOGS_EXPORTER"
+        },
+        {
+          "name": "SENTRY_ENVIRONMENT",
+          "valueFrom": "/dameokja-v2-dev/SENTRY_ENVIRONMENT"
+        },
+        {
+          "name": "S3_BUCKET",
+          "valueFrom": "/dameokja-v2-dev/S3_BUCKET"
+        },
+        {
+          "name": "S3_REGION",
+          "valueFrom": "/dameokja-v2-dev/S3_REGION"
+        },
+        {
+          "name": "S3_UPLOAD_PREFIX",
+          "valueFrom": "/dameokja-v2-dev/S3_UPLOAD_PREFIX"
+        },
+        {
+          "name": "S3_PRESIGNED_URL_TTL",
+          "valueFrom": "/dameokja-v2-dev/S3_PRESIGNED_URL_TTL"
+        },
+        {
+          "name": "S3_MAX_UPLOAD_BYTES",
+          "valueFrom": "/dameokja-v2-dev/S3_MAX_UPLOAD_BYTES"
+        },
+        {
+          "name": "S3_ALLOWED_CONTENT_TYPES",
+          "valueFrom": "/dameokja-v2-dev/S3_ALLOWED_CONTENT_TYPES"
+        },
+        {
+          "name": "AI_BASE_URL",
+          "valueFrom": "/dameokja-v2-dev/AI_BASE_URL"
+        },
+        {
+          "name": "AI_INTERNAL_API_KEY",
+          "valueFrom": "/dameokja-v2-dev/AI_INTERNAL_API_KEY"
+        },
+        {
+          "name": "AI_CONNECT_TIMEOUT",
+          "valueFrom": "/dameokja-v2-dev/AI_CONNECT_TIMEOUT"
+        },
+        {
+          "name": "AI_READ_TIMEOUT",
+          "valueFrom": "/dameokja-v2-dev/AI_READ_TIMEOUT"
+        },
+        {
+          "name": "ANALYSIS_JOB_TTL",
+          "valueFrom": "/dameokja-v2-dev/ANALYSIS_JOB_TTL"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "backend-log",
+          "containerPath": "/var/log/dameokja"
+        },
+        {
+          "sourceVolume": "localtime",
+          "containerPath": "/etc/localtime",
+          "readOnly": true
+        }
+      ]
+    }
+  ]
+}

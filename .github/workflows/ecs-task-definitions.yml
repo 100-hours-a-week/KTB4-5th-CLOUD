@@ -1,0 +1,45 @@
+name: v2 dev Task Definition 반영
+
+# infra/v2/ecs/dev/*.json이 main에 들어오면 바뀐 서비스만 다시 배포 (이미지는 지금 것 유지)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/v2/ecs/dev/**"
+  workflow_dispatch:
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      services: ${{ steps.diff.outputs.services }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            files=$(ls infra/v2/ecs/dev/*.json)
+          else
+            files=$(git diff --name-only HEAD^ HEAD -- infra/v2/ecs/dev/)
+          fi
+          services=$(printf '%s\n' "$files" | grep '\.json$' | xargs -r -n1 basename -s .json | jq -Rnc '[inputs]')
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/ecs-deploy.yml
+    with:
+      service: ${{ matrix.service }}

@@ -1,0 +1,25 @@
+{
+  "family": "dameokja-dev-frontend",
+  "networkMode": "host",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "memory": "768",
+  "executionRoleArn": "arn:aws:iam::906462447513:role/dameokja-dev-ecs-task-execution",
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "ghcr.io/100-hours-a-week/ktb4-5th-fe:d76e6c3f2900bf9d9ac5e53b0cbff8a75758045e",
+      "essential": true,
+      "repositoryCredentials": {
+        "credentialsParameter": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef"
+      },
+      "secrets": [
+        {
+          "name": "DISCORD_BUG_REPORT_WEBHOOK_URL",
+          "valueFrom": "/dameokja-v2-dev-fe/DISCORD_BUG_REPORT_WEBHOOK_URL"
+        }
+      ]
+    }
+  ]
+}

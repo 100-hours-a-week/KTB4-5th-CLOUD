@@ -264,6 +264,7 @@ Resources:
   TaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: dameokja-dev-ecs-task-execution
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -290,6 +291,7 @@ Resources:
   BackendTaskRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: dameokja-dev-backend-task
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -304,6 +306,40 @@ Resources:
               - Effect: Allow
                 Action: [s3:PutObject, s3:GetObject]
                 Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
+
+  # BE/FE(dev 브랜치)와 CLOUD(main) GitHub Actions가 Task Definition 등록과 Service 갱신에 쓰는 역할
+  GitHubEcsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-dev-github-ecs-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  - repo:100-hours-a-week@167328634/KTB4-5th-BE@1344691625:ref:refs/heads/dev
+                  - repo:100-hours-a-week@167328634/KTB4-5th-FE@1344691246:ref:refs/heads/dev
+                  - repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:ref:refs/heads/main
+      Policies:
+        - PolicyName: ecs-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ecs:RegisterTaskDefinition, ecs:DescribeTaskDefinition]
+                Resource: "*"
+              - Effect: Allow
+                Action: [ecs:UpdateService, ecs:DescribeServices]
+                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn]
 
   # 앱 인스턴스 Task: nginx, FE, BE. host 네트워크라 포트를 인스턴스에서 직접 씀
   AppTaskDefinition:

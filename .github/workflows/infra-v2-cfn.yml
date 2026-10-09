@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "infra/v2/**"
+      - "!infra/v2/ecs/**"
       - ".github/workflows/infra-v2-cfn.yml"
   push:
     branches: [main]
     paths:
       - "infra/v2/**"
+      - "!infra/v2/ecs/**"
       - ".github/workflows/infra-v2-cfn.yml"
 
 env:
