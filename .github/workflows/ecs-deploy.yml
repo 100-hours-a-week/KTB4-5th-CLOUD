@@ -56,6 +56,9 @@ jobs:
           else
             cp "$FILE" td.json
           fi
+          # 값은 읽지 않고 SSM 이름만 조회해 FE·BE 환경변수 참조를 갱신한다.
+          python3 cloud/scripts/render_ecs_secrets.py --service "${{ inputs.service }}" \
+            --input td.json --output td.json
           arn=$(aws ecs register-task-definition --cli-input-json file://td.json \
             --query taskDefinition.taskDefinitionArn --output text)
           echo "등록: $arn ($(jq -r '.containerDefinitions[0].image' td.json))"

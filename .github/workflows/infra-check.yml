@@ -20,6 +20,8 @@ jobs:
         run: |
           bash -n v1/scripts/deploy-v1.sh
           python3 tests/test_deploy.py
+      - name: ECS 환경변수 자동 주입 검사
+        run: python3 -m unittest discover -s tests -p 'test_ecs_secrets.py' -v
       - name: Compose 설정 검사
         run: |
           docker compose -f v1/prod/compose.yaml config --quiet
