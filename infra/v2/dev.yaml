@@ -387,6 +387,23 @@ Resources:
         - Type: memberOf
           Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
 
+  # Redis (127.0.0.1:6379, 같은 인스턴스의 BE만 사용)
+  RedisService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: dameokja-dev-redis
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-dev-redis
+      LaunchType: EC2
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      PlacementConstraints:
+        - Type: memberOf
+          Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
+
 Outputs:
   ClusterName:
     Value: !Ref Cluster
