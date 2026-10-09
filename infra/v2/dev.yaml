@@ -139,6 +139,16 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-dev-v2-ai }
 
+  # 서버 시간대를 KST로. UserData는 처음 부팅 때만 실행되고 바꾸면 인스턴스가 재시작되므로, 실행 중인 인스턴스에 SSM으로 적용
+  TimezoneAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref Instance, !Ref AiInstance] }
+      Parameters:
+        commands: [timedatectl set-timezone Asia/Seoul]
+
   # 고정 IP 없이 자동 할당 공인 IP를 가리킴. 인스턴스를 중지/시작하면 IP가 바뀌므로 스택을 다시 배포해야 갱신됨
   DnsRecord:
     Type: AWS::Route53::RecordSet
