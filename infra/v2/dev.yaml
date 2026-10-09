@@ -288,6 +288,8 @@ Resources:
       Family: dameokja-dev-app
       NetworkMode: host
       RequiresCompatibilities: [EC2]
+      # 인스턴스 등록 메모리 3839 중 OS·에이전트 몫을 남긴 Task 전체 한계 (컨테이너는 이 안에서 나눠 씀)
+      Memory: "3584"
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
       TaskRoleArn: !GetAtt BackendTaskRole.Arn
       Volumes:
@@ -299,7 +301,6 @@ Resources:
         - Name: nginx
           Image: nginx:stable
           Essential: true
-          MemoryReservation: 128
           EntryPoint: [sh, -c]
           Command: ['printf "%s" "$NGINX_CONF" > /etc/nginx/conf.d/default.conf && exec nginx -g "daemon off;"']
           Secrets:
@@ -311,12 +312,10 @@ Resources:
         - Name: frontend
           Image: !Ref FeImage
           Essential: true
-          MemoryReservation: 512
           RepositoryCredentials: { CredentialsParameter: !Ref GhcrCredentialsArn }
         - Name: backend
           Image: !Ref BeImage
           Essential: true
-          MemoryReservation: 1536
           RepositoryCredentials: { CredentialsParameter: !Ref GhcrCredentialsArn }
           Environment:
             - { Name: SERVER_TOMCAT_MBEANREGISTRY_ENABLED, Value: "true" }
