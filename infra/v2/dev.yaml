@@ -297,6 +297,34 @@ Resources:
                 Action: [s3:PutObject, s3:GetObject]
                 Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
 
+  # 팀원(IAM 그룹 dameokja-iam-ai, 콘솔에서 관리)이 v2 dev 설정값(SSM)을 조회·생성·수정·삭제
+  TeamSsmAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: dameokja-v2-dev-ssm-team
+      Groups: [dameokja-iam-ai]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+              - ssm:GetParameterHistory
+              - ssm:PutParameter
+              - ssm:DeleteParameter
+              - ssm:DeleteParameters
+              - ssm:AddTagsToResource
+              - ssm:ListTagsForResource
+            Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev/*"
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev-*"
+          # 콘솔 목록 보기용 (값은 볼 수 없음)
+          - Effect: Allow
+            Action: ssm:DescribeParameters
+            Resource: "*"
+
   # BE/FE(dev 브랜치)와 CLOUD(main) GitHub Actions가 Task Definition 등록과 Service 갱신에 쓰는 역할
   GitHubEcsDeployRole:
     Type: AWS::IAM::Role
