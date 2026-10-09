@@ -149,6 +149,18 @@ Resources:
       Parameters:
         commands: [timedatectl set-timezone Asia/Seoul]
 
+  # BE 컨테이너는 uid 10001로 /var/log/dameokja에 로그를 씀. ECS가 없는 호스트 경로를 root 소유로 만들기 전에 미리 생성
+  LogDirAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref Instance] }
+      Parameters:
+        commands:
+          - mkdir -p /var/log/dameokja/nginx
+          - chown 10001:10001 /var/log/dameokja
+
   # 고정 IP 없이 자동 할당 공인 IP를 가리킴. 인스턴스를 중지/시작하면 IP가 바뀌므로 스택을 다시 배포해야 갱신됨
   DnsRecord:
     Type: AWS::Route53::RecordSet
