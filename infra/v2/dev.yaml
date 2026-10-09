@@ -53,6 +53,24 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      # certbot DNS 방식(certbot-dns-route53)으로 dev/v2 도메인 인증서를 받기 위한 권한. _acme-challenge TXT 레코드만 바꿀 수 있음
+      Policies:
+        - PolicyName: certbot-dns-route53
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [route53:ListHostedZones, route53:GetChange]
+                Resource: "*"
+              - Effect: Allow
+                Action: route53:ChangeResourceRecordSets
+                Resource: !Sub "arn:aws:route53:::hostedzone/${HostedZoneId}"
+                Condition:
+                  ForAllValues:StringEquals:
+                    route53:ChangeResourceRecordSetsNormalizedRecordNames:
+                      - _acme-challenge.dev.dameokja.com
+                      - _acme-challenge.v2.dameokja.com
+                    route53:ChangeResourceRecordSetsRecordTypes: [TXT]
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
