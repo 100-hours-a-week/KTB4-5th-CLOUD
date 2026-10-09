@@ -1,0 +1,65 @@
+{
+  "family": "dameokja-dev-nginx",
+  "networkMode": "host",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "memory": "256",
+  "executionRoleArn": "arn:aws:iam::906462447513:role/dameokja-dev-ecs-task-execution",
+  "volumes": [
+    {
+      "name": "letsencrypt",
+      "host": {
+        "sourcePath": "/etc/letsencrypt"
+      }
+    },
+    {
+      "name": "nginx-log",
+      "host": {
+        "sourcePath": "/var/log/dameokja/nginx"
+      }
+    },
+    {
+      "name": "localtime",
+      "host": {
+        "sourcePath": "/etc/localtime"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "nginx",
+      "image": "nginx:stable",
+      "essential": true,
+      "entryPoint": [
+        "sh",
+        "-c"
+      ],
+      "command": [
+        "printf \"%s\" \"$NGINX_CONF\" > /etc/nginx/conf.d/default.conf && exec nginx -g \"daemon off;\""
+      ],
+      "secrets": [
+        {
+          "name": "NGINX_CONF",
+          "valueFrom": "/dameokja-v2-dev/nginx/default.conf"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "letsencrypt",
+          "containerPath": "/etc/letsencrypt",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "nginx-log",
+          "containerPath": "/var/log/nginx/app"
+        },
+        {
+          "sourceVolume": "localtime",
+          "containerPath": "/etc/localtime",
+          "readOnly": true
+        }
+      ]
+    }
+  ]
+}

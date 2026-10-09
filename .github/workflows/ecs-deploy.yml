@@ -1,0 +1,82 @@
+name: v2 dev ECS 배포
+
+# BE/FE CI와 CLOUD가 함께 쓰는 배포 단계.
+# infra/v2/ecs/dev/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
+# 실패하면 ECS가 이전 버전으로 되돌리고(circuit breaker) 이 작업도 실패로 끝남.
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: nginx, frontend, backend
+        type: string
+        required: true
+      image:
+        description: 배포할 이미지. 비우면 지금 돌고 있는 이미지 유지
+        type: string
+        default: ""
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: ecs-dev-${{ inputs.service }}
+      cancel-in-progress: false
+    env:
+      CLUSTER: dameokja-dev
+      SERVICE: dameokja-dev-${{ inputs.service }}
+      FILE: cloud/infra/v2/ecs/dev/${{ inputs.service }}.json
+      IMAGE: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: 100-hours-a-week/KTB4-5th-CLOUD
+          ref: main
+          path: cloud
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::906462447513:role/dameokja-dev-github-ecs-deploy
+          aws-region: ap-northeast-2
+      - name: Task Definition 등록
+        id: register
+        run: |
+          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
+          if [ -z "$IMAGE" ] && [ "${{ inputs.service }}" != nginx ] && [ "$current" != None ]; then
+            IMAGE=$(aws ecs describe-task-definition --task-definition "$current" \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text)
+          fi
+          if [ -n "$IMAGE" ]; then
+            jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image' "$FILE" > td.json
+          else
+            cp "$FILE" td.json
+          fi
+          arn=$(aws ecs register-task-definition --cli-input-json file://td.json \
+            --query taskDefinition.taskDefinitionArn --output text)
+          echo "등록: $arn ($(jq -r '.containerDefinitions[0].image' td.json))"
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+          echo "service-exists=$([ "$current" != None ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Service 갱신 후 완료 대기
+        if: steps.register.outputs.service-exists == 'true'
+        env:
+          ARN: ${{ steps.register.outputs.arn }}
+        run: |
+          id=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$ARN" \
+            --query 'service.deployments[?status==`PRIMARY`]|[0].id' --output text)
+          while sleep 15; do
+            state=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "services[0].deployments[?id=='$id']|[0].rolloutState" --output text)
+            echo "$id: $state"
+            case "$state" in
+              COMPLETED) exit 0 ;;
+              IN_PROGRESS) ;;
+              *) echo "배포 실패. ECS 이벤트:"
+                 aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+                   --query 'services[0].events[:10].message' --output text
+                 exit 1 ;;
+            esac
+          done
