@@ -349,6 +349,10 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # 파라미터 이름만 조회한다. 이 API는 리소스별 권한 제한을 지원하지 않는다.
+              - Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
               - Effect: Allow
                 Action: [ecs:RegisterTaskDefinition, ecs:DescribeTaskDefinition]
                 Resource: "*"
