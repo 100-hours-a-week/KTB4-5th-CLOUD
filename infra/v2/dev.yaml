@@ -173,7 +173,7 @@ Resources:
       Type: A
       TTL: "300"
       SetIdentifier: v1
-      Weight: 100
+      Weight: 0
       ResourceRecords: ["43.200.71.145"]
 
   # v2 dev 앱 인스턴스. 가중치를 PR로 조금씩 올려 v1에서 옮김 (0이면 트래픽 없음)
@@ -185,7 +185,7 @@ Resources:
       Type: A
       TTL: "300"
       SetIdentifier: v2
-      Weight: 0
+      Weight: 100
       ResourceRecords: [!GetAtt Instance.PublicIp]
 
   # 기존 dev1 DB 보안그룹에 앱 인스턴스(BE)의 3306 접근만 추가. 스택 삭제 시 이 규칙만 제거됨
