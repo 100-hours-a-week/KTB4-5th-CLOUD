@@ -2,10 +2,10 @@
 
 | 폴더 | 문서 | 내용 |
 |---|---|---|
-| `wiki/` | [ktb4-cloud-wiki-v1.md](wiki/ktb4-cloud-wiki-v1.md) | 1단계: EC2 + Docker Compose 초기 배포 |
-| | [ktb4-cloud-wiki-ci.md](wiki/ktb4-cloud-wiki-ci.md) | 2단계: CI |
-| | [ktb4-cloud-wiki-cd.md](wiki/ktb4-cloud-wiki-cd.md) | 3단계: CD |
-| | [ktb4-cloud-wiki-v2.md](wiki/ktb4-cloud-wiki-v2.md) | 4단계: 트래픽 급증 대비 확장·Auto Scaling |
+| `design/wiki/` | [ktb4-cloud-wiki-v1.md](design/wiki/ktb4-cloud-wiki-v1.md) | 1단계: EC2 + Docker Compose 초기 배포 |
+| | [ktb4-cloud-wiki-ci.md](design/wiki/ktb4-cloud-wiki-ci.md) | 2단계: CI |
+| | [ktb4-cloud-wiki-cd.md](design/wiki/ktb4-cloud-wiki-cd.md) | 3단계: CD |
+| | [ktb4-cloud-wiki-v2.md](design/wiki/ktb4-cloud-wiki-v2.md) | 4단계: 트래픽 급증 대비 확장·Auto Scaling |
 | `design/` | [v2 인프라 설계 전 배경.md](design/v2%20인프라%20설계%20전%20배경.md) | v2 인프라 설계 |
 | | [v3 인프라 설계 전 배경.md](design/v3%20인프라%20설계%20전%20배경.md) | v3 설계 배경 |
 | | [v3 인프라 설계.md](design/v3%20인프라%20설계.md) | v3 인프라 설계 |
@@ -16,4 +16,4 @@
 | `../tests/k6/` | [V1-RESULTS.md](../tests/k6/V1-RESULTS.md) | v1 부하 테스트 결과: 시나리오별 처리량·응답시간·오류 및 배포 영향 분석 |
 | `assets/` | 이미지 | 문서에서 참조하는 그림 |
 
-`wiki/` 문서는 GitHub Wiki에 옮기는 원본입니다. 트러블슈팅 기록은 저장소 밖 `기술 문서` 폴더에서 관리합니다.
+`design/wiki/` 문서는 GitHub Wiki에 옮기는 원본입니다. 트러블슈팅 기록은 저장소 밖 `기술 문서` 폴더에서 관리합니다.
