@@ -133,6 +133,10 @@
         {
           "name": "OPENROUTER_API_KEY",
           "valueFrom": "/dameokja-v2-dev-ai/OPENROUTER_API_KEY"
+        },
+        {
+          "name": "S3_BUCKET",
+          "valueFrom": "/dameokja-v2-dev-ai/S3_BUCKET"
         }
       ],
       "mountPoints": [
