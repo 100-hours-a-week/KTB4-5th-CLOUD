@@ -113,16 +113,6 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-dev-v2-ai }
 
-  # AI 서버가 분석 결과를 BE(8080)로 콜백
-  AiToBackendIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref InstanceSecurityGroup
-      IpProtocol: tcp
-      FromPort: 8080
-      ToPort: 8080
-      SourceSecurityGroupId: !Ref AiSecurityGroup
-
   # 같은 ECS 클러스터에 등록. Task는 인스턴스 타입(attribute:ecs.instance-type)으로 앱/AI 인스턴스를 구분해 배치
   AiInstance:
     Type: AWS::EC2::Instance
