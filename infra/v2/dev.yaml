@@ -309,6 +309,7 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev/*"
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev-fe/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev-ai/*"
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !Ref GhcrCredentialsArn
@@ -331,6 +332,26 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
+
+  # AI 서버: BE가 올린 이미지를 읽어 서명 URL을 만듦
+  AiTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-dev-ai-task
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-images
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
                 Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
 
   # 팀원(IAM 그룹 dameokja-iam, 콘솔에서 관리)이 v2 dev 설정값(SSM)을 조회·생성·수정·삭제하고, 인스턴스에 Session Manager로 접속
@@ -395,6 +416,7 @@ Resources:
                   - repo:100-hours-a-week@167328634/KTB4-5th-BE@1344691625:ref:refs/heads/dev
                   - repo:100-hours-a-week@167328634/KTB4-5th-FE@1344691246:ref:refs/heads/dev
                   - repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:ref:refs/heads/main
+                  - repo:100-hours-a-week@167328634/KTB4-5th-AI@1344690862:ref:refs/heads/main
       Policies:
         - PolicyName: ecs-deploy
           PolicyDocument:
@@ -412,7 +434,7 @@ Resources:
                 Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/*"
               - Effect: Allow
                 Action: iam:PassRole
-                Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn]
+                Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn, !GetAtt AiTaskRole.Arn]
 
   # 서비스별 Task Definition은 infra/v2/ecs/dev/*.json (ecs-deploy.yml이 등록)
   # 인스턴스 1대·포트 직접 사용(host 네트워크)이라 옛 Task를 내리고 새 Task를 올림(배포 중 잠깐 끊김)

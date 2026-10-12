@@ -10,6 +10,7 @@ import subprocess
 SSM_PATHS = {
     "frontend": "/dameokja-v2-dev-fe/",
     "backend": "/dameokja-v2-dev/",
+    "ai": "/dameokja-v2-dev-ai/",
 }
 SERVICES = (*SSM_PATHS, "nginx", "redis")
 
