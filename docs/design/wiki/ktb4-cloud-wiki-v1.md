@@ -1,7 +1,7 @@
 # 다먹자 v1 인프라 위키 — 1단계: EC2 + Docker Compose 기반 초기 배포 설계
 
 > KTB 4조 다먹자 팀의 v1 인프라 설계 문서입니다. 이 문서는 **1단계(EC2 + Docker Compose 기반 초기 배포)** 만 다룹니다. 2단계(CI)는 별도 문서 `ktb4-cloud-wiki-ci.md`를 참고하세요.
-> 초기 v1 설계의 가정과 선택 근거를 기록합니다. 실제 운영 설정은 [v1 설정](../../v1/)을, 서비스 품질 목표는 [SLI·SLO 설계](../observability/SLI-SLO-design.md)를 기준으로 확인합니다. AWS에 적용된 상태를 검증한 문서는 아닙니다.
+> 초기 v1 설계의 가정과 선택 근거를 기록합니다. 실제 운영 설정은 [v1 설정](../../../v1/)을, 서비스 품질 목표는 [SLI·SLO 설계](../../observability/SLI-SLO-design.md)를 기준으로 확인합니다. AWS에 적용된 상태를 검증한 문서는 아닙니다.
 > 검토일: 2026-10-04
 
 ## 목차
@@ -67,13 +67,13 @@ Neurocloud의 공조·서버 모듈은 고객사 설치 형태의 한 예이며,
 ### Latency
 
 - **상황**: 초기 인프라 응답속도 가정과 사용자 경험 목표를 구분해야 합니다.
-- **결론**: 초기 200ms는 참고 목표이며 최소 응답시간이 아닙니다. 최종 평가는 [SLI·SLO 설계](../observability/SLI-SLO-design.md)의 사용자 요청부터 화면 반영까지 기준을 따릅니다.
+- **결론**: 초기 200ms는 참고 목표이며 최소 응답시간이 아닙니다. 최종 평가는 [SLI·SLO 설계](../../observability/SLI-SLO-design.md)의 사용자 요청부터 화면 반영까지 기준을 따릅니다.
 - **이유**: 서버 응답과 화면 반영 시간은 측정 구간이 다릅니다. 수동 재고 등록·조회는 p95 1초, p99 10초 목표를 적용하며 모든 요청이 1초 이내라고 단정하지 않습니다.
 
 ### 가용성
 
 - **상황**: 단일 서버 구성의 비용과 장애 영향을 함께 고려해야 합니다.
-- **결론**: 초기 설계에서는 99%를 가정했습니다. 운영 평가 대상·분모·평가 기간과 최종 목표는 [SLI·SLO 설계](../observability/SLI-SLO-design.md)를 따릅니다.
+- **결론**: 초기 설계에서는 99%를 가정했습니다. 운영 평가 대상·분모·평가 기간과 최종 목표는 [SLI·SLO 설계](../../observability/SLI-SLO-design.md)를 따릅니다.
 - **이유**: 초기 가정만으로 가용성을 보장할 수 없습니다. 인프라 가동 시간과 사용자 요청 성공률은 서로 다른 지표입니다.
 
 ### 배포 빈도 / 전략
@@ -82,7 +82,7 @@ Neurocloud의 공조·서버 모듈은 고객사 설치 형태의 한 예이며,
 
 - **상황**: dev는 잦은 배포가 필요하고 prod는 배포 중 영향을 줄여야 합니다.
 - **결론**: 현재 v1 스크립트는 대상 서비스 컨테이너를 교체하고 헬스체크 후 실패 시 이전 이미지·설정으로 복구합니다. 단일 복제본이므로 짧은 중단이 발생할 수 있습니다.
-- **이유**: 서비스별 순차 교체는 무중단 롤링 배포와 다릅니다. 롤링 배포를 보장하려면 복수 인스턴스 또는 복제본, 트래픽 분산과 준비 상태 확인이 필요합니다. 상세 절차는 [CD 문서](ktb4-cloud-wiki-cd.md)와 [배포 스크립트](../../v1/scripts/deploy-v1.sh)를 확인합니다.
+- **이유**: 서비스별 순차 교체는 무중단 롤링 배포와 다릅니다. 롤링 배포를 보장하려면 복수 인스턴스 또는 복제본, 트래픽 분산과 준비 상태 확인이 필요합니다. 상세 절차는 [CD 문서](ktb4-cloud-wiki-cd.md)와 [배포 스크립트](../../../v1/scripts/deploy-v1.sh)를 확인합니다.
 
 ### 서버 인스턴스 — 모델 계열
 - **상황**: MVP 인프라에 맞는 EC2 인스턴스 계열을 선택해야 함.
@@ -117,7 +117,7 @@ Neurocloud의 공조·서버 모듈은 고객사 설치 형태의 한 예이며,
 - **범위**: 계산 검산을 위한 가정이며 최신 서울 리전 견적이 아닙니다. Spot 할인율은 고정되지 않습니다. EBS·공인 IPv4·전송량·CloudWatch·Secrets Manager·SNS·Lambda 등은 별도로 포함해야 합니다.
 
 ### 아키텍처 다이어그램
-![아키텍처 다이어그램](../assets/image-12.png)
+![아키텍처 다이어그램](../../assets/image-12.png)
 
 (이미지가 안 보이는 환경을 위한 Mermaid 버전 — AWS 인프라 구성만, CI/CD는 제외)
 
@@ -213,7 +213,7 @@ flowchart TB
 | 장애·복구 알림 | CloudWatch Alarm → SNS → Lambda → Discord로 전달합니다. 임계값·평가 주기·누락 데이터 처리와 수신 테스트가 필요합니다. |
 | Spot 중단 예고 | EventBridge → Lambda → Discord를 사용합니다. StatusCheckFailed는 Spot 중단 사전 예고가 아닙니다. |
 
-세부 구성은 [모니터링 설계](../observability/monitoring-alerting-design.md), [Agent 설정](../observability/cloudwatch-agent-setup.md), [Discord 알림](../../infra/discord-alerts/aws/README.md)을 따릅니다. 이 계획만으로 실제 수집·전달 완료를 보장하지 않습니다. 로그 보존 기간과 민감정보 제외, 수집량 비용을 관리하고 알림 실패도 점검합니다. [CloudWatch 개요](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/), [Agent 지표](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/metrics-collected-by-CloudWatch-agent.html)
+세부 구성은 [모니터링 설계](../../observability/monitoring-alerting-design.md), [Agent 설정](../../observability/cloudwatch-agent-setup.md), [Discord 알림](../../../infra/discord-alerts/aws/README.md)을 따릅니다. 이 계획만으로 실제 수집·전달 완료를 보장하지 않습니다. 로그 보존 기간과 민감정보 제외, 수집량 비용을 관리하고 알림 실패도 점검합니다. [CloudWatch 개요](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/), [Agent 지표](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/metrics-collected-by-CloudWatch-agent.html)
 
 ### Dev 환경 구성
 
