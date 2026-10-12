@@ -509,6 +509,23 @@ Resources:
         - Type: memberOf
           Expression: !Sub "attribute:ecs.instance-type == ${InstanceType}"
 
+  # AI API (8000, AI 인스턴스. 앱 인스턴스의 BE만 호출)
+  AiService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: dameokja-dev-ai
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-dev-ai
+      LaunchType: EC2
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      PlacementConstraints:
+        - Type: memberOf
+          Expression: !Sub "attribute:ecs.instance-type == ${AiInstanceType}"
+
 Outputs:
   ClusterName:
     Value: !Ref Cluster
