@@ -1,0 +1,46 @@
+{
+  "family": "dameokja-dev-ai",
+  "networkMode": "host",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "memory": "1536",
+  "executionRoleArn": "arn:aws:iam::906462447513:role/dameokja-dev-ecs-task-execution",
+  "taskRoleArn": "arn:aws:iam::906462447513:role/dameokja-dev-ai-task",
+  "volumes": [
+    {
+      "name": "ai-log",
+      "host": {
+        "sourcePath": "/var/log/dameokja-ai"
+      }
+    },
+    {
+      "name": "localtime",
+      "host": {
+        "sourcePath": "/etc/localtime"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "ai",
+      "image": "ghcr.io/100-hours-a-week/ktb4-5th-ai:main",
+      "essential": true,
+      "repositoryCredentials": {
+        "credentialsParameter": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef"
+      },
+      "secrets": [],
+      "mountPoints": [
+        {
+          "sourceVolume": "ai-log",
+          "containerPath": "/app/logs"
+        },
+        {
+          "sourceVolume": "localtime",
+          "containerPath": "/etc/localtime",
+          "readOnly": true
+        }
+      ]
+    }
+  ]
+}

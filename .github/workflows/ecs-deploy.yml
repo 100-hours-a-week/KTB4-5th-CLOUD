@@ -1,13 +1,13 @@
 name: v2 dev ECS 배포
 
-# BE/FE CI와 CLOUD가 함께 쓰는 배포 단계.
+# BE/FE/AI CI와 CLOUD가 함께 쓰는 배포 단계.
 # infra/v2/ecs/dev/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
 # 실패하면 ECS가 이전 버전으로 되돌리고(circuit breaker) 이 작업도 실패로 끝남.
 on:
   workflow_call:
     inputs:
       service:
-        description: nginx, frontend, backend, redis
+        description: nginx, frontend, backend, redis, ai
         type: string
         required: true
       image:
@@ -46,8 +46,8 @@ jobs:
         run: |
           current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
             --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          # BE/FE는 이미지를 CI가 정하므로, 이미지 없이 호출되면 지금 돌고 있는 이미지를 유지
-          if [ -z "$IMAGE" ] && { [ "${{ inputs.service }}" = backend ] || [ "${{ inputs.service }}" = frontend ]; } && [ "$current" != None ]; then
+          # BE/FE/AI는 이미지를 CI가 정하므로, 이미지 없이 호출되면 지금 돌고 있는 이미지를 유지
+          if [ -z "$IMAGE" ] && { [ "${{ inputs.service }}" = backend ] || [ "${{ inputs.service }}" = frontend ] || [ "${{ inputs.service }}" = ai ]; } && [ "$current" != None ]; then
             IMAGE=$(aws ecs describe-task-definition --task-definition "$current" \
               --query 'taskDefinition.containerDefinitions[0].image' --output text)
           fi
