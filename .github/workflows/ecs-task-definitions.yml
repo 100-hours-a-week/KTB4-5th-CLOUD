@@ -1,12 +1,18 @@
 name: v2 dev Task Definition 반영
 
 # infra/v2/ecs/dev/*.json이 main에 들어오면 바뀐 서비스만 다시 배포 (이미지는 지금 것 유지)
+# SSM 키를 추가·삭제했을 때는 수동 실행에서 해당 서비스만 골라 다시 등록한다.
 on:
   push:
     branches: [main]
     paths:
       - "infra/v2/ecs/dev/**"
   workflow_dispatch:
+    inputs:
+      service:
+        description: 다시 등록할 서비스 (all이면 전체)
+        type: choice
+        options: [ai, backend, frontend, nginx, redis, all]
 
 jobs:
   changes:
@@ -21,8 +27,12 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - id: diff
+        env:
+          SERVICE: ${{ inputs.service }}
         run: |
-          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+          if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "$SERVICE" != all ]; then
+            files=infra/v2/ecs/dev/$SERVICE.json
+          elif [ "${{ github.event_name }}" = workflow_dispatch ]; then
             files=$(ls infra/v2/ecs/dev/*.json)
           else
             files=$(git diff --name-only HEAD^ HEAD -- infra/v2/ecs/dev/)
