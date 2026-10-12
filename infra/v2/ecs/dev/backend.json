@@ -167,6 +167,22 @@
         {
           "name": "SPRING_DATA_REDIS_PORT",
           "valueFrom": "/dameokja-v2-dev/SPRING_DATA_REDIS_PORT"
+        },
+        {
+          "name": "KAKAO_REST_API_KEY",
+          "valueFrom": "/dameokja-v2-dev/KAKAO_REST_API_KEY"
+        },
+        {
+          "name": "KAKAO_CLIENT_SECRET",
+          "valueFrom": "/dameokja-v2-dev/KAKAO_CLIENT_SECRET"
+        },
+        {
+          "name": "KAKAO_REDIRECT_URI",
+          "valueFrom": "/dameokja-v2-dev/KAKAO_REDIRECT_URI"
+        },
+        {
+          "name": "OAUTH_FRONTEND_BASE_URL",
+          "valueFrom": "/dameokja-v2-dev/OAUTH_FRONTEND_BASE_URL"
         }
       ],
       "mountPoints": [
