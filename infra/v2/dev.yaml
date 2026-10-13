@@ -198,7 +198,7 @@ Resources:
             '' close;
         }
 
-        # SLI 집계용 API 분류 (v1/prod/nginx/default.conf와 같음)
+        # SLI 집계용 API 분류 (v1/dev/nginx/default.conf와 같음)
         map "$request_method $uri" $slo_route {
             default "-";
             "~^POST /api/v1/refrigerators/[^/]+/ingredients$" ingredient_create;
