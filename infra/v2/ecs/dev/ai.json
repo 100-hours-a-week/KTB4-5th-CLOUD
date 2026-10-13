@@ -153,6 +153,18 @@
         {
           "name": "REMOTE_INFERENCE_TIMEOUT_SECONDS",
           "valueFrom": "/dameokja-v2-dev-ai/REMOTE_INFERENCE_TIMEOUT_SECONDS"
+        },
+        {
+          "name": "CALLBACK_URL",
+          "valueFrom": "/dameokja-v2-dev-ai/CALLBACK_URL"
+        },
+        {
+          "name": "CALLBACK_API_KEY",
+          "valueFrom": "/dameokja-v2-dev-ai/CALLBACK_API_KEY"
+        },
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "/dameokja-v2-dev-ai/DATABASE_URL"
         }
       ],
       "mountPoints": [
