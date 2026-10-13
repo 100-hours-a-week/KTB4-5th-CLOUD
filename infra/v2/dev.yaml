@@ -110,6 +110,8 @@ Resources:
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 8000, ToPort: 8000, SourceSecurityGroupId: !Ref InstanceSecurityGroup }
+        # 임시: 테스트용 전체 공개. 테스트 끝나면 이 줄 삭제
+        - { IpProtocol: tcp, FromPort: 8000, ToPort: 8000, CidrIp: 0.0.0.0/0 }
       Tags:
         - { Key: Name, Value: dameokja-dev-v2-ai }
 
