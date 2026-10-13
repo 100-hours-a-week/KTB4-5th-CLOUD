@@ -39,10 +39,6 @@
           "valueFrom": "/dameokja-v2-dev-ai/INTERNAL_API_KEY"
         },
         {
-          "name": "ENABLE_TEST_PAGE",
-          "valueFrom": "/dameokja-v2-dev-ai/ENABLE_TEST_PAGE"
-        },
-        {
           "name": "LOG_DIR",
           "valueFrom": "/dameokja-v2-dev-ai/LOG_DIR"
         },
@@ -67,20 +63,8 @@
           "valueFrom": "/dameokja-v2-dev-ai/ANALYSIS_RESULT_MAX_ENTRIES"
         },
         {
-          "name": "MAX_IMAGE_BYTES",
-          "valueFrom": "/dameokja-v2-dev-ai/MAX_IMAGE_BYTES"
-        },
-        {
-          "name": "MAX_IMAGE_PIXELS",
-          "valueFrom": "/dameokja-v2-dev-ai/MAX_IMAGE_PIXELS"
-        },
-        {
           "name": "IMAGE_SOURCE",
           "valueFrom": "/dameokja-v2-dev-ai/IMAGE_SOURCE"
-        },
-        {
-          "name": "LOCAL_IMAGE_ROOT",
-          "valueFrom": "/dameokja-v2-dev-ai/LOCAL_IMAGE_ROOT"
         },
         {
           "name": "S3_REGION",
@@ -91,36 +75,8 @@
           "valueFrom": "/dameokja-v2-dev-ai/S3_ALLOWED_PREFIX"
         },
         {
-          "name": "OCR_BACKEND",
-          "valueFrom": "/dameokja-v2-dev-ai/OCR_BACKEND"
-        },
-        {
-          "name": "PADDLE_LANG",
-          "valueFrom": "/dameokja-v2-dev-ai/PADDLE_LANG"
-        },
-        {
-          "name": "PADDLE_OCR_VERSION",
-          "valueFrom": "/dameokja-v2-dev-ai/PADDLE_OCR_VERSION"
-        },
-        {
-          "name": "PADDLE_DEVICE",
-          "valueFrom": "/dameokja-v2-dev-ai/PADDLE_DEVICE"
-        },
-        {
-          "name": "OLLAMA_BASE_URL",
-          "valueFrom": "/dameokja-v2-dev-ai/OLLAMA_BASE_URL"
-        },
-        {
           "name": "OLLAMA_MODEL",
           "valueFrom": "/dameokja-v2-dev-ai/OLLAMA_MODEL"
-        },
-        {
-          "name": "OLLAMA_TIMEOUT_SECONDS",
-          "valueFrom": "/dameokja-v2-dev-ai/OLLAMA_TIMEOUT_SECONDS"
-        },
-        {
-          "name": "OLLAMA_TEMPERATURE",
-          "valueFrom": "/dameokja-v2-dev-ai/OLLAMA_TEMPERATURE"
         },
         {
           "name": "CALLBACK_TIMEOUT_SECONDS",
@@ -131,16 +87,8 @@
           "valueFrom": "/dameokja-v2-dev-ai/CALLBACK_MAX_ATTEMPTS"
         },
         {
-          "name": "OPENROUTER_API_KEY",
-          "valueFrom": "/dameokja-v2-dev-ai/OPENROUTER_API_KEY"
-        },
-        {
           "name": "S3_BUCKET",
           "valueFrom": "/dameokja-v2-dev-ai/S3_BUCKET"
-        },
-        {
-          "name": "INFERENCE_BACKEND",
-          "valueFrom": "/dameokja-v2-dev-ai/INFERENCE_BACKEND"
         },
         {
           "name": "REMOTE_INFERENCE_URL",
