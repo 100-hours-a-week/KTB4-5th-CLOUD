@@ -63,6 +63,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
       # certbot DNS 방식(certbot-dns-route53)으로 dev/v2 도메인 인증서를 받기 위한 권한. _acme-challenge TXT 레코드만 바꿀 수 있음
       Policies:
         - PolicyName: certbot-dns-route53
@@ -152,6 +153,217 @@ Resources:
         commands:
           - mkdir -p /var/log/dameokja/nginx
           - chown 10001:10001 /var/log/dameokja
+
+  # CloudWatch Agent: nginx·BE 파일 로그와 메모리·디스크·BE 지표 수집 (v1 setup-host.sh와 같은 작업).
+  # 설정을 바꾸면 이 Association이 다시 실행되어 Agent에 반영됨
+  CloudWatchAgentAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: LogDirAssociation
+    Properties:
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref Instance] }
+      Parameters:
+        commands:
+          - set -e
+          - dnf install -y amazon-cloudwatch-agent logrotate
+          - |
+            cat > /etc/logrotate.d/dameokja-nginx <<'EOF'
+            # nginx SLI 접근 로그 회전. 컨테이너가 파일을 계속 열고 있으므로 copytruncate로 같은 파일을 비운다.
+            # CloudWatch Agent는 파일 크기가 줄어들면 처음부터 다시 읽는다.
+            /var/log/dameokja/nginx/*.log {
+                daily
+                rotate 7
+                maxsize 50M
+                missingok
+                notifempty
+                compress
+                delaycompress
+                copytruncate
+            }
+            EOF
+          - |
+            cat > /opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml <<'EOF'
+            # CloudWatch Agent가 BE의 Spring Boot Actuator(Prometheus 형식)를 1분마다 읽는다.
+            # 서버 위치: /opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml
+            global:
+              scrape_interval: 1m
+              scrape_timeout: 10s
+            scrape_configs:
+              - job_name: dameokja-backend
+                metrics_path: /actuator/prometheus
+                sample_limit: 10000
+                static_configs:
+                  - targets: ["127.0.0.1:8080"]   # host 네트워크의 BE 포트
+                    labels:
+                      env: dev
+                # info 타입(jvm_info 등)은 Agent가 처리하지 못해 매분 오류 로그를 남기므로 수집 단계에서 버린다.
+                metric_relabel_configs:
+                  - source_labels: [__name__]
+                    regex: ".*_info"
+                    action: drop
+            EOF
+          - |
+            cat > /opt/aws/amazon-cloudwatch-agent/etc/dameokja.json <<'EOF'
+            {
+              "agent": {
+                "metrics_collection_interval": 60,
+                "run_as_user": "root",
+                "omit_hostname": true
+              },
+              "logs": {
+                "logs_collected": {
+                  "files": {
+                    "collect_list": [
+                      {
+                        "file_path": "/var/log/dameokja/nginx/access.json.log",
+                        "log_group_name": "/dameokja/dev/nginx-access",
+                        "log_stream_name": "{instance_id}",
+                        "retention_in_days": -1
+                      },
+                      {
+                        "file_path": "/var/log/dameokja/backend.log",
+                        "log_group_name": "/dameokja/dev/backend",
+                        "log_stream_name": "{instance_id}",
+                        "retention_in_days": -1,
+                        "multi_line_start_pattern": "^\\d{4}-\\d{2}-\\d{2}T"
+                      }
+                    ]
+                  }
+                },
+                "metrics_collected": {
+                  "prometheus": {
+                    "log_group_name": "/dameokja/dev/prometheus",
+                    "prometheus_config_path": "/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml",
+                    "emf_processor": {
+                      "metric_declaration_dedup": true,
+                      "metric_namespace": "Dameokja/dev/App",
+                      "metric_declaration": [
+                        {
+                          "source_labels": [
+                            "job"
+                          ],
+                          "label_matcher": "^dameokja-backend$",
+                          "dimensions": [
+                            [
+                              "env"
+                            ]
+                          ],
+                          "metric_selectors": [
+                            "^tomcat_threads_(busy|current|config_max)_threads$",
+                            "^hikaricp_connections_(active|idle|pending|max)$",
+                            "^hikaricp_connections_timeout_total$",
+                            "^jvm_threads_(live|daemon|peak)_threads$"
+                          ]
+                        },
+                        {
+                          "source_labels": [
+                            "job"
+                          ],
+                          "label_matcher": "^dameokja-backend$",
+                          "dimensions": [
+                            [
+                              "env",
+                              "state"
+                            ]
+                          ],
+                          "metric_selectors": [
+                            "^jvm_threads_states_threads$"
+                          ]
+                        },
+                        {
+                          "source_labels": [
+                            "job",
+                            "uri"
+                          ],
+                          "label_matcher": "^dameokja-backend;/api/v1/(refrigerators/\\{refrigeratorId\\}/(ingredients|notifications|notifications/stream|notifications/unread-count)|ingredients/\\{ingredientId\\})$",
+                          "dimensions": [
+                            [
+                              "env",
+                              "method",
+                              "uri"
+                            ]
+                          ],
+                          "metric_selectors": [
+                            "^http_server_requests_seconds_(count|sum)$"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "metrics": {
+                "namespace": "CWAgent",
+                "append_dimensions": {
+                  "InstanceId": "${aws:InstanceId}"
+                },
+                "metrics_collected": {
+                  "mem": {
+                    "measurement": [
+                      "mem_used_percent"
+                    ]
+                  },
+                  "disk": {
+                    "measurement": [
+                      "used_percent"
+                    ],
+                    "resources": [
+                      "/"
+                    ],
+                    "drop_device": true
+                  },
+                  "net": {
+                    "measurement": [
+                      "err_in",
+                      "err_out",
+                      "drop_in",
+                      "drop_out"
+                    ],
+                    "resources": [
+                      "ens5"
+                    ]
+                  },
+                  "netstat": {
+                    "measurement": [
+                      "tcp_established",
+                      "tcp_time_wait"
+                    ]
+                  },
+                  "processes": {
+                    "measurement": [
+                      "running",
+                      "blocked"
+                    ]
+                  },
+                  "procstat": [
+                    {
+                      "exe": "java",
+                      "measurement": [
+                        "cpu_usage",
+                        "memory_rss"
+                      ]
+                    },
+                    {
+                      "exe": "nginx",
+                      "measurement": [
+                        "cpu_usage",
+                        "memory_rss"
+                      ]
+                    },
+                    {
+                      "exe": "node",
+                      "measurement": [
+                        "cpu_usage",
+                        "memory_rss"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+            EOF
+          - /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/dameokja.json
 
   # 고정 IP 없이 자동 할당 공인 IP를 가리킴. 인스턴스를 중지/시작하면 IP가 바뀌므로 스택을 다시 배포해야 갱신됨
   DnsRecord:
