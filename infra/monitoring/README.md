@@ -36,6 +36,7 @@ flowchart LR
 | `cloudwatch-agent/prometheus.{env}.yaml` | Agent가 BE `/actuator/prometheus`를 읽는 설정(서버 `/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml`) |
 | `host/setup-host.sh` | 로그 디렉터리·소유자, logrotate, Agent 설치·설정 적용 |
 | `host/logrotate-dameokja-nginx` | nginx JSON 로그 회전(BE는 Spring Boot가 회전) |
+| `../v2/dev.yaml` `CloudWatchAgentAssociation` | v2 dev 앱 인스턴스용. 위 dev Agent 설정·prometheus 설정·logrotate를 그대로 담아 SSM으로 적용(`setup-host.sh` 대신). dev 파일을 고치면 여기도 함께 고침 |
 | `cloudformation/slo-monitoring.{env}.template.json` | 환경별 CloudFormation 템플릿(지표 필터·알람·복합 알람·대시보드·저장 쿼리) |
 
 ## 알람 목록
