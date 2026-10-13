@@ -137,6 +137,22 @@
         {
           "name": "S3_BUCKET",
           "valueFrom": "/dameokja-v2-dev-ai/S3_BUCKET"
+        },
+        {
+          "name": "INFERENCE_BACKEND",
+          "valueFrom": "/dameokja-v2-dev-ai/INFERENCE_BACKEND"
+        },
+        {
+          "name": "REMOTE_INFERENCE_URL",
+          "valueFrom": "/dameokja-v2-dev-ai/REMOTE_INFERENCE_URL"
+        },
+        {
+          "name": "REMOTE_INFERENCE_API_KEY",
+          "valueFrom": "/dameokja-v2-dev-ai/REMOTE_INFERENCE_API_KEY"
+        },
+        {
+          "name": "REMOTE_INFERENCE_TIMEOUT_SECONDS",
+          "valueFrom": "/dameokja-v2-dev-ai/REMOTE_INFERENCE_TIMEOUT_SECONDS"
         }
       ],
       "mountPoints": [
