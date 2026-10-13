@@ -163,22 +163,7 @@ Resources:
       TTL: "300"
       ResourceRecords: [!GetAtt Instance.PublicIp]
 
-  # 사용자가 쓰는 dev 주소. v1 → v2를 가중치 레코드로 나눠 옮김(prod Blue/Green 전환 연습).
-  # v1은 콘솔에서 만든 기존 레코드를 가중치 레코드로 바꾼 뒤 import로 가져옴. 스택에서 빠져도 레코드는 남김
-  DevDomainV1Record:
-    Type: AWS::Route53::RecordSet
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      HostedZoneId: !Ref HostedZoneId
-      Name: dev.dameokja.com.
-      Type: A
-      TTL: "300"
-      SetIdentifier: v1
-      Weight: 0
-      ResourceRecords: ["43.200.71.145"]
-
-  # v2 dev 앱 인스턴스. 가중치를 PR로 조금씩 올려 v1에서 옮김 (0이면 트래픽 없음)
+  # 사용자가 쓰는 dev 주소. v1 → v2를 가중치 레코드로 옮긴 뒤 v1 레코드는 제거함(#51)
   DevDomainV2Record:
     Type: AWS::Route53::RecordSet
     Properties:

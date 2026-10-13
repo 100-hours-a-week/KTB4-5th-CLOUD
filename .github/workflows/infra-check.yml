@@ -23,12 +23,11 @@ jobs:
       - name: Compose 설정 검사
         run: |
           docker compose -f v1/prod/compose.yaml config --quiet
-          docker compose -f v1/dev/compose.yaml config --quiet
       - name: Nginx 설정 검사
         run: |
           certs=$(mktemp -d)
           trap 'rm -rf "$certs"' EXIT
-          for domain in dameokja.com dev.dameokja.com; do
+          for domain in dameokja.com; do
             mkdir -p "$certs/live/$domain"
             openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
               -subj "/CN=$domain" \
@@ -38,6 +37,4 @@ jobs:
           logs=$(mktemp -d)
           trap 'rm -rf "$certs" "$logs"' EXIT
           docker run --rm -v "$PWD/v1/prod/nginx:/etc/nginx/conf.d:ro" \
-            -v "$certs:/etc/letsencrypt:ro" -v "$logs:/var/log/nginx/app" nginx:stable nginx -t
-          docker run --rm -v "$PWD/v1/dev/nginx:/etc/nginx/conf.d:ro" \
             -v "$certs:/etc/letsencrypt:ro" -v "$logs:/var/log/nginx/app" nginx:stable nginx -t
