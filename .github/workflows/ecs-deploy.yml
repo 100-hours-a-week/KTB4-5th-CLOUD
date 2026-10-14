@@ -1,15 +1,23 @@
-name: v2 dev ECS 배포
+name: v2 ECS 배포
 
 # BE/FE/AI CI와 CLOUD가 함께 쓰는 배포 단계.
-# infra/v2/ecs/dev/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
-# 실패하면 ECS가 이전 버전으로 되돌리고(circuit breaker) 이 작업도 실패로 끝남.
+# infra/v2/ecs/<env>/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
+# 실패하면 ECS가 이전 버전으로 되돌리고 이 작업도 실패로 끝남.
 on:
   workflow_call:
     inputs:
+      env:
+        description: dev, stage
+        type: string
+        default: dev
       service:
-        description: nginx, frontend, backend, redis, ai
+        description: "dev: nginx, frontend, backend, redis, ai / stage: app, ai"
         type: string
         required: true
+      container:
+        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (stage app은 frontend 또는 backend)
+        type: string
+        default: ""
       image:
         description: 배포할 이미지. 비우면 지금 돌고 있는 이미지 유지
         type: string
@@ -18,17 +26,18 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
     concurrency:
-      group: ecs-dev-${{ inputs.service }}
+      group: ecs-${{ inputs.env }}-${{ inputs.service }}
       cancel-in-progress: false
     env:
-      CLUSTER: dameokja-dev
-      SERVICE: dameokja-dev-${{ inputs.service }}
-      FILE: cloud/infra/v2/ecs/dev/${{ inputs.service }}.json
+      CLUSTER: dameokja-${{ inputs.env }}
+      SERVICE: dameokja-${{ inputs.env }}-${{ inputs.service }}
+      FILE: cloud/infra/v2/ecs/${{ inputs.env }}/${{ inputs.service }}.json
+      CONTAINER: ${{ inputs.container }}
       IMAGE: ${{ inputs.image }}
     steps:
       - uses: actions/checkout@v6
@@ -39,26 +48,35 @@ jobs:
           persist-credentials: false
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::906462447513:role/dameokja-dev-github-ecs-deploy
+          role-to-assume: arn:aws:iam::906462447513:role/dameokja-${{ inputs.env }}-github-ecs-deploy
           aws-region: ap-northeast-2
       - name: Task Definition 등록
         id: register
         run: |
+          # stage app은 BE·FE가 같은 Task를 써서 두 저장소의 배포가 겹칠 수 있음. 진행 중인 배포가 끝난 뒤 지금 상태를 읽음
+          while [ "$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query "length(services[?status=='ACTIVE'].deployments[] | [?rolloutState=='IN_PROGRESS'])" --output text)" != 0 ]; do
+            echo "진행 중인 배포를 기다리는 중"; sleep 15
+          done
           current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
             --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          # BE/FE/AI는 이미지를 CI가 정하므로, 이미지 없이 호출되면 지금 돌고 있는 이미지를 유지
-          if [ -z "$IMAGE" ] && { [ "${{ inputs.service }}" = backend ] || [ "${{ inputs.service }}" = frontend ] || [ "${{ inputs.service }}" = ai ]; } && [ "$current" != None ]; then
-            IMAGE=$(aws ecs describe-task-definition --task-definition "$current" \
-              --query 'taskDefinition.containerDefinitions[0].image' --output text)
+          # 앱 이미지(ghcr.io)는 CI가 정하므로 지금 돌고 있는 이미지를 유지하고, 지정한 컨테이너만 새 이미지로 바꿈.
+          # nginx·redis 같은 공개 이미지는 JSON에 적힌 이미지를 그대로 씀
+          running='{}'
+          if [ "$current" != None ]; then
+            running=$(aws ecs describe-task-definition --task-definition "$current" \
+              --query 'taskDefinition.containerDefinitions' --output json | jq 'map({(.name): .image}) | add')
           fi
-          if [ -n "$IMAGE" ]; then
-            jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image' "$FILE" > td.json
-          else
-            cp "$FILE" td.json
-          fi
+          target=${CONTAINER:-$(jq -r '.containerDefinitions[0].name' "$FILE")}
+          jq --argjson running "$running" --arg target "$target" --arg image "$IMAGE" '
+            .containerDefinitions |= map(
+              if .name == $target and $image != "" then .image = $image
+              elif (.image | startswith("ghcr.io/")) and $running[.name] then .image = $running[.name]
+              else . end)' "$FILE" > td.json
           arn=$(aws ecs register-task-definition --cli-input-json file://td.json \
             --query taskDefinition.taskDefinitionArn --output text)
-          echo "등록: $arn ($(jq -r '.containerDefinitions[0].image' td.json))"
+          echo "등록: $arn"
+          jq -r '.containerDefinitions[] | "  \(.name): \(.image)"' td.json
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
           echo "service-exists=$([ "$current" != None ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Service 갱신 후 완료 대기
