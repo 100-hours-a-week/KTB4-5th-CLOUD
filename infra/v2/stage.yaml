@@ -47,7 +47,7 @@ Parameters:
   DbInstanceType:
     Type: String
     Default: t3.medium
-  # 고정 AMI. SSM 권장 AMI 경로를 쓰면 새 AMI가 나올 때마다 DB 인스턴스가 교체됨
+  # 일반 AL2023 AMI(ECS 최적화 아님) ID 고정. SSM 최신 AMI 경로를 쓰면 새 AMI가 나올 때마다 DB 인스턴스가 교체됨
   DbAmiId:
     Type: AWS::EC2::Image::Id
   GhcrCredentialsArn:
