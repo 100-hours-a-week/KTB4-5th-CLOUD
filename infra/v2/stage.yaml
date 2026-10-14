@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: dameokja v2 stage (prod와 같은 구조 - 2AZ 서브넷, NAT, ALB, ECS on EC2 ASG, 자체 구축 Redis·MySQL)
+Description: dameokja v2 stage (서브넷 2AZ, 앱 서버는 2b 한 곳, NAT, ALB, ECS on EC2 ASG, 자체 구축 Redis·MySQL)
 
 # prod와 같은 방식으로 동작하는 stage. dev(172.31 VPC)·prod(10.0 VPC)와 겹치지 않는 stage 전용 VPC를 새로 만듦
 # 구조: stage.dameokja.com -> ALB(TLS 종료) -> private 서브넷 ECS Task(nginx+FE+BE, awsvpc) -> Redis / stage 전용 MySQL
@@ -87,6 +87,7 @@ Resources:
       InternetGatewayId: !Ref InternetGateway
 
   # --- 서브넷: public(ALB, NAT) / private(ECS 인스턴스·Task, Redis, DB) x 2AZ
+  # 앱 서버(ECS)는 2b 한 곳에만 둠. AZ 분리는 DB만 (private 2c는 DB Standby용, ALB는 서브넷 2AZ가 필수)
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -434,7 +435,7 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-stage-db }
 
-  # --- ECS 클러스터 + ASG(2AZ private) + Capacity Provider
+  # --- ECS 클러스터 + ASG(private 2b) + Capacity Provider
   Cluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -483,7 +484,7 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: dameokja-stage
-      VPCZoneIdentifier: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      VPCZoneIdentifier: [!Ref PrivateSubnetA]
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
@@ -807,11 +808,9 @@ Resources:
       DesiredCount: 2
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
-      PlacementStrategies:
-        - { Type: spread, Field: attribute:ecs.availability-zone }
       NetworkConfiguration:
         AwsvpcConfiguration:
-          Subnets: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+          Subnets: [!Ref PrivateSubnetA]
           SecurityGroups: [!Ref AppSecurityGroup]
       HealthCheckGracePeriodSeconds: 300
       LoadBalancers:
@@ -842,7 +841,7 @@ Resources:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       NetworkConfiguration:
         AwsvpcConfiguration:
-          Subnets: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+          Subnets: [!Ref PrivateSubnetA]
           SecurityGroups: [!Ref AiSecurityGroup]
       ServiceRegistries:
         - RegistryArn: !GetAtt AiDiscoveryService.Arn
