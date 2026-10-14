@@ -32,9 +32,10 @@ Parameters:
   DomainName:
     Type: String
     Default: stage.dameokja.com
+  # prod와 같은 m7i 계열. m7i는 large(2 vCPU, 8GB)가 가장 작은 크기
   InstanceType:
     Type: String
-    Default: t3.large
+    Default: m7i.large
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
@@ -46,7 +47,7 @@ Parameters:
     Default: 4
   DbInstanceType:
     Type: String
-    Default: t3.medium
+    Default: m7i.large
   # 일반 AL2023 AMI(ECS 최적화 아님) ID 고정. SSM 최신 AMI 경로를 쓰면 새 AMI가 나올 때마다 DB 인스턴스가 교체됨
   DbAmiId:
     Type: AWS::EC2::Image::Id
