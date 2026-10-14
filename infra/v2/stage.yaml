@@ -1,12 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: dameokja v2 stage (prod와 같은 구조 - 2AZ 서브넷, NAT, ALB, ECS on EC2 ASG, ElastiCache Redis)
 
-# prod와 같은 방식으로 동작하는 stage. dev(dev.yaml)와 같은 172.31 VPC에 stage 전용 서브넷을 새로 만듦
+# prod와 같은 방식으로 동작하는 stage. dev(172.31 VPC)·prod(10.0 VPC)와 겹치지 않는 stage 전용 VPC를 새로 만듦
 # 구조: stage.dameokja.com -> ALB(TLS 종료) -> private 서브넷 ECS Task(nginx+FE+BE, awsvpc) -> Redis / stage 전용 MySQL
 # ECS Service와 Task Definition은 다음 PR에서 추가 (Service는 Task Definition이 먼저 등록되어 있어야 함)
 Parameters:
-  VpcId:
-    Type: AWS::EC2::VPC::Id
+  VpcCidr:
+    Type: String
+    Default: 10.10.0.0/16
   AzA:
     Type: AWS::EC2::AvailabilityZone::Name
     Default: ap-northeast-2b
@@ -15,16 +16,16 @@ Parameters:
     Default: ap-northeast-2c
   PublicSubnetACidr:
     Type: String
-    Default: 172.31.64.0/20
+    Default: 10.10.0.0/20
   PublicSubnetBCidr:
     Type: String
-    Default: 172.31.80.0/20
+    Default: 10.10.16.0/20
   PrivateSubnetACidr:
     Type: String
-    Default: 172.31.96.0/20
+    Default: 10.10.32.0/20
   PrivateSubnetBCidr:
     Type: String
-    Default: 172.31.112.0/20
+    Default: 10.10.48.0/20
   HostedZoneId:
     Type: AWS::Route53::HostedZone::Id
     Description: dameokja.com hosted zone
@@ -60,12 +61,32 @@ Parameters:
     Default: stage/image/
 
 Resources:
-  # --- 서브넷: public(ALB, NAT) / private(ECS 인스턴스·Task, Redis) x 2AZ
-  # public 서브넷은 라우팅 테이블을 따로 연결하지 않아 VPC 기본 라우팅 테이블(0.0.0.0/0 -> 기존 IGW)을 씀
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: dameokja-stage }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: dameokja-stage }
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # --- 서브넷: public(ALB, NAT) / private(ECS 인스턴스·Task, Redis, DB) x 2AZ
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzA
       CidrBlock: !Ref PublicSubnetACidr
       Tags:
@@ -74,7 +95,7 @@ Resources:
   PublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzB
       CidrBlock: !Ref PublicSubnetBCidr
       Tags:
@@ -83,7 +104,7 @@ Resources:
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzA
       CidrBlock: !Ref PrivateSubnetACidr
       Tags:
@@ -92,15 +113,43 @@ Resources:
   PrivateSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzB
       CidrBlock: !Ref PrivateSubnetBCidr
       Tags:
         - { Key: Name, Value: dameokja-stage-private-b }
 
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: dameokja-stage-public-rt }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
   # --- NAT 1개(AzA). AzA 장애 시 AzB private의 외부 통신도 끊기는 것은 감수 (구현 기록 임시 기본값)
   NatEip:
     Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
       Tags:
@@ -117,7 +166,7 @@ Resources:
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       Tags:
         - { Key: Name, Value: dameokja-stage-private-rt }
 
@@ -144,7 +193,7 @@ Resources:
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       VpcEndpointType: Gateway
       RouteTableIds: [!Ref PrivateRouteTable]
@@ -154,7 +203,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja v2 stage ALB (80/443 public)
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
         - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
@@ -166,7 +215,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja v2 stage ECS instances (no inbound)
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       Tags:
         - { Key: Name, Value: dameokja-stage-instance }
 
@@ -175,7 +224,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja v2 stage app task (80 from ALB)
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 80, ToPort: 80, SourceSecurityGroupId: !Ref AlbSecurityGroup }
       Tags:
@@ -186,7 +235,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja v2 stage AI task (8000 from app task)
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 8000, ToPort: 8000, SourceSecurityGroupId: !Ref AppSecurityGroup }
       Tags:
@@ -196,7 +245,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja v2 stage Redis (6379 from app task)
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 6379, ToPort: 6379, SourceSecurityGroupId: !Ref AppSecurityGroup }
       Tags:
@@ -206,7 +255,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja v2 stage MySQL (3306 from app task)
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref AppSecurityGroup }
       Tags:
@@ -224,6 +273,8 @@ Resources:
 
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    # internet-facing ALB는 VPC에 IGW가 붙어 있어야 만들어짐
+    DependsOn: InternetGatewayAttachment
     Properties:
       Name: dameokja-stage-alb
       Type: application
@@ -237,7 +288,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: dameokja-stage-tg-blue
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       Protocol: HTTP
       Port: 80
       TargetType: ip # awsvpc Task
@@ -250,7 +301,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: dameokja-stage-tg-green
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       Protocol: HTTP
       Port: 80
       TargetType: ip
@@ -455,7 +506,7 @@ Resources:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Name: stage.dameokja.internal
-      Vpc: !Ref VpcId
+      Vpc: !Ref Vpc
 
   AiDiscoveryService:
     Type: AWS::ServiceDiscovery::Service
@@ -524,7 +575,7 @@ Resources:
             server_name _;
 
             # ALB가 붙여 준 X-Forwarded-For에서 실제 사용자 IP를 꺼냄
-            set_real_ip_from 172.31.0.0/16;
+            set_real_ip_from 10.10.0.0/16;
             real_ip_header X-Forwarded-For;
 
             # 컨테이너 표준 출력 -> CloudWatch Logs
@@ -736,6 +787,8 @@ Resources:
                 ssm:resourceTag/Name: dameokja-stage*
 
 Outputs:
+  VpcId:
+    Value: !Ref Vpc
   ClusterName:
     Value: !Ref Cluster
   AlbDnsName:
