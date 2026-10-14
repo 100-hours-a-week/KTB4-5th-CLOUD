@@ -62,7 +62,7 @@ Parameters:
     Default: dameokja-906462447513-ap-northeast-2-an
   S3UploadPrefix:
     Type: String
-    Default: stage/image/
+    Default: image/stage/
 
 Resources:
   Vpc:
