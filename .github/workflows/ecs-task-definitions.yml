@@ -1,11 +1,12 @@
-name: v2 dev Task Definition 반영
+name: v2 Task Definition 반영
 
-# infra/v2/ecs/dev/*.json이 main에 들어오면 바뀐 서비스만 다시 배포 (이미지는 지금 것 유지)
+# infra/v2/ecs/<env>/*.json이 main에 들어오면 바뀐 서비스만 다시 배포 (이미지는 지금 것 유지)
 on:
   push:
     branches: [main]
     paths:
       - "infra/v2/ecs/dev/**"
+      - "infra/v2/ecs/stage/**"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      services: ${{ steps.diff.outputs.services }}
+      targets: ${{ steps.diff.outputs.targets }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -23,23 +24,26 @@ jobs:
       - id: diff
         run: |
           if [ "${{ github.event_name }}" = workflow_dispatch ]; then
-            files=$(ls infra/v2/ecs/dev/*.json)
+            files=$(ls infra/v2/ecs/dev/*.json infra/v2/ecs/stage/*.json)
           else
-            files=$(git diff --name-only HEAD^ HEAD -- infra/v2/ecs/dev/)
+            files=$(git diff --name-only --diff-filter=d HEAD^ HEAD -- infra/v2/ecs/dev/ infra/v2/ecs/stage/)
           fi
-          services=$(printf '%s\n' "$files" | grep '\.json$' | xargs -r -n1 basename -s .json | jq -Rnc '[inputs]')
-          echo "services=$services" >> "$GITHUB_OUTPUT"
+          # infra/v2/ecs/stage/app.json -> {"env":"stage","service":"app"}
+          targets=$(printf '%s\n' "$files" | grep '\.json$' \
+            | jq -Rnc '[inputs | split("/") | {env: .[3], service: (.[4] | rtrimstr(".json"))}]')
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: changes
-    if: needs.changes.outputs.services != '[]'
+    if: needs.changes.outputs.targets != '[]'
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.changes.outputs.services) }}
+        target: ${{ fromJSON(needs.changes.outputs.targets) }}
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/ecs-deploy.yml
     with:
-      service: ${{ matrix.service }}
+      env: ${{ matrix.target.env }}
+      service: ${{ matrix.target.service }}
