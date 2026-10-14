@@ -1,16 +1,16 @@
-name: v2 인프라 CloudFormation
+name: v2 인프라 CloudFormation (dev)
 
 on:
   pull_request:
     paths:
-      - "infra/v2/**"
-      - "!infra/v2/ecs/**"
+      - "infra/v2/dev.yaml"
+      - "infra/v2/params/dev.json"
       - ".github/workflows/infra-v2-cfn.yml"
   push:
     branches: [main]
     paths:
-      - "infra/v2/**"
-      - "!infra/v2/ecs/**"
+      - "infra/v2/dev.yaml"
+      - "infra/v2/params/dev.json"
       - ".github/workflows/infra-v2-cfn.yml"
 
 env:
@@ -48,6 +48,8 @@ jobs:
           change-set-name: pr-${{ github.event.pull_request.number }}-${{ github.run_number }}
           role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
           capabilities: CAPABILITY_NAMED_IAM
+          # 워크플로 파일만 바뀌어 템플릿 변경이 없을 때 실패하지 않게
+          fail-on-empty-changeset: false
       - name: PR에 미리보기 댓글
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,3 +80,5 @@ jobs:
           parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
           role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
           capabilities: CAPABILITY_NAMED_IAM
+          # 워크플로 파일만 바뀌어 템플릿 변경이 없을 때 실패하지 않게
+          fail-on-empty-changeset: false

@@ -13,9 +13,10 @@ Parameters:
   AiInstanceType:
     Type: String
     Default: t3.small
+  # 지금 인스턴스의 AMI로 고정. SSM 권장 AMI 경로를 쓰면 AWS가 새 AMI를 낼 때마다 다음 배포에서 인스턴스가 교체됨
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    Type: AWS::EC2::Image::Id
+    Default: ami-01c8e9f48048c29a4
   HostedZoneId:
     Type: AWS::Route53::HostedZone::Id
     Description: dameokja.com hosted zone

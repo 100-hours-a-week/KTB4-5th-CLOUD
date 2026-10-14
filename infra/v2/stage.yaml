@@ -1,0 +1,823 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: dameokja v2 stage (prod와 같은 구조 - 2AZ 서브넷, NAT, ALB, ECS on EC2 ASG, 자체 구축 Redis·MySQL)
+
+# prod와 같은 방식으로 동작하는 stage. dev(172.31 VPC)·prod(10.0 VPC)와 겹치지 않는 stage 전용 VPC를 새로 만듦
+# 구조: stage.dameokja.com -> ALB(TLS 종료) -> private 서브넷 ECS Task(nginx+FE+BE, awsvpc) -> Redis / stage 전용 MySQL
+# ECS Service와 Task Definition은 다음 PR에서 추가 (Service는 Task Definition이 먼저 등록되어 있어야 함)
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.10.0.0/16
+  AzA:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-2b
+  AzB:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-2c
+  PublicSubnetACidr:
+    Type: String
+    Default: 10.10.0.0/20
+  PublicSubnetBCidr:
+    Type: String
+    Default: 10.10.16.0/20
+  PrivateSubnetACidr:
+    Type: String
+    Default: 10.10.32.0/20
+  PrivateSubnetBCidr:
+    Type: String
+    Default: 10.10.48.0/20
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: dameokja.com hosted zone
+  DomainName:
+    Type: String
+    Default: stage.dameokja.com
+  # prod와 같은 m7i 계열. m7i는 large(2 vCPU, 8GB)가 가장 작은 크기
+  InstanceType:
+    Type: String
+    Default: m7i.large
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+  MinSize:
+    Type: Number
+    Default: 2
+  MaxSize:
+    Type: Number
+    Default: 4
+  DbInstanceType:
+    Type: String
+    Default: m7i.large
+  RedisInstanceType:
+    Type: String
+    Default: m7i.large
+  # 일반 AL2023 AMI(ECS 최적화 아님) ID 고정. SSM 최신 AMI 경로를 쓰면 새 AMI가 나올 때마다 DB 인스턴스가 교체됨
+  DbAmiId:
+    Type: AWS::EC2::Image::Id
+  GhcrCredentialsArn:
+    Type: String
+    Description: Secrets Manager secret ARN with GHCR username/PAT (read:packages), created by hand
+  S3BucketName:
+    Type: String
+    Default: dameokja-906462447513-ap-northeast-2-an
+  S3UploadPrefix:
+    Type: String
+    Default: image/stage/
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: dameokja-stage }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: dameokja-stage }
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # --- 서브넷: public(ALB, NAT) / private(ECS 인스턴스·Task, Redis, DB) x 2AZ
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AzA
+      CidrBlock: !Ref PublicSubnetACidr
+      Tags:
+        - { Key: Name, Value: dameokja-stage-public-a }
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AzB
+      CidrBlock: !Ref PublicSubnetBCidr
+      Tags:
+        - { Key: Name, Value: dameokja-stage-public-b }
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AzA
+      CidrBlock: !Ref PrivateSubnetACidr
+      Tags:
+        - { Key: Name, Value: dameokja-stage-private-a }
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AzB
+      CidrBlock: !Ref PrivateSubnetBCidr
+      Tags:
+        - { Key: Name, Value: dameokja-stage-private-b }
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: dameokja-stage-public-rt }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # --- NAT 1개(AzA). AzA 장애 시 AzB private의 외부 통신도 끊기는 것은 감수 (구현 기록 임시 기본값)
+  NatEip:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: dameokja-stage-nat }
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - { Key: Name, Value: dameokja-stage-nat }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: dameokja-stage-private-rt }
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # S3 트래픽(이미지 업로드·조회, ECR 레이어 등)이 NAT를 타지 않게 (무료)
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref PrivateRouteTable]
+
+  # --- 보안그룹
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 stage ALB (80/443 public)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+      Tags:
+        - { Key: Name, Value: dameokja-stage-alb }
+
+  # ECS 인스턴스 자체. Task는 awsvpc라 각자 ENI와 아래 Task용 보안그룹을 따로 가짐
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 stage ECS instances (no inbound)
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: dameokja-stage-instance }
+
+  # nginx+FE+BE Task. ALB에서 오는 80만
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 stage app task (80 from ALB)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, SourceSecurityGroupId: !Ref AlbSecurityGroup }
+      Tags:
+        - { Key: Name, Value: dameokja-stage-app }
+
+  # AI API Task. 앱 Task(BE)에서 오는 8000만
+  AiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 stage AI task (8000 from app task)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 8000, ToPort: 8000, SourceSecurityGroupId: !Ref AppSecurityGroup }
+      Tags:
+        - { Key: Name, Value: dameokja-stage-ai }
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 stage Redis (6379 from app task)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 6379, ToPort: 6379, SourceSecurityGroupId: !Ref AppSecurityGroup }
+      Tags:
+        - { Key: Name, Value: dameokja-stage-redis }
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 stage MySQL (3306 from app task)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref AppSecurityGroup }
+      Tags:
+        - { Key: Name, Value: dameokja-stage-db }
+
+  # --- 진입점: ACM 인증서 + ALB + 타겟 그룹 2개(ECS Blue/Green) + 리스너
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    # internet-facing ALB는 VPC에 IGW가 붙어 있어야 만들어짐
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Name: dameokja-stage-alb
+      Type: application
+      Scheme: internet-facing
+      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      SecurityGroups: [!Ref AlbSecurityGroup]
+      LoadBalancerAttributes:
+        - { Key: idle_timeout.timeout_seconds, Value: "300" } # SSE 연결 유지 (구현 기록 임시 기본값)
+
+  TargetGroupBlue:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: dameokja-stage-tg-blue
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip # awsvpc Task
+      HealthCheckPath: /nginx-health
+      Matcher: { HttpCode: "200" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  TargetGroupGreen:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: dameokja-stage-tg-green
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip
+      HealthCheckPath: /nginx-health
+      Matcher: { HttpCode: "200" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig: { Protocol: HTTPS, Port: "443", StatusCode: HTTP_301 }
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: !Ref Certificate
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig: { StatusCode: "404", ContentType: text/plain, MessageBody: not found }
+
+  # ECS Native Blue/Green이 배포 때 이 규칙의 가중치를 바꿔 blue <-> green을 전환
+  ProductionListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig: { Values: ["/*"] }
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - { TargetGroupArn: !Ref TargetGroupBlue, Weight: 100 }
+              - { TargetGroupArn: !Ref TargetGroupGreen, Weight: 0 }
+
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "${DomainName}."
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Alb.DNSName
+        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
+
+  # --- Redis: EC2 자체 구축 단일 노드, 이중화 없음 (v2 22번), AOF 영속화
+  # AMI는 DB와 같은 고정 일반 AL2023, 역할도 DB와 같은 SSM 접속용
+  RedisInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref DbAmiId
+      InstanceType: !Ref RedisInstanceType
+      SubnetId: !Ref PrivateSubnetA
+      SecurityGroupIds: [!Ref RedisSecurityGroup]
+      IamInstanceProfile: !Ref DbInstanceProfile
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y redis6
+          sed -i -e 's/^bind .*/bind 0.0.0.0/' -e 's/^protected-mode yes/protected-mode no/' \
+            -e 's/^appendonly no/appendonly yes/' /etc/redis6/redis6.conf
+          systemctl enable --now redis6
+      Tags:
+        - { Key: Name, Value: dameokja-stage-redis }
+
+  # --- stage 전용 MySQL 8.4 (Primary 1대). Standby·Replica·Orchestrator는 DB 이중화 작업에서 추가
+  # 복제를 붙일 수 있게 처음부터 binlog·GTID를 켬. 계정·스키마는 처음 한 번 Session Manager로 만듦
+  DbRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  DbInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref DbRole]
+
+  DbInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref DbAmiId
+      InstanceType: !Ref DbInstanceType
+      SubnetId: !Ref PrivateSubnetA
+      SecurityGroupIds: [!Ref DbSecurityGroup]
+      IamInstanceProfile: !Ref DbInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 30, VolumeType: gp3 }
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm
+          dnf install -y mysql-community-server
+          cat > /etc/my.cnf.d/dameokja.cnf <<'EOF'
+          [mysqld]
+          server_id=1
+          log_bin=binlog
+          gtid_mode=ON
+          enforce_gtid_consistency=ON
+          default_time_zone='+09:00'
+          EOF
+          systemctl enable --now mysqld
+      Tags:
+        - { Key: Name, Value: dameokja-stage-db }
+
+  # --- ECS 클러스터 + ASG(2AZ private) + Capacity Provider
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: dameokja-stage
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # 새 인스턴스는 처음 부팅 때 클러스터 등록과 KST 설정. 템플릿을 바꾸면 이후 새로 뜨는 인스턴스부터 적용
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: dameokja-stage
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
+        SecurityGroupIds: [!Ref InstanceSecurityGroup]
+        MetadataOptions: { HttpTokens: required }
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: Name, Value: dameokja-stage }
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
+            timedatectl set-timezone Asia/Seoul
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: dameokja-stage
+      VPCZoneIdentifier: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+
+  # Task를 올릴 자리가 모자라면 ECS가 ASG 인스턴스 수를 늘리고, 남으면 줄임 (min~max 안에서)
+  CapacityProvider:
+    Type: AWS::ECS::CapacityProvider
+    Properties:
+      AutoScalingGroupProvider:
+        AutoScalingGroupArn: !Ref AutoScalingGroup
+        ManagedScaling:
+          Status: ENABLED
+          TargetCapacity: 100
+        ManagedTerminationProtection: DISABLED
+
+  ClusterCapacityProviders:
+    Type: AWS::ECS::ClusterCapacityProviderAssociations
+    Properties:
+      Cluster: !Ref Cluster
+      CapacityProviders: [!Ref CapacityProvider]
+      DefaultCapacityProviderStrategy:
+        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+
+  # --- BE가 AI를 찾는 내부 주소: ai.stage.dameokja.internal (AI Task가 뜨면 IP가 등록됨)
+  PrivateNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: stage.dameokja.internal
+      Vpc: !Ref Vpc
+
+  AiDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: ai
+      NamespaceId: !Ref PrivateNamespace
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - { Type: A, TTL: 10 }
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  # --- 스택이 정하는 설정값. 콘솔에서 바꾸면 다음 배포 때 덮어씀
+  RedisHostParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-v2-stage/SPRING_DATA_REDIS_HOST
+      Type: String
+      Value: !GetAtt RedisInstance.PrivateIp
+
+  RedisPortParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-v2-stage/SPRING_DATA_REDIS_PORT
+      Type: String
+      Value: "6379"
+
+  AiBaseUrlParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-v2-stage/AI_BASE_URL
+      Type: String
+      Value: http://ai.stage.dameokja.internal:8000
+
+  # nginx 설정. ALB가 TLS를 끝내고 80으로 넘겨줌. awsvpc라 같은 Task의 FE·BE는 127.0.0.1
+  NginxConfParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-v2-stage/nginx/default.conf
+      Type: String
+      Value: |
+        map $http_upgrade $connection_upgrade {
+            default upgrade;
+            '' close;
+        }
+
+        # SLI 집계용 API 분류 (dev와 같음)
+        map "$request_method $uri" $slo_route {
+            default "-";
+            "~^POST /api/v1/refrigerators/[^/]+/ingredients$" ingredient_create;
+            "~^GET /api/v1/refrigerators/[^/]+/ingredients$" ingredient_read;
+            "~^GET /api/v1/ingredients/[^/]+$" ingredient_read;
+            "~^GET /api/v1/refrigerators/[^/]+/notifications(/stream|/unread-count)?$" notification_poll;
+            "~^POST /api/v1/ingredients/[^/]+$" aux_consume;
+            "~^POST /api/v1/push-subscriptions$" aux_push_subscribe;
+        }
+
+        log_format slo_json escape=json '{"time":"$time_iso8601","method":"$request_method",'
+            '"uri":"$uri","status":$status,"route":"$slo_route","request_time":$request_time,'
+            '"upstream_status":"$upstream_status","upstream_time":"$upstream_response_time",'
+            '"bytes":$body_bytes_sent}';
+
+        server {
+            listen 80;
+            server_name _;
+
+            # ALB가 붙여 준 X-Forwarded-For에서 실제 사용자 IP를 꺼냄
+            set_real_ip_from 10.10.0.0/16;
+            real_ip_header X-Forwarded-For;
+
+            # 컨테이너 표준 출력 -> CloudWatch Logs
+            access_log /var/log/nginx/access.log slo_json;
+
+            location = /nginx-health {
+                access_log off;
+                default_type text/plain;
+                return 200 "ok\n";
+            }
+
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_buffering off;
+
+            location ~ ^/(swagger-ui(?:/|$)|swagger-ui\.html$|v3/api-docs(?:\.yaml$|/|$)) {
+                proxy_pass http://127.0.0.1:8080;
+            }
+
+            location ~ ^/api(?:/|$) {
+                proxy_pass http://127.0.0.1:8080;
+            }
+
+            location / {
+                proxy_pass http://127.0.0.1:3000;
+            }
+        }
+
+  # --- 컨테이너 로그 (awslogs). 서비스마다 로그 그룹 하나
+  NginxLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /dameokja/stage/nginx
+      RetentionInDays: 30
+
+  FrontendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /dameokja/stage/frontend
+      RetentionInDays: 30
+
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /dameokja/stage/backend
+      RetentionInDays: 30
+
+  AiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /dameokja/stage/ai
+      RetentionInDays: 30
+
+  # --- IAM
+  # ECS 에이전트가 이미지 받기(GHCR 토큰)와 SSM 값 읽기에 쓰는 역할
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-stage-ecs-task-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: read-app-config
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-stage/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-stage-fe/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-stage-ai/*"
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref GhcrCredentialsArn
+
+  # BE 컨테이너: 이미지 버킷의 stage 업로드 경로만
+  BackendTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-stage-backend-task
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: profile-images
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
+
+  # AI 서버: BE가 올린 이미지 읽기
+  AiTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-stage-ai-task
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-images
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
+
+  # ECS Native Blue/Green이 배포 중 리스너 규칙·타겟 그룹을 바꿀 때 쓰는 역할
+  EcsInfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-stage-ecs-infrastructure
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers
+
+  # BE/FE/AI(main)와 CLOUD(main) GitHub Actions가 stage Task Definition 등록과 Service 갱신에 쓰는 역할
+  GitHubEcsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-stage-github-ecs-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  - repo:100-hours-a-week@167328634/KTB4-5th-BE@1344691625:ref:refs/heads/main
+                  - repo:100-hours-a-week@167328634/KTB4-5th-FE@1344691246:ref:refs/heads/main
+                  - repo:100-hours-a-week@167328634/KTB4-5th-AI@1344690862:ref:refs/heads/main
+                  - repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:ref:refs/heads/main
+      Policies:
+        - PolicyName: ecs-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ecs:RegisterTaskDefinition, ecs:DescribeTaskDefinition]
+                Resource: "*"
+              - Effect: Allow
+                Action: [ecs:UpdateService, ecs:DescribeServices]
+                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/*"
+              - Effect: Allow
+                Action: [ecs:DescribeServiceDeployments, ecs:ListServiceDeployments]
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn, !GetAtt AiTaskRole.Arn]
+
+  # 팀원(IAM 그룹 dameokja-iam)이 stage 설정값(SSM)을 관리하고, stage 인스턴스에 Session Manager로 접속
+  TeamSsmAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: dameokja-v2-stage-ssm-team
+      Groups: [dameokja-iam]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+              - ssm:GetParameterHistory
+              - ssm:PutParameter
+              - ssm:DeleteParameter
+              - ssm:DeleteParameters
+              - ssm:AddTagsToResource
+              - ssm:ListTagsForResource
+            Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-stage/*"
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-stage-*"
+          # ASG가 인스턴스를 바꾸므로 ID 대신 Name 태그로 허용 (앱 dameokja-stage, DB dameokja-stage-db)
+          - Effect: Allow
+            Action: ssm:StartSession
+            Resource: !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+            Condition:
+              StringLike:
+                ssm:resourceTag/Name: dameokja-stage*
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+  ClusterName:
+    Value: !Ref Cluster
+  AlbDnsName:
+    Value: !GetAtt Alb.DNSName
+  TargetGroupBlueArn:
+    Value: !Ref TargetGroupBlue
+  TargetGroupGreenArn:
+    Value: !Ref TargetGroupGreen
+  ProductionListenerRuleArn:
+    Value: !Ref ProductionListenerRule
+  PrivateSubnetA:
+    Value: !Ref PrivateSubnetA
+  PrivateSubnetB:
+    Value: !Ref PrivateSubnetB
+  AppSecurityGroupId:
+    Value: !Ref AppSecurityGroup
+  AiSecurityGroupId:
+    Value: !Ref AiSecurityGroup
+  RedisPrivateIp:
+    Value: !GetAtt RedisInstance.PrivateIp
+  DbInstanceId:
+    Value: !Ref DbInstance
+  DbPrivateIp:
+    Value: !GetAtt DbInstance.PrivateIp
