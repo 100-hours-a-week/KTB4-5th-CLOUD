@@ -38,8 +38,31 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_CFN_PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 상태
+        id: st
+        run: echo "status=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE)" >> "$GITHUB_OUTPUT"
+      # 첫 생성 전에는 미리보기 change set 때문에 스택이 REVIEW_IN_PROGRESS로 남는데,
+      # 이 액션은 그 상태를 "있는 스택"으로 보고 UPDATE를 시도해 실패함 -> CREATE change set을 직접 만듦
+      - name: 첫 생성 전이면 CREATE change set 만들기
+        id: new
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        run: |
+          CS="pr-${{ github.event.pull_request.number }}-${{ github.run_number }}"
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+            --change-set-type CREATE --template-body "file://$TEMPLATE" --parameters "file://$PARAMS" \
+            --role-arn "${{ vars.AWS_CFN_EXEC_ROLE_ARN }}" --capabilities CAPABILITY_NAMED_IAM > /dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CS"
+          {
+            echo 'md<<EOF'
+            echo "새 스택 생성: $(aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" --query 'length(Changes)') 개 추가"
+            echo
+            aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+              --query 'Changes[].ResourceChange.[LogicalResourceId,ResourceType]' --output text | awk '{print "- 🟢 " $1 " `" $2 "`"}'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: change set 만들기 (적용하지 않음)
         id: cs
+        if: steps.st.outputs.status != 'REVIEW_IN_PROGRESS'
         uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
         with:
           mode: create-only
@@ -54,7 +77,7 @@ jobs:
       - name: PR에 미리보기 댓글
         env:
           GH_TOKEN: ${{ github.token }}
-          BODY: ${{ steps.cs.outputs.changes-markdown || '변경 없음' }}
+          BODY: ${{ steps.new.outputs.md || steps.cs.outputs.changes-markdown || '변경 없음' }}
         run: gh pr comment "${{ github.event.pull_request.number }}" --body "$(printf '**stage** (`%s`)\n\n%s' "$STACK_NAME" "$BODY")"
 
   deploy:
@@ -74,7 +97,28 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 상태
+        id: st
+        run: echo "status=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE)" >> "$GITHUB_OUTPUT"
+      - name: 첫 생성이면 CREATE change set 만들기
+        id: new
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        run: |
+          CS="main-${{ github.run_number }}"
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+            --change-set-type CREATE --template-body "file://$TEMPLATE" --parameters "file://$PARAMS" \
+            --role-arn "${{ vars.AWS_CFN_EXEC_ROLE_ARN }}" --capabilities CAPABILITY_NAMED_IAM > /dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CS"
+          echo "cs=$CS" >> "$GITHUB_OUTPUT"
+      - name: 스택 생성
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: execute-only
+          name: ${{ env.STACK_NAME }}
+          execute-change-set-id: ${{ steps.new.outputs.cs }}
       - name: 스택 적용
+        if: steps.st.outputs.status != 'REVIEW_IN_PROGRESS'
         uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
         with:
           name: ${{ env.STACK_NAME }}
