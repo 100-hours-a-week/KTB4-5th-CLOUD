@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: dameokja v2 stage (prod와 같은 구조 - 2AZ 서브넷, NAT, ALB, ECS on EC2 ASG, ElastiCache Redis)
+Description: dameokja v2 stage (prod와 같은 구조 - 2AZ 서브넷, NAT, ALB, ECS on EC2 ASG, 자체 구축 Redis·MySQL)
 
 # prod와 같은 방식으로 동작하는 stage. dev(172.31 VPC)·prod(10.0 VPC)와 겹치지 않는 stage 전용 VPC를 새로 만듦
 # 구조: stage.dameokja.com -> ALB(TLS 종료) -> private 서브넷 ECS Task(nginx+FE+BE, awsvpc) -> Redis / stage 전용 MySQL
@@ -46,6 +46,9 @@ Parameters:
     Type: Number
     Default: 4
   DbInstanceType:
+    Type: String
+    Default: m7i.large
+  RedisInstanceType:
     Type: String
     Default: m7i.large
   # 일반 AL2023 AMI(ECS 최적화 아님) ID 고정. SSM 최신 AMI 경로를 쓰면 새 AMI가 나올 때마다 DB 인스턴스가 교체됨
@@ -360,23 +363,27 @@ Resources:
         DNSName: !GetAtt Alb.DNSName
         HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
 
-  # --- Redis: 단일 노드, 이중화 없음 (v2 22번)
-  RedisSubnetGroup:
-    Type: AWS::ElastiCache::SubnetGroup
+  # --- Redis: EC2 자체 구축 단일 노드, 이중화 없음 (v2 22번), AOF 영속화
+  # AMI는 DB와 같은 고정 일반 AL2023, 역할도 DB와 같은 SSM 접속용
+  RedisInstance:
+    Type: AWS::EC2::Instance
     Properties:
-      Description: dameokja v2 stage redis
-      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
-
-  Redis:
-    Type: AWS::ElastiCache::CacheCluster
-    Properties:
-      ClusterName: dameokja-stage-redis
-      Engine: redis
-      CacheNodeType: cache.t4g.micro
-      NumCacheNodes: 1
-      PreferredAvailabilityZone: !Ref AzA
-      CacheSubnetGroupName: !Ref RedisSubnetGroup
-      VpcSecurityGroupIds: [!Ref RedisSecurityGroup]
+      ImageId: !Ref DbAmiId
+      InstanceType: !Ref RedisInstanceType
+      SubnetId: !Ref PrivateSubnetA
+      SecurityGroupIds: [!Ref RedisSecurityGroup]
+      IamInstanceProfile: !Ref DbInstanceProfile
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y redis6
+          sed -i -e 's/^bind .*/bind 0.0.0.0/' -e 's/^protected-mode yes/protected-mode no/' \
+            -e 's/^appendonly no/appendonly yes/' /etc/redis6/redis6.conf
+          systemctl enable --now redis6
+      Tags:
+        - { Key: Name, Value: dameokja-stage-redis }
 
   # --- stage 전용 MySQL 8.4 (Primary 1대). Standby·Replica·Orchestrator는 DB 이중화 작업에서 추가
   # 복제를 붙일 수 있게 처음부터 binlog·GTID를 켬. 계정·스키마는 처음 한 번 Session Manager로 만듦
@@ -527,14 +534,14 @@ Resources:
     Properties:
       Name: /dameokja-v2-stage/SPRING_DATA_REDIS_HOST
       Type: String
-      Value: !GetAtt Redis.RedisEndpoint.Address
+      Value: !GetAtt RedisInstance.PrivateIp
 
   RedisPortParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: /dameokja-v2-stage/SPRING_DATA_REDIS_PORT
       Type: String
-      Value: !GetAtt Redis.RedisEndpoint.Port
+      Value: "6379"
 
   AiBaseUrlParameter:
     Type: AWS::SSM::Parameter
@@ -808,8 +815,8 @@ Outputs:
     Value: !Ref AppSecurityGroup
   AiSecurityGroupId:
     Value: !Ref AiSecurityGroup
-  RedisEndpoint:
-    Value: !GetAtt Redis.RedisEndpoint.Address
+  RedisPrivateIp:
+    Value: !GetAtt RedisInstance.PrivateIp
   DbInstanceId:
     Value: !Ref DbInstance
   DbPrivateIp:
