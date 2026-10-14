@@ -1,0 +1,86 @@
+name: v2 인프라 CloudFormation (stage)
+
+# dev(infra-v2-cfn.yml)와 같은 흐름. main 머지 후 GitHub Environments "stage" 승인이 있어야 적용
+on:
+  pull_request:
+    paths:
+      - "infra/v2/stage.yaml"
+      - "infra/v2/params/stage.json"
+      - ".github/workflows/infra-v2-cfn-stage.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/v2/stage.yaml"
+      - "infra/v2/params/stage.json"
+      - ".github/workflows/infra-v2-cfn-stage.yml"
+
+env:
+  AWS_REGION: ap-northeast-2
+  STACK_NAME: dameokja-stage
+  TEMPLATE: infra/v2/stage.yaml
+  PARAMS: infra/v2/params/stage.json
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: cfn-lint
+        run: |
+          pipx install cfn-lint
+          cfn-lint --regions "$AWS_REGION" -- "$TEMPLATE"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: change set 만들기 (적용하지 않음)
+        id: cs
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: create-only
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
+          change-set-name: pr-${{ github.event.pull_request.number }}-${{ github.run_number }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_NAMED_IAM
+          # 워크플로 파일만 바뀌어 템플릿 변경이 없을 때 실패하지 않게
+          fail-on-empty-changeset: false
+      - name: PR에 미리보기 댓글
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.cs.outputs.changes-markdown || '변경 없음' }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body "$(printf '**stage** (`%s`)\n\n%s' "$STACK_NAME" "$BODY")"
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    # 승인자가 Actions 화면에서 승인해야 시작. 이 job의 OIDC sub는 environment:stage
+    environment: stage
+    concurrency:
+      group: infra-v2-stage-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 적용
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_NAMED_IAM
+          # 워크플로 파일만 바뀌어 템플릿 변경이 없을 때 실패하지 않게
+          fail-on-empty-changeset: false
