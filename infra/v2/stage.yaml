@@ -3,7 +3,7 @@ Description: dameokja v2 stage (prod와 같은 구조 - 2AZ 서브넷, NAT, ALB,
 
 # prod와 같은 방식으로 동작하는 stage. dev(172.31 VPC)·prod(10.0 VPC)와 겹치지 않는 stage 전용 VPC를 새로 만듦
 # 구조: stage.dameokja.com -> ALB(TLS 종료) -> private 서브넷 ECS Task(nginx+FE+BE, awsvpc) -> Redis / stage 전용 MySQL
-# ECS Service와 Task Definition은 다음 PR에서 추가 (Service는 Task Definition이 먼저 등록되어 있어야 함)
+# Task Definition은 infra/v2/ecs/stage/*.json. Service보다 먼저 등록되어 있어야 함
 Parameters:
   VpcCidr:
     Type: String
@@ -793,6 +793,84 @@ Resources:
             Condition:
               StringLike:
                 ssm:resourceTag/Name: dameokja-stage*
+
+  # --- ECS Service. Task Definition은 infra/v2/ecs/stage/*.json (ecs-deploy.yml이 등록). family만 적어 최신 버전을 씀
+  # nginx+FE+BE. ECS Native Blue/Green: 새 버전을 green 타겟 그룹에 띄우고 헬스체크 통과 후 리스너 규칙을 green으로 전환,
+  # 대기(Bake) 시간 동안 문제가 생기면 blue로 되돌림
+  AppService:
+    Type: AWS::ECS::Service
+    DependsOn: ClusterCapacityProviders
+    Properties:
+      ServiceName: dameokja-stage-app
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-stage-app
+      DesiredCount: 2
+      CapacityProviderStrategy:
+        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      PlacementStrategies:
+        - { Type: spread, Field: attribute:ecs.availability-zone }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+          SecurityGroups: [!Ref AppSecurityGroup]
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: nginx
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroupBlue
+          AdvancedConfiguration:
+            AlternateTargetGroupArn: !Ref TargetGroupGreen
+            ProductionListenerRule: !Ref ProductionListenerRule
+            RoleArn: !GetAtt EcsInfrastructureRole.Arn
+      DeploymentConfiguration:
+        Strategy: BLUE_GREEN
+        BakeTimeInMinutes: 5
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+
+  # AI API. BE는 ai.stage.dameokja.internal:8000으로 호출 (Cloud Map에 Task IP 등록)
+  AiService:
+    Type: AWS::ECS::Service
+    DependsOn: ClusterCapacityProviders
+    Properties:
+      ServiceName: dameokja-stage-ai
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-stage-ai
+      DesiredCount: 1
+      CapacityProviderStrategy:
+        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+          SecurityGroups: [!Ref AiSecurityGroup]
+      ServiceRegistries:
+        - RegistryArn: !GetAtt AiDiscoveryService.Arn
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+
+  # 앱 Task 수 자동 조정 (Target Tracking, v2 20번). Task가 늘어 자리가 모자라면 Capacity Provider가 인스턴스를 늘림
+  AppScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: !Sub "service/${Cluster}/${AppService.Name}"
+      MinCapacity: 2
+      MaxCapacity: 4
+
+  AppCpuScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: dameokja-stage-app-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AppScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
 
 Outputs:
   VpcId:
