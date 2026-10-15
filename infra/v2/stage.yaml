@@ -764,6 +764,47 @@ Resources:
                 Action: iam:PassRole
                 Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn, !GetAtt AiTaskRole.Arn]
 
+  # CLOUD(main)의 stage 켜기·끄기 워크플로(stage-power.yml)가 쓰는 역할. 서비스 수, ASG 크기, DB·Redis 시작·중지만 가능
+  GitHubPowerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-stage-github-power
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:ref:refs/heads/main
+      Policies:
+        - PolicyName: stage-power
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ecs:UpdateService, ecs:DescribeServices]
+                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/*"
+              - Effect: Allow
+                Action: autoscaling:UpdateAutoScalingGroup
+                Resource: !Sub "arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AutoScalingGroup}"
+              - Effect: Allow
+                Action: [ec2:StartInstances, ec2:StopInstances]
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${DbInstance}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${RedisInstance}"
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:RegisterScalableTarget
+                  - application-autoscaling:DescribeScalableTargets
+                  - autoscaling:DescribeAutoScalingGroups
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                Resource: "*"
+
   # 팀원(IAM 그룹 dameokja-iam)이 stage 설정값(SSM)을 관리하고, stage 인스턴스에 Session Manager로 접속
   TeamSsmAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
