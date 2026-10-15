@@ -1,0 +1,72 @@
+name: stage 켜기·끄기
+
+# 쓸 때만 stage 서버(앱 ASG, DB, Redis)를 켠다. NAT·ALB는 중지 기능이 없어 계속 켜져 있다.
+# 꺼진 동안 stage 스택을 업데이트하지 않는다 (서비스 수가 템플릿 값으로 돌아갈 수 있음).
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: start 또는 stop
+        type: choice
+        options: [start, stop]
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: stage-power
+  cancel-in-progress: false
+
+jobs:
+  power:
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLUSTER: dameokja-stage
+      ASG: dameokja-stage
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::906462447513:role/dameokja-stage-github-power
+          aws-region: ap-northeast-2
+      - name: DB·Redis 인스턴스 찾기
+        run: |
+          ids=$(aws ec2 describe-instances \
+            --filters Name=tag:aws:cloudformation:stack-name,Values=dameokja-stage \
+                      Name=tag:aws:cloudformation:logical-id,Values=DbInstance,RedisInstance \
+                      Name=instance-state-name,Values=pending,running,stopping,stopped \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          echo "DB·Redis: $ids"
+          echo "IDS=$ids" >> "$GITHUB_ENV"
+      - name: 끄기
+        if: inputs.action == 'stop'
+        run: |
+          # 앱 오토스케일링이 다시 늘리지 않게 0으로 묶은 뒤 Task를 내리고, 빈 서버를 ASG에서 뺀다
+          aws application-autoscaling register-scalable-target --service-namespace ecs \
+            --scalable-dimension ecs:service:DesiredCount \
+            --resource-id "service/$CLUSTER/dameokja-stage-app" --min-capacity 0 --max-capacity 0
+          for s in app ai; do
+            aws ecs update-service --cluster "$CLUSTER" --service "dameokja-stage-$s" --desired-count 0 > /dev/null
+          done
+          aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-ai
+          aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --desired-capacity 0
+          aws ec2 stop-instances --instance-ids $IDS > /dev/null
+          aws ec2 wait instance-stopped --instance-ids $IDS
+          echo "stage 꺼짐"
+      - name: 켜기
+        if: inputs.action == 'start'
+        run: |
+          # DB·Redis가 먼저 떠야 백엔드가 시작할 수 있다. 사설 IP는 그대로라 SSM 값은 바꾸지 않는다
+          aws ec2 start-instances --instance-ids $IDS > /dev/null
+          aws ec2 wait instance-status-ok --instance-ids $IDS
+          aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 2
+          aws application-autoscaling register-scalable-target --service-namespace ecs \
+            --scalable-dimension ecs:service:DesiredCount \
+            --resource-id "service/$CLUSTER/dameokja-stage-app" --min-capacity 2 --max-capacity 4
+          aws ecs update-service --cluster "$CLUSTER" --service dameokja-stage-app --desired-count 2 > /dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service dameokja-stage-ai --desired-count 1 > /dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-ai
+          echo "stage 켜짐"
