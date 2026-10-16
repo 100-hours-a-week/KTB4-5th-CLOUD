@@ -1,5 +1,5 @@
 [
-  {"ParameterKey": "AlarmTopicArn", "ParameterValue": "arn:aws:sns:ap-northeast-2:906462447513:damuckja-v1-discord-alerts-Topic-P9Ua3t6qNBDR"},
+  {"ParameterKey": "AlarmTopicArn", "ParameterValue": "arn:aws:sns:ap-northeast-2:906462447513:dameokja-v1-discord-alerts-Topic-sM5PwAp9GIcJ"},
   {"ParameterKey": "AlbFullName", "ParameterValue": "app/dameokja-stage-alb/4b33865b35bf5490"},
   {"ParameterKey": "BlueTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-tg-blue/346d6663748aa88d"},
   {"ParameterKey": "GreenTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-tg-green/fa593c22454f193c"},

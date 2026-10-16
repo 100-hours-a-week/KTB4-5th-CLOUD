@@ -5,7 +5,7 @@
     "AlarmTopicArn": {
       "Type": "String",
       "AllowedPattern": "arn:aws:sns:[a-z0-9-]+:[0-9]{12}:.+",
-      "Description": "damuckja-v1-discord-alerts 스택 Outputs의 TopicArn"
+      "Description": "dameokja-v1-discord-alerts 스택 Outputs의 TopicArn"
     },
     "InstanceId": {
       "Type": "String",

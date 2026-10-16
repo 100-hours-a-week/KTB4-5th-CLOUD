@@ -99,7 +99,7 @@ def post(webhook, message):
         raise ValueError("Discord 웹훅 Secret 확인 필요")
     for attempt in range(3):
         request = Request(webhook + "?wait=true", data=json.dumps(message).encode(),
-                          headers={"Content-Type": "application/json", "User-Agent": "Damuckja-CICD/1.0"}, method="POST")
+                          headers={"Content-Type": "application/json", "User-Agent": "Dameokja-CICD/1.0"}, method="POST")
         try:
             with urlopen(request, timeout=15):
                 return

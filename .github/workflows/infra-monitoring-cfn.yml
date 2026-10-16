@@ -35,7 +35,7 @@ jobs:
       matrix:
         include:
           - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
-          - { stack: damuckja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
+          - { stack: dameokja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
     steps:
       - uses: actions/checkout@v6
       - name: cfn-lint
@@ -81,7 +81,7 @@ jobs:
       matrix:
         include:
           # 알람이 SNS로 거부되지 않게 Discord(허용 목록·SNS 정책)를 먼저 적용
-          - { stack: damuckja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
+          - { stack: dameokja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
           - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
     steps:
       - uses: actions/checkout@v6

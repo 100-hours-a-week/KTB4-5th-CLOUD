@@ -265,7 +265,7 @@ CI 실패와 배포 성공도 같은 GitHub 필드를 사용한다. 성공 메�
 
 ### AWS
 
-설정한 이름으로 안내한 스택은 `damuckja-v1-discord-alerts`, 비밀 이름은 `damuckja/v1/discord-webhook`이다. 실제 적용값은 서울 리전 CloudFormation의 Parameters와 Lambda Configuration에서 확인한다.
+설정한 이름으로 안내한 스택은 `dameokja-v1-discord-alerts`, 비밀 이름은 `damuckja/v1/discord-webhook`이다. 실제 적용값은 서울 리전 CloudFormation의 Parameters와 Lambda Configuration에서 확인한다.
 
 | 설정 | 원본 관리 위치 | Lambda에서 사용하는 값 |
 |---|---|---|
