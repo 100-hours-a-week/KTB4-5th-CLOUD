@@ -1,0 +1,100 @@
+name: 모니터링·Discord 알림 CloudFormation
+
+# stage 모니터링과 Discord 알림 스택. stage 인프라(infra-v2-cfn-stage.yml)와 같은 흐름
+# PR: change set 미리보기만, main 머지: GitHub Environments "stage" 승인 후 적용
+on:
+  pull_request:
+    paths:
+      - "infra/monitoring/cloudformation/slo-monitoring.stage.template.json"
+      - "infra/monitoring/params/stage.json"
+      - "infra/discord-alerts/aws/cloudformation/discord-alerts.template.json"
+      - "infra/discord-alerts/aws/params/discord-alerts.json"
+      - ".github/workflows/infra-monitoring-cfn.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/monitoring/cloudformation/slo-monitoring.stage.template.json"
+      - "infra/monitoring/params/stage.json"
+      - "infra/discord-alerts/aws/cloudformation/discord-alerts.template.json"
+      - "infra/discord-alerts/aws/params/discord-alerts.json"
+      - ".github/workflows/infra-monitoring-cfn.yml"
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
+          - { stack: damuckja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
+    steps:
+      - uses: actions/checkout@v6
+      - name: cfn-lint
+        run: |
+          pipx install cfn-lint
+          cfn-lint --regions "$AWS_REGION" -- "${{ matrix.template }}"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: change set 만들기 (적용하지 않음)
+        id: cs
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: create-only
+          name: ${{ matrix.stack }}
+          template: ${{ matrix.template }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ matrix.params }}
+          change-set-name: pr-${{ github.event.pull_request.number }}-${{ github.run_number }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_IAM
+          fail-on-empty-changeset: false
+      - name: PR에 미리보기 댓글
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.cs.outputs.changes-markdown || '변경 없음' }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body "$(printf '**%s**\n\n%s' "${{ matrix.stack }}" "$BODY")"
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    # 승인자가 Actions 화면에서 승인해야 시작. 이 job의 OIDC sub는 environment:stage
+    environment: stage
+    concurrency:
+      group: infra-monitoring-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          # 알람이 SNS로 거부되지 않게 Discord(허용 목록·SNS 정책)를 먼저 적용
+          - { stack: damuckja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
+          - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 적용
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          name: ${{ matrix.stack }}
+          template: ${{ matrix.template }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ matrix.params }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_IAM
+          fail-on-empty-changeset: false

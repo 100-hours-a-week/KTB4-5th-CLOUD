@@ -121,6 +121,8 @@ Spot 대상 ID는 두 입력 JSON과 별개이며 CloudFormation의 `SpotInstanc
 
 ## 6. 템플릿 배포
 
+템플릿·`params/discord-alerts.json`을 고친 PR이 main에 머지되면 `.github/workflows/infra-monitoring-cfn.yml`이 GitHub Environment `stage` 승인 후 스택을 갱신한다(#73). 아래는 처음 만들 때와 워크플로를 쓸 수 없을 때의 수동 절차다.
+
 CloudFormation에서 해당 스택을 선택한 뒤:
 
 1. **Update stack → Make a direct update**.

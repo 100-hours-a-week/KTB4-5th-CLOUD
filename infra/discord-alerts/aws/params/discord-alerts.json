@@ -1,0 +1,5 @@
+[
+  {"ParameterKey": "WebhookSecretArn", "ParameterValue": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:damuckja/v1/discord-webhook-ihEmhp"},
+  {"ParameterKey": "SpotInstanceIds", "ParameterValue": "i-007f9683d847fe700,i-0eced2b65959c4faf"},
+  {"ParameterKey": "DiscordUserIds", "ParameterValue": ""}
+]
