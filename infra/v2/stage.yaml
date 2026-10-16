@@ -386,6 +386,24 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-stage-redis }
 
+  # dev와 같은 Redis 버전(redis:7.4-alpine)을 Docker로 실행. UserData의 redis6(6.2)는 끄고 쓰지 않음
+  # UserData를 바꾸면 처음 부팅 때만 실행되므로 Association으로 적용. 꺼져 있으면 켜질 때 실행되고, 이미 돌고 있으면 그대로 둠
+  RedisDockerAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: dameokja-stage-redis-docker
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref RedisInstance] }
+      Parameters:
+        commands:
+          - set -e
+          - dnf install -y docker
+          - systemctl enable --now docker
+          - systemctl disable --now redis6 || true
+          - mkdir -p /var/lib/redis-data
+          - if [ -z "$(docker ps -q --filter name=^redis$ --filter ancestor=redis:7.4-alpine)" ]; then docker rm -f redis || true; docker run -d --name redis --restart unless-stopped --network host -v /var/lib/redis-data:/data redis:7.4-alpine redis-server --protected-mode no --appendonly yes; fi
+
   # --- stage 전용 MySQL 8.4 (Primary 1대). Standby·Replica·Orchestrator는 DB 이중화 작업에서 추가
   # 복제를 붙일 수 있게 처음부터 binlog·GTID를 켬. 계정·스키마는 처음 한 번 Session Manager로 만듦
   DbRole:
