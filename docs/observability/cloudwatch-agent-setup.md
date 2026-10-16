@@ -169,7 +169,7 @@ BE(Spring Boot Actuator)가 Prometheus 형식으로 지표를 내놓고, Agent�
 | `dameokja-{env}-infra` | EC2 기본(CPU·크레딧·초과 크레딧·네트워크·EBS·상태 검사), OS(메모리·디스크·프로세스·TCP·네트워크 오류), BE 앱(Tomcat·HikariCP·JVM 스레드·API 요청 수·평균 처리 시간), BE ERROR 건수, 로그 수신량 |
 | `dameokja-prod-infra`에만 추가 | Discord 알림 Lambda 호출·오류, 알림 실패 큐, 예상 청구 금액 |
 
-prod 스택에는 Discord 알림 그래프용 파라미터 2개가 있습니다. 값은 Discord 알림 스택(`damuckja-v1-discord-alerts`)의 **출력(Outputs)**에서 복사합니다.
+prod 스택에는 Discord 알림 그래프용 파라미터 2개가 있습니다. 값은 Discord 알림 스택(`dameokja-v1-discord-alerts`)의 **출력(Outputs)**에서 복사합니다.
 
 | 파라미터 | 값 |
 |---|---|
