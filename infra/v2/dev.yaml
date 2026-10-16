@@ -156,12 +156,14 @@ Resources:
           - chown 10001:10001 /var/log/dameokja
 
   # CloudWatch Agent: nginx·BE 파일 로그와 메모리·디스크·BE 지표 수집 (v1 setup-host.sh와 같은 작업).
-  # 설정을 바꾸면 이 Association이 다시 실행되어 Agent에 반영됨
+  # 설정을 바꾸면 이 Association이 다시 실행되어 Agent에 반영됨.
+  # 일정이 없으면 한 번만 실행되어 Agent가 멈춰도 다시 켜지지 않으므로 매일 다시 적용함(#64)
   CloudWatchAgentAssociation:
     Type: AWS::SSM::Association
     DependsOn: LogDirAssociation
     Properties:
       Name: AWS-RunShellScript
+      ScheduleExpression: rate(1 day)
       Targets:
         - { Key: InstanceIds, Values: [!Ref Instance] }
       Parameters:
