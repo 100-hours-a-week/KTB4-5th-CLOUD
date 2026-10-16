@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: dameokja v2 DB 마이그레이션 테스트 (stage VPC 안에 원본·신규 MySQL과 부하·전환 실행 서버. stage DB는 사본 원본을 채울 때 읽기만)
+Description: dameokja v2 DB 마이그레이션 테스트 (원본 = stage DB, 대상 = 이 스택의 신규 MySQL, 부하·전환 실행 서버)
 
 # stage 스택(dameokja-stage)은 수정하지 않는다. 이 스택만 만들고 지우면 테스트 자원이 함께 정리된다
-# 예외: 실행 서버가 stage DB를 mysqldump로 읽을 수 있게 stage DB 보안그룹에 인바운드 규칙 1개를 이 스택 소유로 추가한다
-# 원본 = stage DB 사본(SourceDb), 대상 = 신규 DB(TargetDb). 전환·쓰기 차단은 이 두 서버에만 한다
+# 예외: 신규 DB(복제)·실행 서버(덤프·부하·검사)가 stage DB 3306에 붙도록 stage DB 보안그룹 인바운드 2개를 이 스택 소유로 추가한다
+# stage DB의 복제·관리 계정(migadmin·repl)은 같은 SSM 비밀번호로 stage DB에 별도로 만든다
 # 접속 계정 비밀번호는 스택 밖에서 만든 SSM SecureString(/dameokja-migtest/MIG_PASSWORD, REPL_PASSWORD)을 인스턴스가 읽는다
 Parameters:
   VpcId:
@@ -18,13 +18,14 @@ Parameters:
   # stage와 같은 고정 일반 AL2023 x86_64 AMI (params/stage.json의 DbAmiId)
   AmiId:
     Type: AWS::EC2::Image::Id
-  # 원본·대상 모두 stage DB와 같은 m7i.large (설계의 대상 M7i·AMD64, 크기 미확정)
+  # 신규 DB는 설계의 대상 M7i·AMD64 (크기 미확정, stage DB와 같은 large)
   DbInstanceType:
     Type: String
     Default: m7i.large
+  # DB 직접 부하(쓰기 100·읽기 200/초)에서 CPU 10% 미만이라 작은 크기로 충분 (2026-10-16 측정)
   RunnerInstanceType:
     Type: String
-    Default: c7i.large
+    Default: t3.small
   DbVolumeGiB:
     Type: Number
     Default: 30
@@ -36,7 +37,7 @@ Parameters:
 Mappings:
   Scripts:
     Db:
-      # 원본·대상 공통 설치. AL2023의 mysql-community /etc/my.cnf는 my.cnf.d를 읽지 않아 includedir를 직접 추가함
+      # 신규 DB 설치. AL2023의 mysql-community /etc/my.cnf는 my.cnf.d를 읽지 않아 includedir를 직접 추가함
       # (stage DB는 이 줄이 없어 dameokja.cnf의 gtid_mode=ON 등이 적용되지 않은 상태로 확인됨, 2026-10-16)
       Setup: |
         timedatectl set-timezone Asia/Seoul
@@ -82,26 +83,27 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-migtest-runner }
 
-  # 원본·대상 DB 공용. 실행 서버와 DB끼리(복제)만 3306 허용
+  # 신규 DB. 실행 서버에서 오는 3306만 허용
   DbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: dameokja migtest MySQL (3306 from runner and each other)
+      GroupDescription: dameokja migtest target MySQL (3306 from runner)
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref RunnerSecurityGroup }
       Tags:
         - { Key: Name, Value: dameokja-migtest-db }
-  DbFromDbIngress:
+
+  # stage DB(원본) 3306: 신규 DB의 복제 연결, 실행 서버의 덤프·부하·검사. 스택 삭제 시 이 규칙들만 사라짐
+  StageDbFromTargetIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !Ref DbSecurityGroup
+      GroupId: !Ref StageDbSecurityGroupId
       IpProtocol: tcp
       FromPort: 3306
       ToPort: 3306
       SourceSecurityGroupId: !Ref DbSecurityGroup
-
-  # 실행 서버 → stage DB 덤프용(읽기만). 스택 삭제 시 이 규칙만 사라짐
+      Description: migtest target replication
   StageDbFromRunnerIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -110,9 +112,9 @@ Resources:
       FromPort: 3306
       ToPort: 3306
       SourceSecurityGroupId: !Ref RunnerSecurityGroup
-      Description: migtest runner dump (read only)
+      Description: migtest runner
 
-  # Session Manager 접속, CloudWatch Agent 지표, 테스트 비밀번호·stage DB 비밀번호 읽기
+  # Session Manager 접속, CloudWatch Agent 지표, 테스트 계정 비밀번호 읽기
   Role:
     Type: AWS::IAM::Role
     Properties:
@@ -134,7 +136,6 @@ Resources:
                 Action: ssm:GetParameter
                 Resource:
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-migtest/*"
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-stage/DB_PASSWORD"
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -152,31 +153,6 @@ Resources:
          "metrics_collected":{"cpu":{"measurement":["usage_active","usage_iowait"],"totalcpu":true,"metrics_collection_interval":60},
           "mem":{"measurement":["used_percent","available"],"metrics_collection_interval":60},
           "disk":{"measurement":["used_percent","used","free","total"],"resources":["/"],"metrics_collection_interval":60}}}}
-
-  # 원본: v1·stage와 같은 binlog·GTID 설정의 빈 MySQL. 데이터는 실행 서버가 stage 덤프로 채움
-  SourceDbInstance:
-    Type: AWS::EC2::Instance
-    DependsOn: CloudWatchAgentConfig
-    Properties:
-      ImageId: !Ref AmiId
-      InstanceType: !Ref DbInstanceType
-      SubnetId: !Ref SubnetId
-      SecurityGroupIds: [!Ref DbSecurityGroup]
-      IamInstanceProfile: !Ref InstanceProfile
-      MetadataOptions: { HttpTokens: required }
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs: { VolumeSize: !Ref DbVolumeGiB, VolumeType: gp3 }
-      UserData:
-        Fn::Base64: !Sub
-          - |
-            #!/bin/bash
-            set -e
-            SERVER_ID=1 READ_ONLY=OFF MYSQL_VERSION=${MysqlVersion}
-            ${Setup}
-          - Setup: !FindInMap [Scripts, Db, Setup]
-      Tags:
-        - { Key: Name, Value: dameokja-migtest-source-db }
 
   # 신규: 복제 수신 전용으로 시작. 계정 생성 후 super_read_only를 영구 설정해 조기 쓰기를 막음
   TargetDbInstance:
@@ -203,7 +179,7 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-migtest-target-db }
 
-  # 실행 서버: mysql 클라이언트·mysqldump(원본과 같은 버전), Percona Toolkit, Python(PyMySQL)
+  # 실행 서버: mysql 클라이언트·mysqldump(stage DB와 같은 버전), Percona Toolkit, Python(PyMySQL)
   RunnerInstance:
     Type: AWS::EC2::Instance
     DependsOn: CloudWatchAgentConfig
@@ -232,10 +208,6 @@ Resources:
         - { Key: Name, Value: dameokja-migtest-runner }
 
 Outputs:
-  SourceDbInstanceId:
-    Value: !Ref SourceDbInstance
-  SourceDbPrivateIp:
-    Value: !GetAtt SourceDbInstance.PrivateIp
   TargetDbInstanceId:
     Value: !Ref TargetDbInstance
   TargetDbPrivateIp:
