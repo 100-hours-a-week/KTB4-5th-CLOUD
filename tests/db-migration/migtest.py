@@ -36,7 +36,8 @@ def connect(prefix, autocommit=True, use_db=True):
         port=int(os.environ.get(f"{prefix}_PORT", "3306")),
         user=os.environ[f"{prefix}_USER"],
         password=os.environ[f"{prefix}_PASSWORD"],
-        database=os.environ.get("DB_NAME", "dameokja") if use_db else None,
+        # 시험 부하는 LOAD_DB(예: 원본의 app과 분리한 migtest 스키마)에 쓴다. 없으면 DB_NAME의 첫 번째
+        database=(os.environ.get("LOAD_DB") or os.environ.get("DB_NAME", "dameokja").split()[0]) if use_db else None,
         autocommit=autocommit,
         connect_timeout=3,
         read_timeout=10,

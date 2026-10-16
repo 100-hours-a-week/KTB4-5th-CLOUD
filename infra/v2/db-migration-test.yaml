@@ -1,109 +1,100 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: dameokja v2 DB 마이그레이션 테스트 (원본 = stage DB, 대상 = 이 스택의 신규 MySQL, 부하·전환 실행 서버)
+Description: dameokja v2 DB 마이그레이션 테스트 (원본 = dev1, 대상 = stage DB. dev·stage VPC 연결과 부하·전환 실행 서버)
 
-# stage 스택(dameokja-stage)은 수정하지 않는다. 이 스택만 만들고 지우면 테스트 자원이 함께 정리된다
-# 예외: 신규 DB(복제)·실행 서버(덤프·부하·검사)가 stage DB 3306에 붙도록 stage DB 보안그룹 인바운드 2개를 이 스택 소유로 추가한다
-# stage DB의 복제·관리 계정(migadmin·repl)은 같은 SSM 비밀번호로 stage DB에 별도로 만든다
-# 접속 계정 비밀번호는 스택 밖에서 만든 SSM SecureString(/dameokja-migtest/MIG_PASSWORD, REPL_PASSWORD)을 인스턴스가 읽는다
+# stage 스택(dameokja-stage)과 dev1 서버는 이 스택으로 수정하지 않는다. 이 스택만 지우면 아래 연결·규칙·서버가 함께 정리된다
+# - dev VPC(172.31) ↔ stage VPC(10.10) Peering, 양쪽 경로는 dev1 주소와 stage private 서브넷 A로만 한정
+# - dev1 보안그룹: stage DB(복제)·실행 서버(덤프·부하·검사)에서 오는 3306 인바운드
+# - stage DB 보안그룹: 실행 서버에서 오는 3306 인바운드
+# 복제·관리 계정(migadmin·repl)은 dev1·stage DB에 SSM SecureString(/dameokja-migtest/*) 비밀번호로 별도로 만든다
 Parameters:
-  VpcId:
+  StageVpcId:
     Type: AWS::EC2::VPC::Id
     Description: stage VPC (10.10.0.0/16)
-  SubnetId:
+  StageSubnetId:
     Type: AWS::EC2::Subnet::Id
-    Description: stage private 서브넷 (stage 앱 사용자는 10.10.32.0/19에서만 접속 가능)
+    Description: stage private 서브넷 A (stage DB와 같은 서브넷)
+  StageSubnetCidr:
+    Type: String
+    Default: 10.10.32.0/20
+  StagePrivateRouteTableId:
+    Type: String
+    Description: stage PrivateRouteTable
   StageDbSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Description: stage DbSecurityGroup (dameokja-stage-db)
+  DevVpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: dev VPC (172.31.0.0/16)
+  DevRouteTableId:
+    Type: String
+    Description: dev1 서브넷이 쓰는 dev VPC 경로 테이블
+  DevDbIp:
+    Type: String
+    Default: 172.31.4.192
+  DevDbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: dev1 보안그룹 (dameokja-v1-dev-DB)
   # stage와 같은 고정 일반 AL2023 x86_64 AMI (params/stage.json의 DbAmiId)
   AmiId:
     Type: AWS::EC2::Image::Id
-  # 신규 DB는 설계의 대상 M7i·AMD64 (크기 미확정, stage DB와 같은 large)
-  DbInstanceType:
-    Type: String
-    Default: m7i.large
   # DB 직접 부하(쓰기 100·읽기 200/초)에서 CPU 10% 미만이라 작은 크기로 충분 (2026-10-16 측정)
   RunnerInstanceType:
     Type: String
     Default: t3.small
-  DbVolumeGiB:
-    Type: Number
-    Default: 30
-  # 원본(v1)·stage와 같은 버전으로 고정
+  # dev1·stage DB와 같은 클라이언트 버전
   MysqlVersion:
     Type: String
     Default: 8.4.11
 
-Mappings:
-  Scripts:
-    Db:
-      # 신규 DB 설치. AL2023의 mysql-community /etc/my.cnf는 my.cnf.d를 읽지 않아 includedir를 직접 추가함
-      # (stage DB는 이 줄이 없어 dameokja.cnf의 gtid_mode=ON 등이 적용되지 않은 상태로 확인됨, 2026-10-16)
-      Setup: |
-        timedatectl set-timezone Asia/Seoul
-        dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm amazon-cloudwatch-agent
-        dnf install -y mysql-community-server-$MYSQL_VERSION
-        mkdir -p /etc/my.cnf.d
-        grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf
-        cat > /etc/my.cnf.d/dameokja.cnf <<EOF
-        [mysqld]
-        server_id=$SERVER_ID
-        log_bin=binlog
-        gtid_mode=ON
-        enforce_gtid_consistency=ON
-        log_replica_updates=ON
-        binlog_expire_logs_seconds=2592000
-        default_time_zone='+09:00'
-        skip_replica_start=ON
-        relay_log_recovery=ON
-        EOF
-        systemctl enable --now mysqld
-        # 임시 root 비밀번호로 계정을 만들고 root는 알 수 없는 값으로 바꿈. 이후 관리는 migadmin으로 함
-        # RPM 설치본은 validate_password(MEDIUM)가 켜져 있어 대소문자·숫자·특수문자를 모두 포함해야 함
-        TMP=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}')
-        MIG=$(aws ssm get-parameter --region ap-northeast-2 --name /dameokja-migtest/MIG_PASSWORD --with-decryption --query Parameter.Value --output text)
-        REPL=$(aws ssm get-parameter --region ap-northeast-2 --name /dameokja-migtest/REPL_PASSWORD --with-decryption --query Parameter.Value --output text)
-        ROOT="Rt_$(openssl rand -hex 16)_9z"
-        mysql --connect-expired-password -uroot -p"$TMP" <<SQL
-        ALTER USER 'root'@'localhost' IDENTIFIED BY '$ROOT';
-        CREATE USER 'migadmin'@'10.10.%' IDENTIFIED BY '$MIG';
-        GRANT ALL PRIVILEGES ON *.* TO 'migadmin'@'10.10.%' WITH GRANT OPTION;
-        CREATE USER 'repl'@'10.10.%' IDENTIFIED BY '$REPL';
-        GRANT REPLICATION SLAVE ON *.* TO 'repl'@'10.10.%';
-        SET PERSIST super_read_only = $READ_ONLY;
-        SQL
-        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:/dameokja-migtest/cloudwatch-agent
-
 Resources:
+  # --- dev ↔ stage 연결 (같은 계정·리전이라 수락 절차 없이 바로 활성화)
+  Peering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !Ref StageVpcId
+      PeerVpcId: !Ref DevVpcId
+      Tags:
+        - { Key: Name, Value: dameokja-migtest-dev-stage }
+  StageToDevDbRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref StagePrivateRouteTableId
+      DestinationCidrBlock: !Sub "${DevDbIp}/32"
+      VpcPeeringConnectionId: !Ref Peering
+  DevToStageRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DevRouteTableId
+      DestinationCidrBlock: !Ref StageSubnetCidr
+      VpcPeeringConnectionId: !Ref Peering
+
   RunnerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: dameokja migtest runner (no inbound)
-      VpcId: !Ref VpcId
+      VpcId: !Ref StageVpcId
       Tags:
         - { Key: Name, Value: dameokja-migtest-runner }
 
-  # 신규 DB. 실행 서버에서 오는 3306만 허용
-  DbSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja migtest target MySQL (3306 from runner)
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref RunnerSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-migtest-db }
-
-  # stage DB(원본) 3306: 신규 DB의 복제 연결, 실행 서버의 덤프·부하·검사. 스택 삭제 시 이 규칙들만 사라짐
-  StageDbFromTargetIngress:
+  # Peering된 VPC의 보안그룹은 ID로 참조 가능
+  DevDbFromStageDbIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !Ref StageDbSecurityGroupId
+      GroupId: !Ref DevDbSecurityGroupId
       IpProtocol: tcp
       FromPort: 3306
       ToPort: 3306
-      SourceSecurityGroupId: !Ref DbSecurityGroup
-      Description: migtest target replication
+      SourceSecurityGroupId: !Ref StageDbSecurityGroupId
+      Description: migtest stage DB replication
+  DevDbFromRunnerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DevDbSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref RunnerSecurityGroup
+      Description: migtest runner
   StageDbFromRunnerIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -134,8 +125,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: ssm:GetParameter
-                Resource:
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-migtest/*"
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-migtest/*"
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -154,39 +144,14 @@ Resources:
           "mem":{"measurement":["used_percent","available"],"metrics_collection_interval":60},
           "disk":{"measurement":["used_percent","used","free","total"],"resources":["/"],"metrics_collection_interval":60}}}}
 
-  # 신규: 복제 수신 전용으로 시작. 계정 생성 후 super_read_only를 영구 설정해 조기 쓰기를 막음
-  TargetDbInstance:
-    Type: AWS::EC2::Instance
-    DependsOn: CloudWatchAgentConfig
-    Properties:
-      ImageId: !Ref AmiId
-      InstanceType: !Ref DbInstanceType
-      SubnetId: !Ref SubnetId
-      SecurityGroupIds: [!Ref DbSecurityGroup]
-      IamInstanceProfile: !Ref InstanceProfile
-      MetadataOptions: { HttpTokens: required }
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs: { VolumeSize: !Ref DbVolumeGiB, VolumeType: gp3 }
-      UserData:
-        Fn::Base64: !Sub
-          - |
-            #!/bin/bash
-            set -e
-            SERVER_ID=2 READ_ONLY=ON MYSQL_VERSION=${MysqlVersion}
-            ${Setup}
-          - Setup: !FindInMap [Scripts, Db, Setup]
-      Tags:
-        - { Key: Name, Value: dameokja-migtest-target-db }
-
-  # 실행 서버: mysql 클라이언트·mysqldump(stage DB와 같은 버전), Percona Toolkit, Python(PyMySQL)
+  # 실행 서버: mysql 클라이언트·mysqldump, Percona Toolkit, Python(PyMySQL)
   RunnerInstance:
     Type: AWS::EC2::Instance
     DependsOn: CloudWatchAgentConfig
     Properties:
       ImageId: !Ref AmiId
       InstanceType: !Ref RunnerInstanceType
-      SubnetId: !Ref SubnetId
+      SubnetId: !Ref StageSubnetId
       SecurityGroupIds: [!Ref RunnerSecurityGroup]
       IamInstanceProfile: !Ref InstanceProfile
       MetadataOptions: { HttpTokens: required }
@@ -208,9 +173,7 @@ Resources:
         - { Key: Name, Value: dameokja-migtest-runner }
 
 Outputs:
-  TargetDbInstanceId:
-    Value: !Ref TargetDbInstance
-  TargetDbPrivateIp:
-    Value: !GetAtt TargetDbInstance.PrivateIp
   RunnerInstanceId:
     Value: !Ref RunnerInstance
+  PeeringId:
+    Value: !Ref Peering

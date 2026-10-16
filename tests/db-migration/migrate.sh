@@ -6,10 +6,11 @@
 #   SRC_HOST SRC_PORT SRC_USER SRC_PASSWORD   원본 관리 계정
 #   TGT_HOST TGT_PORT TGT_USER TGT_PASSWORD   신규 관리 계정
 #   REPL_USER REPL_PASSWORD                   원본의 복제 전용 계정 (REPLICATION SLAVE)
-#   DB_NAME(기본 dameokja) WORK_DIR(기본 ./work) PT_CMD(기본 pt-table-checksum)
+#   DB_NAME(이전 대상 DB, 공백으로 여러 개. 기본 dameokja) WORK_DIR(기본 ./work) PT_CMD(기본 pt-table-checksum)
 set -euo pipefail
 
 DB_NAME=${DB_NAME:-dameokja}
+DBQ=$(printf "'%s'," $DB_NAME); DBQ=${DBQ%,}  # SQL IN 목록
 WORK_DIR=${WORK_DIR:-./work}
 PT_CMD=${PT_CMD:-pt-table-checksum}
 mkdir -p "$WORK_DIR"
@@ -61,13 +62,13 @@ preflight() {
   diff "$WORK_DIR/preflight.src.txt" "$WORK_DIR/preflight.tgt.txt" || true
   log "== 원본 이전 범위: 엔진·객체"
   src -e "SELECT ENGINE, COUNT(*), ROUND(SUM(DATA_LENGTH+INDEX_LENGTH)/1024/1024,1) AS mb FROM information_schema.TABLES
-          WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_TYPE='BASE TABLE' GROUP BY ENGINE"
-  src -e "SELECT 'non_innodb', COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DB_NAME' AND TABLE_TYPE='BASE TABLE' AND ENGINE<>'InnoDB'
-          UNION ALL SELECT 'views', COUNT(*) FROM information_schema.VIEWS WHERE TABLE_SCHEMA='$DB_NAME'
-          UNION ALL SELECT 'triggers', COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$DB_NAME'
-          UNION ALL SELECT 'routines', COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA='$DB_NAME'
-          UNION ALL SELECT 'events', COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA='$DB_NAME'
-          UNION ALL SELECT 'no_primary_key', COUNT(*) FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA='$DB_NAME' AND t.TABLE_TYPE='BASE TABLE'
+          WHERE TABLE_SCHEMA IN ($DBQ) AND TABLE_TYPE='BASE TABLE' GROUP BY ENGINE"
+  src -e "SELECT 'non_innodb', COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA IN ($DBQ) AND TABLE_TYPE='BASE TABLE' AND ENGINE<>'InnoDB'
+          UNION ALL SELECT 'views', COUNT(*) FROM information_schema.VIEWS WHERE TABLE_SCHEMA IN ($DBQ)
+          UNION ALL SELECT 'triggers', COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA IN ($DBQ)
+          UNION ALL SELECT 'routines', COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA IN ($DBQ)
+          UNION ALL SELECT 'events', COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA IN ($DBQ)
+          UNION ALL SELECT 'no_primary_key', COUNT(*) FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA IN ($DBQ) AND t.TABLE_TYPE='BASE TABLE'
             AND NOT EXISTS (SELECT 1 FROM information_schema.TABLE_CONSTRAINTS c WHERE c.TABLE_SCHEMA=t.TABLE_SCHEMA AND c.TABLE_NAME=t.TABLE_NAME AND c.CONSTRAINT_TYPE='PRIMARY KEY')" \
     | tee "$WORK_DIR/preflight.objects.txt"
   awk '$1=="non_innodb"&&$2>0{exit 1}' "$WORK_DIR/preflight.objects.txt" || { log "실패: InnoDB 아닌 테이블 있음"; fail=1; }
@@ -84,7 +85,7 @@ disk() {
   src -e "SHOW BINARY LOGS" | awk '{s+=$2;n++} END{printf "binlog_mb=%.1f files=%d\n", s/1024/1024, n}'
   for side in src tgt; do
     log "== $side 데이터 용량(MB)"
-    $side -e "SELECT ROUND(SUM(DATA_LENGTH+INDEX_LENGTH)/1024/1024,1) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DB_NAME'"
+    $side -e "SELECT ROUND(SUM(DATA_LENGTH+INDEX_LENGTH)/1024/1024,1) FROM information_schema.TABLES WHERE TABLE_SCHEMA IN ($DBQ)"
   done
   # DB 서버의 파일시스템 여유는 각 DB 서버에서 df 또는 CloudWatch Agent disk 지표로 확인 (이 서버 df는 덤프 저장 경로만 해당)
   log "== 덤프 저장 경로 파일시스템"
@@ -100,12 +101,12 @@ copy() {
   t0=$(date +%s.%N)
   mysqldump --defaults-extra-file="$SRC_CNF" --single-transaction --source-data=2 --set-gtid-purged=ON \
     --routines --events --triggers --hex-blob --default-character-set=utf8mb4 \
-    --databases "$DB_NAME" > "$dump"
+    --databases $DB_NAME > "$dump"
   t1=$(date +%s.%N)
   log "덤프 완료 $(du -h "$dump" | cut -f1), $(el "$t0" "$t1")s"
   grep -m1 -A3 'GTID_PURGED' "$dump" | tee "$WORK_DIR/dump.gtid.txt"
   # 신규 DB를 비운 상태에서만 복원 (기존 데이터를 덮어쓰지 않음)
-  if [[ $(tgt -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$DB_NAME'") != 0 ]]; then
+  if [[ $(tgt -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME IN ($DBQ)") != 0 ]]; then
     log "중단: 신규 DB에 $DB_NAME 이 이미 있음. 직접 확인 후 정리할 것"; return 1
   fi
   # 복원 동안만 읽기 전용을 풀고, 끝나면 다시 켠다 (신규 DB는 격리돼 있어 이 사이 다른 쓰기 주체가 없어야 함)
@@ -139,26 +140,26 @@ status() {
 # 4) 스키마 정의 비교. 판정은 information_schema의 정의 값으로 한다
 #   SHOW CREATE TABLE 문자열은 같은 정의도 생성 경로에 따라 표기가 달라질 수 있어(예: 컬럼 CHARACTER SET 표시) 참고용으로만 남김
 schema_diff() {
-  local d="'$DB_NAME'" side cnf_var
+  local d="($DBQ)" side cnf_var
   local q="
-SELECT 'T',TABLE_NAME,ENGINE,TABLE_COLLATION,ROW_FORMAT,CREATE_OPTIONS,TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA=$d ORDER BY 2;
-SELECT 'C',TABLE_NAME,ORDINAL_POSITION,COLUMN_NAME,COLUMN_TYPE,CHARACTER_SET_NAME,COLLATION_NAME,IS_NULLABLE,IFNULL(COLUMN_DEFAULT,'<NULL>'),EXTRA,GENERATION_EXPRESSION,COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=$d ORDER BY 2,3;
-SELECT 'I',TABLE_NAME,INDEX_NAME,NON_UNIQUE,SEQ_IN_INDEX,COLUMN_NAME,IFNULL(SUB_PART,''),COLLATION,INDEX_TYPE,IS_VISIBLE,IFNULL(EXPRESSION,'') FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=$d ORDER BY 2,3,5;
-SELECT 'K',TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=$d ORDER BY 2,3;
-SELECT 'CK',CONSTRAINT_NAME,CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=$d ORDER BY 2;
-SELECT 'FK',k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION,k.COLUMN_NAME,k.REFERENCED_TABLE_NAME,k.REFERENCED_COLUMN_NAME,r.UPDATE_RULE,r.DELETE_RULE
+SELECT 'T',TABLE_SCHEMA,TABLE_NAME,ENGINE,TABLE_COLLATION,ROW_FORMAT,CREATE_OPTIONS,TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA IN $d ORDER BY 2,3;
+SELECT 'C',TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION,COLUMN_NAME,COLUMN_TYPE,CHARACTER_SET_NAME,COLLATION_NAME,IS_NULLABLE,IFNULL(COLUMN_DEFAULT,'<NULL>'),EXTRA,GENERATION_EXPRESSION,COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA IN $d ORDER BY 2,3,4;
+SELECT 'I',TABLE_SCHEMA,TABLE_NAME,INDEX_NAME,NON_UNIQUE,SEQ_IN_INDEX,COLUMN_NAME,IFNULL(SUB_PART,''),COLLATION,INDEX_TYPE,IS_VISIBLE,IFNULL(EXPRESSION,'') FROM information_schema.STATISTICS WHERE TABLE_SCHEMA IN $d ORDER BY 2,3,4,6;
+SELECT 'K',TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA IN $d ORDER BY 2,3,4;
+SELECT 'CK',CONSTRAINT_SCHEMA,CONSTRAINT_NAME,CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA IN $d ORDER BY 2,3;
+SELECT 'FK',k.TABLE_SCHEMA,k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION,k.COLUMN_NAME,k.REFERENCED_TABLE_NAME,k.REFERENCED_COLUMN_NAME,r.UPDATE_RULE,r.DELETE_RULE
   FROM information_schema.KEY_COLUMN_USAGE k JOIN information_schema.REFERENTIAL_CONSTRAINTS r
-  ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA=$d ORDER BY 2,3,4;
-SELECT 'V',TABLE_NAME,VIEW_DEFINITION,SECURITY_TYPE FROM information_schema.VIEWS WHERE TABLE_SCHEMA=$d ORDER BY 2;
-SELECT 'TR',TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=$d ORDER BY 2;
-SELECT 'R',ROUTINE_NAME,ROUTINE_TYPE,ROUTINE_DEFINITION FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=$d ORDER BY 2;
-SELECT 'E',EVENT_NAME,EVENT_DEFINITION,STATUS FROM information_schema.EVENTS WHERE EVENT_SCHEMA=$d ORDER BY 2;"
+  ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA IN $d ORDER BY 2,3,4,5;
+SELECT 'V',TABLE_SCHEMA,TABLE_NAME,VIEW_DEFINITION,SECURITY_TYPE FROM information_schema.VIEWS WHERE TABLE_SCHEMA IN $d ORDER BY 2,3;
+SELECT 'TR',TRIGGER_SCHEMA,TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA IN $d ORDER BY 2,3;
+SELECT 'R',ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE,ROUTINE_DEFINITION FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA IN $d ORDER BY 2,3;
+SELECT 'E',EVENT_SCHEMA,EVENT_NAME,EVENT_DEFINITION,STATUS FROM information_schema.EVENTS WHERE EVENT_SCHEMA IN $d ORDER BY 2,3;"
   src -e "$q" > "$WORK_DIR/schema.src.txt"
   tgt -e "$q" > "$WORK_DIR/schema.tgt.txt"
   for side in SRC TGT; do
     cnf_var=${side}_CNF
     mysqldump --defaults-extra-file="${!cnf_var}" --no-data --routines --events --triggers --skip-dump-date \
-      --set-gtid-purged=OFF --databases "$DB_NAME" | sed -E -e 's/ AUTO_INCREMENT=[0-9]+//' -e '/^-- Host:/d' > "$WORK_DIR/schema.$side.sql"
+      --set-gtid-purged=OFF --databases $DB_NAME | sed -E -e 's/ AUTO_INCREMENT=[0-9]+//' -e '/^-- Host:/d' > "$WORK_DIR/schema.$side.sql"
   done
   diff -u "$WORK_DIR/schema.SRC.sql" "$WORK_DIR/schema.TGT.sql" > "$WORK_DIR/schema.showcreate.diff" \
     || log "참고: SHOW CREATE 표기 차이 $(grep -c '^[-+] ' "$WORK_DIR/schema.showcreate.diff")줄 (schema.showcreate.diff)"
@@ -177,7 +178,7 @@ checksum() {
   # 원본 접속 정보를 잃어 로컬 소켓으로 접속을 시도하는 문제가 있어 쓰지 않음 (2026-10-16 리허설에서 확인)
   # 신규 DB 접속 계정은 원본 DSN의 F=(임시 접속 파일)를 그대로 물려받으므로 양쪽에 같은 검사 계정이 있어야 함
   log "pt-table-checksum 시작 ($($PT_CMD --version))"
-  $PT_CMD "h=$SRC_HOST,P=${SRC_PORT:-3306},F=$SRC_CNF" --databases="$DB_NAME" \
+  $PT_CMD "h=$SRC_HOST,P=${SRC_PORT:-3306},F=$SRC_CNF" --databases="${DB_NAME// /,}" \
     --recursion-method=processlist --replicate=percona.checksums \
     --no-check-binlog-format --chunk-time=0.5 --max-lag=2 --check-interval=1 \
     --progress=time,30 2>&1 | tee "$WORK_DIR/checksum.out"
