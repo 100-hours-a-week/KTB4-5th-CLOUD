@@ -60,6 +60,7 @@ Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지
 1. **EC2 IAM 역할**: dev·prod 앱 서버 인스턴스 역할에 `CloudWatchAgentServerPolicy`를 추가한다(로그 전송·지표 전송 권한).
 2. **Discord 알림 스택 업데이트**: `existing-alarms.json`에 새 알람 이름이 추가되었고 Lambda가 바뀌었으므로 `infra/discord-alerts/aws/cloudformation/discord-alerts.template.json`으로 `damuckja-v1-discord-alerts`를 업데이트한다([AWS 안내](../discord-alerts/aws/README.md) 6장).
 3. **모니터링 스택 생성**: 서울 리전 CloudFormation에서 `cloudformation/` 폴더의 템플릿으로 환경별 스택을 만든다.
+   stage 스택은 생성 후 `.github/workflows/infra-monitoring-cfn.yml`이 관리한다: 템플릿이나 `params/stage.json`을 고친 PR에서 change set 미리보기, main 머지 후 GitHub Environment `stage` 승인 → 적용(#73).
    | 스택 이름 | 템플릿 | 필수 파라미터 |
    |---|---|---|
    | `dameokja-stage-monitoring` | `cloudformation/slo-monitoring.stage.template.json` | `AlarmTopicArn`(Discord 스택 Outputs의 `TopicArn`), `AlbFullName`·`BlueTargetGroupFullName`·`GreenTargetGroupFullName`(ARN의 `app/...`·`targetgroup/...` 부분), `DbInstanceId`·`RedisInstanceId`(stage 스택 Outputs·리소스). stage는 ECS awslogs 로그 그룹(`/dameokja/stage/nginx`·`backend`)과 ECS·ALB·EC2 기본 지표를 쓰므로 4~5번 서버 준비가 필요 없음 |
