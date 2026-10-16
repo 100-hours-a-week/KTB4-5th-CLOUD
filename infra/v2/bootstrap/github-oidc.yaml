@@ -100,10 +100,7 @@ Resources:
                   - cloudformation:GetTemplate
                   - cloudformation:GetTemplateSummary
                   - cloudformation:ListChangeSets
-                # Discord 알림 스택은 이름 철자가 damuckja라 따로 지정 (infra-monitoring-cfn.yml)
-                Resource:
-                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/dameokja-*/*"
-                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/damuckja-v1-discord-alerts/*"
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/dameokja-*/*"
               - Effect: Allow
                 Action: cloudformation:ValidateTemplate
                 Resource: "*"

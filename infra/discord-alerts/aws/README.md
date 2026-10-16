@@ -9,8 +9,8 @@
 | 항목 | 위치 또는 이름 |
 |---|---|
 | AWS 리전 | 서울 `ap-northeast-2` |
-| CloudFormation 스택 | `damuckja-v1-discord-alerts` |
-| Secrets Manager 비밀 이름 | `damuckja/v1/discord-webhook` |
+| CloudFormation 스택 | `dameokja-v1-discord-alerts` |
+| Secrets Manager 비밀 이름 | `damuckja/v1/discord-webhook` (비밀은 이름을 바꿀 수 없어 이전 철자 유지) |
 | 비밀 안의 키 | `discord_webhook_url` |
 | 사용자가 지정한 Spot 대상 | `i-007f9683d847fe700` — 실제 등록값은 스택 Parameters 확인 |
 | Lambda 실제 함수 이름 | 스택 → Outputs → `FunctionName` |
@@ -41,7 +41,7 @@ Spot 예고는 일반적으로 회수 약 2분 전이지만 전달과 도착 시
 
 ## 2. 직접 관리할 입력값은 CloudFormation Parameters에 있다
 
-경로: **CloudFormation → Stacks → damuckja-v1-discord-alerts → Parameters**.
+경로: **CloudFormation → Stacks → dameokja-v1-discord-alerts → Parameters**.
 수정은 **Update stack → Make a direct update**로 진행한다.
 파라미터만 바꾸면 현재 템플릿을 유지하고, 코드가 바뀌면 새 템플릿으로 교체한다.
 

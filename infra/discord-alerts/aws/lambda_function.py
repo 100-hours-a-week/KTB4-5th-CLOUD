@@ -61,7 +61,7 @@ def send(webhook, payload):
     request = Request(
         webhook + "?wait=true",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json", "User-Agent": "Damuckja-CloudWatch/1.0"},
+        headers={"Content-Type": "application/json", "User-Agent": "Dameokja-CloudWatch/1.0"},
         method="POST",
     )
     try:
