@@ -22,7 +22,7 @@ EC2 앱 서버의 **nginx 접근 로그**, **BE 로그**, **서버 OS 지표**(�
 | 자원 대시보드 `dameokja-{env}-infra` (스택 업데이트) | ⬜ | ⬜ |
 | nginx 연결 수(stub_status) | ⬜ 방식 미결정 | ⬜ |
 | 로그 그룹 보관 기간 설정 | ⬜ | ⬜ |
-| 모니터링 스택(지표 필터·알람·대시보드) | ✅ `dameokja-v1-dev-monitoring` | ✅ `dameokja-v1-prod-monitoring` |
+| 모니터링 스택(지표 필터·알람·대시보드) | 제거(2026-10-16, stage `dameokja-stage-monitoring`로 대체, #71) | ✅ `dameokja-v1-prod-monitoring` |
 
 ## 2. 구조
 

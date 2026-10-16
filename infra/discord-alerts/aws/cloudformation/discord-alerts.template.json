@@ -60,13 +60,10 @@
                       "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:awsec2-i-0eced2b65959c4faf-GreaterThanOrEqualToThreshold-CPUUtilization"
                     },
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-dev-http-5xx-ticket"
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-stage-http-5xx-ticket"
                     },
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-dev-memory-ticket"
-                    },
-                    {
-                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-dev-disk-ticket"
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-stage-memory-ticket"
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dameokja-prod-slo-ingredient-create-fast-burn-page"
@@ -191,7 +188,7 @@
             "DISCORD_USER_IDS": {
               "Ref": "DiscordUserIds"
             },
-            "ALLOWED_ALARM_NAMES": "[\"dev-v1 \\uc11c\\ubc84 \\uc911\\ub2e8 \\uc54c\\ub78c\", \"awsec2-i-0eced2b65959c4faf-GreaterThanOrEqualToThreshold-CPUUtilization\", \"dameokja-dev-http-5xx-ticket\", \"dameokja-dev-memory-ticket\", \"dameokja-dev-disk-ticket\", \"dameokja-prod-slo-ingredient-create-fast-burn-page\", \"dameokja-prod-slo-ingredient-create-slow-burn-ticket\", \"dameokja-prod-slo-ingredient-read-fast-burn-page\", \"dameokja-prod-slo-ingredient-read-slow-burn-ticket\", \"dameokja-prod-slo-notification-poll-fast-burn-page\", \"dameokja-prod-slo-notification-poll-slow-burn-ticket\", \"dameokja-prod-http-5xx-ticket\", \"dameokja-prod-http-4xx-surge-ticket\", \"dameokja-prod-memory-ticket\", \"dameokja-prod-disk-ticket\"]",
+            "ALLOWED_ALARM_NAMES": "[\"dev-v1 \\uc11c\\ubc84 \\uc911\\ub2e8 \\uc54c\\ub78c\", \"awsec2-i-0eced2b65959c4faf-GreaterThanOrEqualToThreshold-CPUUtilization\", \"dameokja-stage-http-5xx-ticket\", \"dameokja-stage-memory-ticket\", \"dameokja-prod-slo-ingredient-create-fast-burn-page\", \"dameokja-prod-slo-ingredient-create-slow-burn-ticket\", \"dameokja-prod-slo-ingredient-read-fast-burn-page\", \"dameokja-prod-slo-ingredient-read-slow-burn-ticket\", \"dameokja-prod-slo-notification-poll-fast-burn-page\", \"dameokja-prod-slo-notification-poll-slow-burn-ticket\", \"dameokja-prod-http-5xx-ticket\", \"dameokja-prod-http-4xx-surge-ticket\", \"dameokja-prod-memory-ticket\", \"dameokja-prod-disk-ticket\"]",
             "SPOT_INSTANCE_IDS": {
               "Ref": "SpotInstanceIds"
             },
