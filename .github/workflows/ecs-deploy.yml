@@ -22,6 +22,26 @@ on:
         description: 배포할 이미지. 비우면 지금 돌고 있는 이미지 유지
         type: string
         default: ""
+  # CLOUD main에서 직접 실행. 앱 CI를 거치지 않고 특정 GHCR 이미지(예: 테스트용 BE 커밋)로 고정할 때 사용
+  workflow_dispatch:
+    inputs:
+      env:
+        description: dev, stage
+        type: choice
+        options: [dev, stage]
+        default: stage
+      service:
+        description: "dev: nginx, frontend, backend, redis, ai / stage: app, ai"
+        type: string
+        required: true
+      container:
+        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (stage app은 frontend 또는 backend)
+        type: string
+        default: ""
+      image:
+        description: 배포할 GHCR 이미지(태그 또는 digest). 비우면 지금 돌고 있는 이미지 유지
+        type: string
+        default: ""
 
 jobs:
   deploy:

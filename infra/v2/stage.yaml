@@ -453,6 +453,25 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-stage-db }
 
+  # MySQL RPM의 /etc/my.cnf는 my.cnf.d를 읽지 않아 위 dameokja.cnf(GTID 등)가 적용되지 않음. 포함 줄을 넣고,
+  # dev1(server_id=1)에서 복제받을 수 있게 복제본 설정을 zz-replica.cnf로 덧씀(파일 이름순으로 나중에 읽혀 server_id를 덮음)
+  # UserData를 바꾸면 DB 서버가 교체될 수 있어 Association으로 적용. 서버가 바뀌어도 대상이 따라가고, 꺼져 있으면 켜질 때 실행됨
+  # 설정이 바뀐 경우에만 MySQL 재시작
+  DbConfigAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: dameokja-stage-db-mycnf
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref DbInstance] }
+      Parameters:
+        commands:
+          - set -e; changed=
+          - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
+          - printf '[mysqld]\nserver_id=2\nlog_replica_updates=ON\nskip_replica_start=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
+          - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
+          - if [ -n "$changed" ]; then systemctl restart mysqld; fi
+
   # --- ECS 클러스터 + ASG(private 2b) + Capacity Provider
   Cluster:
     Type: AWS::ECS::Cluster
