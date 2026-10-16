@@ -37,7 +37,7 @@ flowchart LR
 | `host/setup-host.sh` | 로그 디렉터리·소유자, logrotate, Agent 설치·설정 적용 |
 | `host/logrotate-dameokja-nginx` | nginx JSON 로그 회전(BE는 Spring Boot가 회전) |
 | `../v2/dev.yaml` `CloudWatchAgentAssociation` | v2 dev 앱 인스턴스용. 위 dev Agent 설정·prometheus 설정·logrotate를 그대로 담아 SSM으로 적용(`setup-host.sh` 대신). dev 파일을 고치면 여기도 함께 고침 |
-| `cloudformation/slo-monitoring.{env}.template.json` | 환경별 CloudFormation 템플릿(지표 필터·알람·복합 알람·대시보드·저장 쿼리) |
+| `cloudformation/slo-monitoring.{env}.template.json` | 환경별 CloudFormation 템플릿(지표 필터·알람·복합 알람·대시보드·저장 쿼리). stage·prod. dev 모니터링 스택은 2026-10-16 제거(#71) |
 
 ## 알람 목록
 
@@ -45,10 +45,10 @@ flowchart LR
 |---|---|---|---|
 | `dameokja-prod-slo-<작업>-fast-burn-page` | prod | 오류율 ≥ 72%(소진율 14.4배)가 60분·5분 창에서 동시 발생, 각 창 최소 10·3건 | 즉시 대응, 멘션 |
 | `dameokja-prod-slo-<작업>-slow-burn-ticket` | prod | 오류율 ≥ 30%(소진율 6배)가 6시간·30분 창에서 동시 발생, 각 창 최소 20·5건 | 확인 필요, 멘션 없음 |
-| `dameokja-{env}-http-5xx-ticket` | dev·prod | 전체 API 5xx가 5분간 `Http5xxThreshold`(기본 5)건 이상 | 확인 필요 |
+| `dameokja-{env}-http-5xx-ticket` | stage·prod | 전체 API 5xx가 5분간 `Http5xxThreshold`(기본 5)건 이상 | 확인 필요 |
 | `dameokja-prod-http-4xx-surge-ticket` | prod | 4xx가 1시간 `Http4xxHourlyThreshold`(기본 100)건 이상 | 확인 필요 |
-| `dameokja-{env}-memory-ticket` | dev·prod | 메모리 사용률 ≥ 90%, 5분 × 2회 | 확인 필요 |
-| `dameokja-{env}-disk-ticket` | dev·prod | 루트 디스크 사용률 ≥ 85% | 확인 필요 |
+| `dameokja-{env}-memory-ticket` | stage·prod | 메모리 사용률 ≥ 90%, 5분 × 2회 (stage는 ECS 앱 서비스 `MemoryUtilization`) | 확인 필요 |
+| `dameokja-prod-disk-ticket` | prod | 루트 디스크 사용률 ≥ 85% (stage는 서버 Agent가 없어 제외) | 확인 필요 |
 
 `<작업>`은 `ingredient-create`, `ingredient-read`, `notification-poll`이다. 소진율 판정용 하위 알람(`...-60m`, `...-5m` 등)은 알림을 보내지 않는다.
 Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지 않는다.
@@ -62,7 +62,7 @@ Discord Lambda는 이름이 `-ticket`으로 끝나는 알람에 멘션을 넣지
 3. **모니터링 스택 생성**: 서울 리전 CloudFormation에서 `cloudformation/` 폴더의 템플릿으로 환경별 스택을 만든다.
    | 스택 이름 | 템플릿 | 필수 파라미터 |
    |---|---|---|
-   | `dameokja-v1-dev-monitoring` | `cloudformation/slo-monitoring.dev.template.json` | `AlarmTopicArn`(Discord 스택 Outputs의 `TopicArn`), `InstanceId`(dev 앱 서버) |
+   | `dameokja-stage-monitoring` | `cloudformation/slo-monitoring.stage.template.json` | `AlarmTopicArn`(Discord 스택 Outputs의 `TopicArn`), `AlbFullName`·`BlueTargetGroupFullName`·`GreenTargetGroupFullName`(ARN의 `app/...`·`targetgroup/...` 부분), `DbInstanceId`·`RedisInstanceId`(stage 스택 Outputs·리소스). stage는 ECS awslogs 로그 그룹(`/dameokja/stage/nginx`·`backend`)과 ECS·ALB·EC2 기본 지표를 쓰므로 4~5번 서버 준비가 필요 없음 |
    | `dameokja-v1-prod-monitoring` | `cloudformation/slo-monitoring.prod.template.json` | 위와 같음(prod 앱 서버) + `DiscordFunctionName`(Discord 스택 Outputs의 `FunctionName`), `DiscordFailureQueueName`(`FailureQueueUrl`의 마지막 경로) |
 4. **서버 준비**: 각 앱 서버에 이 폴더를 복사하고 실행한다.
    ```bash
