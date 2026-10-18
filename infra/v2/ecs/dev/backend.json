@@ -37,6 +37,10 @@
       ],
       "secrets": [
         {
+          "name": "KTB_REFRIGERATOR_ID",
+          "valueFrom": "/dameokja-v2-dev/KTB_REFRIGERATOR_ID"
+        },
+        {
           "name": "SERVER_PORT",
           "valueFrom": "/dameokja-v2-dev/SERVER_PORT"
         },
