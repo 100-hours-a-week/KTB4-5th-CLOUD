@@ -36,9 +36,10 @@ Parameters:
   InstanceType:
     Type: String
     Default: m7i.large
+  # 지금 LaunchTemplate의 AMI로 고정. SSM 권장 AMI 경로를 쓰면 AWS가 새 AMI를 낼 때마다 다음 배포에서 LaunchTemplate이 바뀜
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    Type: AWS::EC2::Image::Id
+    Default: ami-09ff58d150cd4e99f
   MinSize:
     Type: Number
     Default: 2
