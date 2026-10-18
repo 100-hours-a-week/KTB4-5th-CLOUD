@@ -533,6 +533,10 @@ Resources:
               - Effect: Allow
                 Action: [s3:PutObject, s3:GetObject]
                 Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
+              # 프로필 기본 이미지 한 파일만 읽기
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${S3BucketName}/profiles/default.png"
 
   # AI 서버: BE가 올린 이미지를 읽어 서명 URL을 만듦
   AiTaskRole:
