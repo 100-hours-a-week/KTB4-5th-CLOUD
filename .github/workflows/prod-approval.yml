@@ -5,10 +5,10 @@ on:
   workflow_dispatch:
     inputs:
       repository:
-        description: 배포를 요청한 FE 또는 BE 저장소
+        description: 배포를 요청한 FE·BE·AI 저장소
         required: true
         type: choice
-        options: [KTB4-5th-FE, KTB4-5th-BE]
+        options: [KTB4-5th-FE, KTB4-5th-BE, KTB4-5th-AI]
       run_id:
         description: stage 배포를 완료한 Actions 실행 ID
         required: true
@@ -41,14 +41,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$SOURCE_REPO" == KTB4-5th-FE || "$SOURCE_REPO" == KTB4-5th-BE ]]
+          case "$SOURCE_REPO" in
+            KTB4-5th-FE|KTB4-5th-BE) workflow='.github/workflows/v1-cicd.yml' ;;
+            KTB4-5th-AI) workflow='.github/workflows/ai-cicd.yml' ;;
+            *) exit 1 ;;
+          esac
           [[ "$RUN_ID" =~ ^[0-9]+$ && "$RUN_ATTEMPT" =~ ^[0-9]+$ ]]
           expected="ghcr.io/100-hours-a-week/${SOURCE_REPO,,}@sha256:"
           [[ "$IMAGE" == "$expected"* && "${IMAGE#"$expected"}" =~ ^[a-f0-9]{64}$ ]]
           source="repos/100-hours-a-week/$SOURCE_REPO/actions/runs/$RUN_ID"
-          gh api "$source" | jq -e --argjson attempt "$RUN_ATTEMPT" '
+          gh api "$source" | jq -e --arg path "$workflow" --argjson attempt "$RUN_ATTEMPT" '
             .event == "push" and .head_branch == "main" and
-            .path == ".github/workflows/v1-cicd.yml" and .run_attempt == $attempt'
+            .path == $path and .run_attempt == $attempt'
           # 재실행의 과거 성공 job을 승인 근거로 사용하지 않는다.
           # 요청 job이 dispatch 직후 종료될 때까지 기다려 앱 저장소 승인도 확인한다.
           verified=false
@@ -80,19 +84,19 @@ jobs:
       id-token: write
     # 같은 prod Task를 FE·BE가 공유하더라도 서로의 이미지를 덮어쓰지 않는다.
     concurrency:
-      group: prod-ecs-${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || 'PROD_ECS_BE_SERVICE'] }}
+      group: prod-ecs-${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || (inputs.repository == 'KTB4-5th-BE' && 'PROD_ECS_BE_SERVICE' || 'PROD_ECS_AI_SERVICE')] }}
       cancel-in-progress: false
     env:
       CLUSTER: dameokja-prod
-      SERVICE: ${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || 'PROD_ECS_BE_SERVICE'] }}
-      CONTAINER: ${{ inputs.repository == 'KTB4-5th-FE' && 'frontend' || 'backend' }}
+      SERVICE: ${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || (inputs.repository == 'KTB4-5th-BE' && 'PROD_ECS_BE_SERVICE' || 'PROD_ECS_AI_SERVICE')] }}
+      CONTAINER: ${{ inputs.repository == 'KTB4-5th-FE' && 'frontend' || (inputs.repository == 'KTB4-5th-BE' && 'backend' || 'ai') }}
       IMAGE: ${{ inputs.image }}
     steps:
       - name: prod 대상 설정 확인
         run: |
           set -euo pipefail
           [[ "$SERVICE" =~ ^dameokja-prod-[a-zA-Z0-9_-]+$ ]] || {
-            echo 'CLOUD Repository Variables에 PROD_ECS_FE_SERVICE 또는 PROD_ECS_BE_SERVICE를 설정하세요.'
+            echo 'CLOUD Repository Variables에 해당 서비스의 PROD_ECS_FE_SERVICE, PROD_ECS_BE_SERVICE 또는 PROD_ECS_AI_SERVICE를 설정하세요.'
             exit 1
           }
       - uses: aws-actions/configure-aws-credentials@v4
