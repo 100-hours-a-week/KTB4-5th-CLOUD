@@ -801,7 +801,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers
 
-  # BE/FE/AI(main)와 CLOUD(main) GitHub Actions가 prod Task Definition 등록과 Service 갱신에 쓰는 역할
+  # CLOUD prod 승인 job(prod-approval.yml)이 prod Task Definition 등록과 Service 갱신에 쓰는 역할
   GitHubEcsDeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -816,11 +816,8 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub:
-                  - repo:100-hours-a-week@167328634/KTB4-5th-BE@1344691625:ref:refs/heads/main
-                  - repo:100-hours-a-week@167328634/KTB4-5th-FE@1344691246:ref:refs/heads/main
-                  - repo:100-hours-a-week@167328634/KTB4-5th-AI@1344690862:ref:refs/heads/main
-                  - repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:ref:refs/heads/main
+                # prod는 CLOUD prod-approval.yml의 GitHub Environments "prod" 승인 job만. FE·BE·AI main이 직접 바꾸지 못하게 함
+                token.actions.githubusercontent.com:sub: repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:environment:prod
       Policies:
         - PolicyName: ecs-deploy
           PolicyDocument:

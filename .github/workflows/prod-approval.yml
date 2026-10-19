@@ -90,22 +90,16 @@ jobs:
       contents: read
       id-token: write
     # 같은 prod Task를 FE·BE가 공유하더라도 서로의 이미지를 덮어쓰지 않는다.
+    # 서비스 이름은 stage(ecs-deploy.yml)처럼 직접 적는다. FE·BE는 nginx+FE+BE가 한 Task인 app, AI는 ai
     concurrency:
-      group: prod-ecs-${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || (inputs.repository == 'KTB4-5th-BE' && 'PROD_ECS_BE_SERVICE' || 'PROD_ECS_AI_SERVICE')] }}
+      group: prod-ecs-${{ inputs.repository == 'KTB4-5th-AI' && 'dameokja-prod-ai' || 'dameokja-prod-app' }}
       cancel-in-progress: false
     env:
       CLUSTER: dameokja-prod
-      SERVICE: ${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || (inputs.repository == 'KTB4-5th-BE' && 'PROD_ECS_BE_SERVICE' || 'PROD_ECS_AI_SERVICE')] }}
+      SERVICE: ${{ inputs.repository == 'KTB4-5th-AI' && 'dameokja-prod-ai' || 'dameokja-prod-app' }}
       CONTAINER: ${{ inputs.repository == 'KTB4-5th-FE' && 'frontend' || (inputs.repository == 'KTB4-5th-BE' && 'backend' || 'ai') }}
       IMAGE: ${{ inputs.image }}
     steps:
-      - name: prod 대상 설정 확인
-        run: |
-          set -euo pipefail
-          [[ "$SERVICE" =~ ^dameokja-prod-[a-zA-Z0-9_-]+$ ]] || {
-            echo 'CLOUD Repository Variables에 해당 서비스의 PROD_ECS_FE_SERVICE, PROD_ECS_BE_SERVICE 또는 PROD_ECS_AI_SERVICE를 설정하세요.'
-            exit 1
-          }
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::906462447513:role/dameokja-prod-github-ecs-deploy
