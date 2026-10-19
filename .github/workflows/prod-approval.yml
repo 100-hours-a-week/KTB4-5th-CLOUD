@@ -91,54 +91,72 @@ jobs:
       id-token: write
     # 같은 prod Task를 FE·BE가 공유하더라도 서로의 이미지를 덮어쓰지 않는다.
     concurrency:
-      group: prod-ecs-${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || (inputs.repository == 'KTB4-5th-BE' && 'PROD_ECS_BE_SERVICE' || 'PROD_ECS_AI_SERVICE')] }}
+      group: ecs-prod-${{ inputs.repository == 'KTB4-5th-AI' && 'ai' || 'app' }}
       cancel-in-progress: false
+    # stage(ecs-deploy.yml)와 같은 방식: infra/v2/ecs/prod/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
+    # 다른 점은 GitHub Environments "prod" 승인 뒤에 실행되고, stage에서 검증한 이미지 digest만 쓴다는 것
     env:
       CLUSTER: dameokja-prod
-      SERVICE: ${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || (inputs.repository == 'KTB4-5th-BE' && 'PROD_ECS_BE_SERVICE' || 'PROD_ECS_AI_SERVICE')] }}
+      SERVICE: dameokja-prod-${{ inputs.repository == 'KTB4-5th-AI' && 'ai' || 'app' }}
+      FILE: cloud/infra/v2/ecs/prod/${{ inputs.repository == 'KTB4-5th-AI' && 'ai' || 'app' }}.json
       CONTAINER: ${{ inputs.repository == 'KTB4-5th-FE' && 'frontend' || (inputs.repository == 'KTB4-5th-BE' && 'backend' || 'ai') }}
       IMAGE: ${{ inputs.image }}
     steps:
-      - name: prod 대상 설정 확인
-        run: |
-          set -euo pipefail
-          [[ "$SERVICE" =~ ^dameokja-prod-[a-zA-Z0-9_-]+$ ]] || {
-            echo 'CLOUD Repository Variables에 해당 서비스의 PROD_ECS_FE_SERVICE, PROD_ECS_BE_SERVICE 또는 PROD_ECS_AI_SERVICE를 설정하세요.'
-            exit 1
-          }
+      - uses: actions/checkout@v6
+        with:
+          repository: 100-hours-a-week/KTB4-5th-CLOUD
+          ref: main
+          path: cloud
+          persist-credentials: false
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::906462447513:role/dameokja-prod-github-ecs-deploy
           aws-region: ap-northeast-2
-      - name: prod Task Definition 이미지 교체
-        id: task
+      - name: Task Definition 등록
+        id: register
         run: |
-          set -euo pipefail
-          # 기존 서비스가 안정화된 후 현재 정의를 읽어 다른 컨테이너 설정을 보존한다.
-          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
-          aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" > service.json
-          jq -e '.failures | length == 0' service.json
-          jq -e '.services | length == 1' service.json
-          jq -e '.services[0] | .status == "ACTIVE" and .desiredCount > 0 and .deploymentController.type == "ECS"' service.json
-          current=$(jq -r '.services[0].taskDefinition' service.json)
-          aws ecs describe-task-definition --task-definition "$current" > current.json
-          jq -e --arg target "$CONTAINER" '.taskDefinition |
-            (.runtimePlatform.cpuArchitecture // "X86_64") == "X86_64" and
-            ([.containerDefinitions[] | select(.name == $target)] | length == 1)' current.json
-          jq --arg target "$CONTAINER" --arg image "$IMAGE" '.taskDefinition |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt) |
-            .containerDefinitions |= map(if .name == $target then .image = $image else . end)' current.json > td.json
-          arn=$(aws ecs register-task-definition --cli-input-json file://td.json --query taskDefinition.taskDefinitionArn --output text)
+          # app은 BE·FE가 같은 Task를 써서 두 저장소의 배포가 겹칠 수 있음. 진행 중인 배포가 끝난 뒤 지금 상태를 읽음
+          while [ "$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query "length(services[?status=='ACTIVE'].deployments[] | [?rolloutState=='IN_PROGRESS'])" --output text)" != 0 ]; do
+            echo "진행 중인 배포를 기다리는 중"; sleep 15
+          done
+          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
+          # 지정한 컨테이너만 stage에서 검증한 이미지로 바꾸고, 다른 앱 이미지(ghcr.io)는 지금 돌고 있는 이미지를 유지.
+          # nginx 같은 공개 이미지는 JSON에 적힌 이미지를 그대로 씀
+          running='{}'
+          if [ "$current" != None ]; then
+            running=$(aws ecs describe-task-definition --task-definition "$current" \
+              --query 'taskDefinition.containerDefinitions' --output json | jq 'map({(.name): .image}) | add')
+          fi
+          jq --argjson running "$running" --arg target "$CONTAINER" --arg image "$IMAGE" '
+            .containerDefinitions |= map(
+              if .name == $target and $image != "" then .image = $image
+              elif (.image | startswith("ghcr.io/")) and $running[.name] then .image = $running[.name]
+              else . end)' "$FILE" > td.json
+          arn=$(aws ecs register-task-definition --cli-input-json file://td.json \
+            --query taskDefinition.taskDefinitionArn --output text)
+          echo "등록: $arn"
+          jq -r '.containerDefinitions[] | "  \(.name): \(.image)"' td.json
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
-      - name: prod 서비스 갱신 및 성공 확인
+          echo "service-exists=$([ "$current" != None ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Service 갱신 후 완료 대기
+        if: steps.register.outputs.service-exists == 'true'
         env:
-          TASK_ARN: ${{ steps.task.outputs.arn }}
+          ARN: ${{ steps.register.outputs.arn }}
         run: |
-          set -euo pipefail
-          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TASK_ARN" > deployment.json
-          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
-          # 롤백으로 안정화된 경우를 새 이미지 배포 성공으로 처리하지 않는다.
-          aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" |
-            jq -e --arg task "$TASK_ARN" '.services[0] |
-              .taskDefinition == $task and .runningCount == .desiredCount and
-              any(.deployments[]; .status == "PRIMARY" and .taskDefinition == $task and .rolloutState == "COMPLETED")'
+          id=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$ARN" \
+            --query 'service.deployments[?status==`PRIMARY`]|[0].id' --output text)
+          while sleep 15; do
+            state=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "services[0].deployments[?id=='$id']|[0].rolloutState" --output text)
+            echo "$id: $state"
+            case "$state" in
+              COMPLETED) exit 0 ;;
+              IN_PROGRESS) ;;
+              *) echo "배포 실패. ECS 이벤트:"
+                 aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+                   --query 'services[0].events[:10].message' --output text
+                 exit 1 ;;
+            esac
+          done
