@@ -67,24 +67,6 @@ Parameters:
     Type: String
     Default: image/prod/
 
-  # --- v1 prod DB → v2 prod DB 이전용 (#96). v1 VPC는 CloudFormation 밖에서 만든 자원이라 ID로 받음
-  V1VpcId:
-    Type: AWS::EC2::VPC::Id
-    Default: vpc-02baccfeb4b47dcdb
-  V1VpcCidr:
-    Type: String
-    Default: 10.0.0.0/24
-  # v1 prod DB가 있는 사설 서브넷(dameokja-prod-private-subnet)과 그 경로 테이블
-  V1PrivateSubnetId:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-0e040927724aa9f96
-  V1PrivateRouteTableId:
-    Type: String
-    Default: rtb-079919009730a7830
-  V1DbSecurityGroupId:
-    Type: AWS::EC2::SecurityGroup::Id
-    Default: sg-0e6e1c1ae0bd2ff03
-
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -223,84 +205,6 @@ Resources:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       VpcEndpointType: Gateway
       RouteTableIds: [!Ref PrivateRouteTable]
-
-  # --- v1 prod DB → v2 prod DB 이전용 연결 (#96). 이전이 끝나면 지움
-  # v2 prod 사설 서브넷 A(DB·앱 Task) ↔ v1 VPC. 같은 계정이라 피어링은 자동 수락
-  V1Peering:
-    Type: AWS::EC2::VPCPeeringConnection
-    Properties:
-      VpcId: !Ref Vpc
-      PeerVpcId: !Ref V1VpcId
-      Tags:
-        - { Key: Name, Value: dameokja-prod-v1-v2 }
-
-  V1RouteFromV2Private:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      DestinationCidrBlock: !Ref V1VpcCidr
-      VpcPeeringConnectionId: !Ref V1Peering
-
-  # v1 사설 서브넷 경로 테이블에 v2 사설 서브넷 A로 가는 경로 한 줄만 추가 (기존 경로는 그대로)
-  V2RouteFromV1Private:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref V1PrivateRouteTableId
-      DestinationCidrBlock: !Ref PrivateSubnetACidr
-      VpcPeeringConnectionId: !Ref V1Peering
-
-  # v2 DB(복제 수신)와 v2 앱 Task가 v1 DB 3306에 접속
-  V1DbFromV2Ingress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref V1DbSecurityGroupId
-      IpProtocol: tcp
-      FromPort: 3306
-      ToPort: 3306
-      CidrIp: !Ref PrivateSubnetACidr
-      Description: v2 prod private subnet A (DB migration)
-
-  # v1 DB 서버는 NAT가 없어 SSM 연결이 끊겨 있음. GTID 설정·이전 계정을 만들 수 있게 v1 VPC에 SSM 엔드포인트를 둠
-  # Private DNS를 쓰려면 v1 VPC의 enableDnsHostnames가 켜져 있어야 함
-  V1EndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v1 prod SSM endpoints (443 from v1 VPC)
-      VpcId: !Ref V1VpcId
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: !Ref V1VpcCidr }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-v1-ssm-endpoint }
-
-  V1SsmEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref V1VpcId
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds: [!Ref V1PrivateSubnetId]
-      SecurityGroupIds: [!Ref V1EndpointSecurityGroup]
-
-  V1SsmMessagesEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref V1VpcId
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds: [!Ref V1PrivateSubnetId]
-      SecurityGroupIds: [!Ref V1EndpointSecurityGroup]
-
-  V1Ec2MessagesEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref V1VpcId
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds: [!Ref V1PrivateSubnetId]
-      SecurityGroupIds: [!Ref V1EndpointSecurityGroup]
 
   # --- 보안그룹
   AlbSecurityGroup:
