@@ -1,0 +1,8 @@
+{
+  "baseUrl": "https://dameokja.com",
+  "testOnly": true,
+  "loginId": "REPLACE_WITH_TEST_LOGIN",
+  "password": "REPLACE_LOCALLY",
+  "refrigeratorId": "REPLACE_WITH_PRIVATE_TEST_REFRIGERATOR",
+  "remainingWriteSlots": 300
+}

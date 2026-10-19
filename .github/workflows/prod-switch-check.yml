@@ -1,0 +1,32 @@
+name: 운영 DNS 전환 부하 도구 검사
+
+on:
+  pull_request:
+    paths: ["tests/prod-switch/**", ".github/workflows/prod-switch-check.yml"]
+  push:
+    branches: [main]
+    paths: ["tests/prod-switch/**", ".github/workflows/prod-switch-check.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: 실제 HTTP 요청 없는 모의 검사
+        run: |
+          bash -n tests/prod-switch/run.sh
+          bash -n tests/prod-switch/collect-switch.sh
+          node tests/prod-switch/test_load.cjs
+          python -m unittest discover -s tests/prod-switch -p test_evaluate.py
