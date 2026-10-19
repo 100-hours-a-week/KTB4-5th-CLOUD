@@ -69,12 +69,65 @@ jobs:
             printf -- '- 이미지: `%s`\n' "$IMAGE"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  approve:
-    name: CLOUD prod 승인
+  deploy:
+    name: CLOUD prod 승인 및 ECS 배포
     needs: validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    # 같은 prod Task를 FE·BE가 공유하더라도 서로의 이미지를 덮어쓰지 않는다.
+    concurrency:
+      group: prod-ecs-${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || 'PROD_ECS_BE_SERVICE'] }}
+      cancel-in-progress: false
+    env:
+      CLUSTER: dameokja-prod
+      SERVICE: ${{ vars[inputs.repository == 'KTB4-5th-FE' && 'PROD_ECS_FE_SERVICE' || 'PROD_ECS_BE_SERVICE'] }}
+      CONTAINER: ${{ inputs.repository == 'KTB4-5th-FE' && 'frontend' || 'backend' }}
+      IMAGE: ${{ inputs.image }}
     steps:
-      - name: 승인 완료
-        run: echo 'CLOUD의 prod 승인 단계가 완료되었습니다.'
+      - name: prod 대상 설정 확인
+        run: |
+          set -euo pipefail
+          [[ "$SERVICE" =~ ^dameokja-prod-[a-zA-Z0-9_-]+$ ]] || {
+            echo 'CLOUD Repository Variables에 PROD_ECS_FE_SERVICE 또는 PROD_ECS_BE_SERVICE를 설정하세요.'
+            exit 1
+          }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::906462447513:role/dameokja-prod-github-ecs-deploy
+          aws-region: ap-northeast-2
+      - name: prod Task Definition 이미지 교체
+        id: task
+        run: |
+          set -euo pipefail
+          # 기존 서비스가 안정화된 후 현재 정의를 읽어 다른 컨테이너 설정을 보존한다.
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" > service.json
+          jq -e '.failures | length == 0' service.json
+          jq -e '.services | length == 1' service.json
+          jq -e '.services[0] | .status == "ACTIVE" and .desiredCount > 0 and .deploymentController.type == "ECS"' service.json
+          current=$(jq -r '.services[0].taskDefinition' service.json)
+          aws ecs describe-task-definition --task-definition "$current" > current.json
+          jq -e --arg target "$CONTAINER" '.taskDefinition |
+            (.runtimePlatform.cpuArchitecture // "X86_64") == "X86_64" and
+            ([.containerDefinitions[] | select(.name == $target)] | length == 1)' current.json
+          jq --arg target "$CONTAINER" --arg image "$IMAGE" '.taskDefinition |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt) |
+            .containerDefinitions |= map(if .name == $target then .image = $image else . end)' current.json > td.json
+          arn=$(aws ecs register-task-definition --cli-input-json file://td.json --query taskDefinition.taskDefinitionArn --output text)
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+      - name: prod 서비스 갱신 및 성공 확인
+        env:
+          TASK_ARN: ${{ steps.task.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TASK_ARN" > deployment.json
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          # 롤백으로 안정화된 경우를 새 이미지 배포 성공으로 처리하지 않는다.
+          aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" |
+            jq -e --arg task "$TASK_ARN" '.services[0] |
+              .taskDefinition == $task and .runningCount == .desiredCount and
+              any(.deployments[]; .status == "PRIMARY" and .taskDefinition == $task and .rolloutState == "COMPLETED")'
