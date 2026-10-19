@@ -419,6 +419,15 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      # 앱 DB 계정 Association이 비밀번호를 서버 안에서 읽도록 (명령 기록에 비밀번호를 남기지 않음)
+      Policies:
+        - PolicyName: read-db-password
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD"
 
   DbInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -459,6 +468,8 @@ Resources:
   # v1 prod DB에서 복제받을 수 있게 복제본 설정을 zz-replica.cnf로 덧씀(파일 이름순으로 나중에 읽혀 server_id를 덮음)
   # UserData를 바꾸면 DB 서버가 교체될 수 있어 Association으로 적용. 서버가 바뀌어도 대상이 따라가고, 꺼져 있으면 켜질 때 실행됨
   # 설정이 바뀐 경우에만 MySQL 재시작
+  # 스택 생성 때 Association이 UserData의 MySQL 설치보다 먼저 돌아 /etc/my.cnf가 include 한 줄만 남고 기본 설정이 my.cnf.rpmnew로 밀려난 적이 있음.
+  # 그래서 설치가 끝날 때까지 기다리고, rpmnew가 있으면 기본 설정을 되살린 뒤 include를 넣음
   DbConfigAssociation:
     Type: AWS::SSM::Association
     Properties:
@@ -469,10 +480,30 @@ Resources:
       Parameters:
         commands:
           - set -e; changed=
+          - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
+          - systemctl is-enabled mysqld >/dev/null 2>&1 || { echo 'MySQL 설치가 끝나지 않음'; exit 1; }
+          - if [ -f /etc/my.cnf.rpmnew ] && ! grep -q '^\[mysqld\]' /etc/my.cnf; then cp /etc/my.cnf.rpmnew /etc/my.cnf; rm -f /etc/my.cnf.rpmnew; changed=1; fi
           - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
           - printf '[mysqld]\nserver_id=2\nlog_replica_updates=ON\nskip_replica_start=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
           - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
           - if [ -n "$changed" ]; then systemctl restart mysqld; fi
+
+  # BE가 쓰는 앱 DB 계정. 비밀번호는 SSM에서 서버 안에서 읽어 명령 기록에 남지 않음. 비밀번호를 바꾸면 이 Association을 다시 실행
+  # root는 sudo 접속(auth_socket)으로 바꿔 둔 상태를 전제로 함 (2026-10-19 수동 적용)
+  DbAppUserAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: DbConfigAssociation
+    Properties:
+      AssociationName: dameokja-prod-db-app-user
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref DbInstance] }
+      Parameters:
+        commands:
+          - set -e
+          - for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 10; done
+          - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD --with-decryption --query Parameter.Value --output text)
+          - mysql -uroot -e "CREATE DATABASE IF NOT EXISTS app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs; CREATE USER IF NOT EXISTS 'dameokja'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; ALTER USER 'dameokja'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; GRANT ALL PRIVILEGES ON app.* TO 'dameokja'@'10.20.32.0/255.255.224.0';"
 
   # --- ECS 클러스터 + ASG(private 2b) + Capacity Provider
   Cluster:
