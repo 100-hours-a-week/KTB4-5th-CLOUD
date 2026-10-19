@@ -1,12 +1,14 @@
 name: 모니터링·Discord 알림 CloudFormation
 
-# stage 모니터링과 Discord 알림 스택. stage 인프라(infra-v2-cfn-stage.yml)와 같은 흐름
-# PR: change set 미리보기만, main 머지: GitHub Environments "stage" 승인 후 적용
+# stage·v2 prod 모니터링과 Discord 알림 스택. 인프라(infra-v2-cfn-stage.yml, infra-v2-cfn-prod.yml)와 같은 흐름
+# PR: change set 미리보기만, main 머지: GitHub Environments "stage"(stage·Discord) / "prod"(v2 prod) 승인 후 적용
 on:
   pull_request:
     paths:
       - "infra/monitoring/cloudformation/slo-monitoring.stage.template.json"
       - "infra/monitoring/params/stage.json"
+      - "infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json"
+      - "infra/monitoring/params/v2-prod.json"
       - "infra/discord-alerts/aws/cloudformation/discord-alerts.template.json"
       - "infra/discord-alerts/aws/params/discord-alerts.json"
       - ".github/workflows/infra-monitoring-cfn.yml"
@@ -15,6 +17,8 @@ on:
     paths:
       - "infra/monitoring/cloudformation/slo-monitoring.stage.template.json"
       - "infra/monitoring/params/stage.json"
+      - "infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json"
+      - "infra/monitoring/params/v2-prod.json"
       - "infra/discord-alerts/aws/cloudformation/discord-alerts.template.json"
       - "infra/discord-alerts/aws/params/discord-alerts.json"
       - ".github/workflows/infra-monitoring-cfn.yml"
@@ -35,6 +39,7 @@ jobs:
       matrix:
         include:
           - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
+          - { stack: dameokja-v2-prod-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json, params: infra/monitoring/params/v2-prod.json }
           - { stack: dameokja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
     steps:
       - uses: actions/checkout@v6
@@ -90,6 +95,55 @@ jobs:
           role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: 스택 적용
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          name: ${{ matrix.stack }}
+          template: ${{ matrix.template }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ matrix.params }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_IAM
+          fail-on-empty-changeset: false
+
+  # v2 prod 모니터링은 GitHub Environments "prod" 승인 후. Discord 알림 스택(위 deploy)이 먼저 있어야 함
+  deploy-prod:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    needs: deploy
+    # 이 job의 OIDC sub는 environment:prod
+    environment: prod
+    concurrency:
+      group: infra-monitoring-deploy-prod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - { stack: dameokja-v2-prod-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json, params: infra/monitoring/params/v2-prod.json }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # 첫 생성 전에는 PR 미리보기 change set 때문에 스택이 REVIEW_IN_PROGRESS로 남고, 액션이 이를 UPDATE로 시도해 실패함
+      # → infra-v2-cfn-prod.yml처럼 CREATE change set을 직접 만들어 실행
+      - name: 스택 상태
+        id: st
+        run: echo "status=$(aws cloudformation describe-stacks --stack-name "${{ matrix.stack }}" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE)" >> "$GITHUB_OUTPUT"
+      - name: 첫 생성
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        run: |
+          CS="main-${{ github.run_number }}"
+          aws cloudformation create-change-set --stack-name "${{ matrix.stack }}" --change-set-name "$CS"             --change-set-type CREATE --template-body "file://${{ matrix.template }}" --parameters "file://${{ matrix.params }}"             --role-arn "${{ vars.AWS_CFN_EXEC_ROLE_ARN }}" --capabilities CAPABILITY_IAM > /dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "${{ matrix.stack }}" --change-set-name "$CS"
+          aws cloudformation execute-change-set --stack-name "${{ matrix.stack }}" --change-set-name "$CS"
+          aws cloudformation wait stack-create-complete --stack-name "${{ matrix.stack }}"
+      - name: 스택 적용
+        if: steps.st.outputs.status != 'REVIEW_IN_PROGRESS'
         uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
         with:
           name: ${{ matrix.stack }}
