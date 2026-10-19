@@ -1,0 +1,135 @@
+{
+  "family": "dameokja-prod-ai",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::906462447513:role/dameokja-prod-ecs-task-execution",
+  "taskRoleArn": "arn:aws:iam::906462447513:role/dameokja-prod-ai-task",
+  "volumes": [
+    {
+      "name": "localtime",
+      "host": {
+        "sourcePath": "/etc/localtime"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "ai",
+      "image": "ghcr.io/100-hours-a-week/ktb4-5th-ai@sha256:91428629c2dcf7f487f98ef4d94d4759318844fe6aee6f2509b7d7673f0738e7",
+      "essential": true,
+      "memory": 1536,
+      "repositoryCredentials": {
+        "credentialsParameter": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef"
+      },
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "APP_ENV",
+          "valueFrom": "/dameokja-v2-prod-ai/APP_ENV"
+        },
+        {
+          "name": "INTERNAL_API_KEY",
+          "valueFrom": "/dameokja-v2-prod-ai/INTERNAL_API_KEY"
+        },
+        {
+          "name": "LOG_DIR",
+          "valueFrom": "/dameokja-v2-prod-ai/LOG_DIR"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "valueFrom": "/dameokja-v2-prod-ai/LOG_LEVEL"
+        },
+        {
+          "name": "LOG_RETENTION_DAYS",
+          "valueFrom": "/dameokja-v2-prod-ai/LOG_RETENTION_DAYS"
+        },
+        {
+          "name": "ANALYSIS_QUEUE_MAXSIZE",
+          "valueFrom": "/dameokja-v2-prod-ai/ANALYSIS_QUEUE_MAXSIZE"
+        },
+        {
+          "name": "ANALYSIS_RESULT_TTL_SECONDS",
+          "valueFrom": "/dameokja-v2-prod-ai/ANALYSIS_RESULT_TTL_SECONDS"
+        },
+        {
+          "name": "ANALYSIS_RESULT_MAX_ENTRIES",
+          "valueFrom": "/dameokja-v2-prod-ai/ANALYSIS_RESULT_MAX_ENTRIES"
+        },
+        {
+          "name": "IMAGE_SOURCE",
+          "valueFrom": "/dameokja-v2-prod-ai/IMAGE_SOURCE"
+        },
+        {
+          "name": "S3_REGION",
+          "valueFrom": "/dameokja-v2-prod-ai/S3_REGION"
+        },
+        {
+          "name": "S3_ALLOWED_PREFIX",
+          "valueFrom": "/dameokja-v2-prod-ai/S3_ALLOWED_PREFIX"
+        },
+        {
+          "name": "OLLAMA_MODEL",
+          "valueFrom": "/dameokja-v2-prod-ai/OLLAMA_MODEL"
+        },
+        {
+          "name": "CALLBACK_TIMEOUT_SECONDS",
+          "valueFrom": "/dameokja-v2-prod-ai/CALLBACK_TIMEOUT_SECONDS"
+        },
+        {
+          "name": "CALLBACK_MAX_ATTEMPTS",
+          "valueFrom": "/dameokja-v2-prod-ai/CALLBACK_MAX_ATTEMPTS"
+        },
+        {
+          "name": "S3_BUCKET",
+          "valueFrom": "/dameokja-v2-prod-ai/S3_BUCKET"
+        },
+        {
+          "name": "REMOTE_INFERENCE_URL",
+          "valueFrom": "/dameokja-v2-prod-ai/REMOTE_INFERENCE_URL"
+        },
+        {
+          "name": "REMOTE_INFERENCE_API_KEY",
+          "valueFrom": "/dameokja-v2-prod-ai/REMOTE_INFERENCE_API_KEY"
+        },
+        {
+          "name": "REMOTE_INFERENCE_TIMEOUT_SECONDS",
+          "valueFrom": "/dameokja-v2-prod-ai/REMOTE_INFERENCE_TIMEOUT_SECONDS"
+        },
+        {
+          "name": "CALLBACK_URL",
+          "valueFrom": "/dameokja-v2-prod-ai/CALLBACK_URL"
+        },
+        {
+          "name": "CALLBACK_API_KEY",
+          "valueFrom": "/dameokja-v2-prod-ai/CALLBACK_API_KEY"
+        },
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "/dameokja-v2-prod-ai/DATABASE_URL"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "localtime",
+          "containerPath": "/etc/localtime",
+          "readOnly": true
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/dameokja/v2-prod/ai",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "ai"
+        }
+      }
+    }
+  ]
+}
