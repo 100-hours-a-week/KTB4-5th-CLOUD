@@ -1,0 +1,81 @@
+name: prod DNS 가중치 변경
+run-name: "dameokja.com v1 ${{ inputs.v1_weight }} / v2 ${{ inputs.v2_weight }}"
+
+# dameokja.com A 레코드를 v1 prod(EC2 공인 IP)와 v2 prod(ALB) 가중치 레코드로 나눠 트래픽을 옮김.
+# GitHub Environments "prod" 승인 뒤에만 실행. 되돌릴 때는 v1 100 / v2 0으로 다시 실행
+# 처음 실행할 때 남아 있는 단순 A 레코드는 같은 변경 묶음에서 지우고 가중치 레코드를 만들어 응답이 끊기지 않음
+on:
+  workflow_dispatch:
+    inputs:
+      v1_weight:
+        description: v1 prod 가중치 (0~255)
+        required: true
+        type: string
+        default: "100"
+      v2_weight:
+        description: v2 prod 가중치 (0~255)
+        required: true
+        type: string
+        default: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  change:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: prod
+    concurrency:
+      group: prod-dns
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ZONE_ID: Z08470472LJSW357027J9
+      NAME: dameokja.com.
+      # v1 prod 앱 서버(i-01dea304b603f7283)의 공인 IP. 지금 단순 A 레코드 값과 같음
+      V1_IP: 43.203.168.253
+      TTL: "60"
+      V1_WEIGHT: ${{ inputs.v1_weight }}
+      V2_WEIGHT: ${{ inputs.v2_weight }}
+    steps:
+      - name: 입력 확인
+        run: |
+          for w in "$V1_WEIGHT" "$V2_WEIGHT"; do
+            [[ "$w" =~ ^[0-9]+$ ]] && [ "$w" -le 255 ] || { echo "가중치는 0~255: $w"; exit 1; }
+          done
+          [ "$V1_WEIGHT" -gt 0 ] || [ "$V2_WEIGHT" -gt 0 ] || { echo '둘 다 0이면 응답이 없어짐'; exit 1; }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::906462447513:role/dameokja-prod-github-dns
+          aws-region: ap-northeast-2
+      - name: 가중치 레코드 반영
+        run: |
+          set -euo pipefail
+          out() { aws cloudformation describe-stacks --stack-name dameokja-prod \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          alb_dns=$(out AlbDnsName); alb_zone=$(out AlbHostedZoneId)
+          current=$(aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+            --query "ResourceRecordSets[?Name=='$NAME' && Type=='A']" --output json)
+          echo "지금 레코드:"; echo "$current" | jq -c '.[]'
+          # 단순 레코드(SetIdentifier 없음)가 있으면 그대로 DELETE에 넣음
+          jq -n --argjson cur "$current" --arg name "$NAME" --arg ip "$V1_IP" --argjson ttl "$TTL" \
+            --argjson w1 "$V1_WEIGHT" --argjson w2 "$V2_WEIGHT" --arg dns "$alb_dns" --arg zone "$alb_zone" '{
+              Comment: "dameokja.com v1 \($w1) / v2 \($w2)",
+              Changes: (
+                [$cur[] | select(has("SetIdentifier") | not) | {Action: "DELETE", ResourceRecordSet: .}] + [
+                {Action: "UPSERT", ResourceRecordSet: {Name: $name, Type: "A", SetIdentifier: "v1", Weight: $w1,
+                  TTL: $ttl, ResourceRecords: [{Value: $ip}]}},
+                {Action: "UPSERT", ResourceRecordSet: {Name: $name, Type: "A", SetIdentifier: "v2", Weight: $w2,
+                  AliasTarget: {DNSName: $dns, HostedZoneId: $zone, EvaluateTargetHealth: false}}}])
+            }' > batch.json
+          jq . batch.json
+          id=$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+            --change-batch file://batch.json --query ChangeInfo.Id --output text)
+          aws route53 wait resource-record-sets-changed --id "$id"
+          echo "반영 완료 ($id). 바뀐 레코드:"
+          aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+            --query "ResourceRecordSets[?Name=='$NAME' && Type=='A'].[SetIdentifier,Weight,TTL,ResourceRecords[0].Value,AliasTarget.DNSName]" --output table
