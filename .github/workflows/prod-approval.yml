@@ -1,0 +1,80 @@
+name: prod 배포 추가 승인
+run-name: "prod ${{ inputs.repository }} ${{ inputs.run_id }}.${{ inputs.run_attempt }} ${{ inputs.image }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 배포를 요청한 FE 또는 BE 저장소
+        required: true
+        type: choice
+        options: [KTB4-5th-FE, KTB4-5th-BE]
+      run_id:
+        description: stage 배포를 완료한 Actions 실행 ID
+        required: true
+        type: string
+      run_attempt:
+        description: 요청 실행의 재시도 번호
+        required: true
+        type: string
+      image:
+        description: stage에서 검증한 이미지 digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: 요청 실행과 stage 성공 확인
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPO: ${{ inputs.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          IMAGE: ${{ inputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REPO" == KTB4-5th-FE || "$SOURCE_REPO" == KTB4-5th-BE ]]
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          expected="ghcr.io/100-hours-a-week/${SOURCE_REPO,,}@sha256:"
+          [[ "$IMAGE" == "$expected"* && "${IMAGE#"$expected"}" =~ ^[a-f0-9]{64}$ ]]
+          source="repos/100-hours-a-week/$SOURCE_REPO/actions/runs/$RUN_ID"
+          gh api "$source" | jq -e --argjson attempt "$RUN_ATTEMPT" '
+            .event == "push" and .head_branch == "main" and
+            .path == ".github/workflows/v1-cicd.yml" and .run_attempt == $attempt'
+          # 재실행의 과거 성공 job을 승인 근거로 사용하지 않는다.
+          # 요청 job이 dispatch 직후 종료될 때까지 기다려 앱 저장소 승인도 확인한다.
+          verified=false
+          for ((i=0; i<20; i++)); do
+            jobs=$(gh api --paginate "$source/attempts/$RUN_ATTEMPT/jobs?per_page=100" --slurp)
+            if jq -e '[.[].jobs[]] |
+              any(.name == "v2 stage 배포 / deploy" and .conclusion == "success") and
+              any(.name == "앱 prod 승인 및 CLOUD 승인 요청" and .conclusion == "success")' <<< "$jobs"; then
+              verified=true
+              break
+            fi
+            sleep 5
+          done
+          [[ "$verified" == true ]] || { echo 'stage 성공 또는 앱 prod 승인을 확인하지 못했습니다.'; exit 1; }
+          {
+            echo '### prod 배포 승인 대상'
+            printf -- '- 요청 실행: https://github.com/100-hours-a-week/%s/actions/runs/%s/attempts/%s\n' "$SOURCE_REPO" "$RUN_ID" "$RUN_ATTEMPT"
+            printf -- '- 이미지: `%s`\n' "$IMAGE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  approve:
+    name: CLOUD prod 승인
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: prod
+    steps:
+      - name: 승인 완료
+        run: echo 'CLOUD의 prod 승인 단계가 완료되었습니다.'
