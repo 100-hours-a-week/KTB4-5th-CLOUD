@@ -66,6 +66,11 @@ Parameters:
     Type: String
     Default: image/prod/
 
+  # v1 → v2 전환 알림을 보낼 기존 Discord 알림 SNS 토픽 (dameokja-v1-discord-alerts)
+  AlarmTopicArn:
+    Type: String
+    Default: arn:aws:sns:ap-northeast-2:906462447513:dameokja-v1-discord-alerts-Topic-sM5PwAp9GIcJ
+
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -836,6 +841,135 @@ Resources:
                 Action: iam:PassRole
                 Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn, !GetAtt AiTaskRole.Arn]
 
+  # CLOUD prod-dns-weight.yml(승인 job)이 dameokja.com A 레코드의 v1·v2 가중치만 바꾸는 역할
+  GitHubDnsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-prod-github-dns
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:environment:prod
+      Policies:
+        - PolicyName: apex-weight
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: route53:ChangeResourceRecordSets
+                Resource: !Sub "arn:aws:route53:::hostedzone/${HostedZoneId}"
+                Condition:
+                  ForAllValues:StringEquals:
+                    route53:ChangeResourceRecordSetsNormalizedRecordNames: [dameokja.com]
+                    route53:ChangeResourceRecordSetsRecordTypes: [A]
+              - Effect: Allow
+                Action: route53:ListResourceRecordSets
+                Resource: !Sub "arn:aws:route53:::hostedzone/${HostedZoneId}"
+              - Effect: Allow
+                Action: route53:GetChange
+                Resource: arn:aws:route53:::change/*
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Ref AWS::StackId
+
+  # --- v1 → v2 전환 측정. v1 nginx(CloudWatch Agent)와 v2 nginx(awslogs)는 같은 slo_json 형식이라 같은 필터를 씀
+  # 요청 수 비율로 가중치가 실제로 나뉘는지, 5xx와 응답 시간이 v1과 비슷한지 봄
+  V1RequestsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /dameokja/prod/nginx-access
+      FilterPattern: "{ $.status = * }"
+      MetricTransformations:
+        - { MetricNamespace: Dameokja/switch, MetricName: V1Requests, MetricValue: "1", Unit: Count }
+
+  V1Http5xxFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /dameokja/prod/nginx-access
+      FilterPattern: "{ $.status >= 500 }"
+      MetricTransformations:
+        - { MetricNamespace: Dameokja/switch, MetricName: V1Http5xx, MetricValue: "1", Unit: Count }
+
+  V1RequestTimeFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /dameokja/prod/nginx-access
+      FilterPattern: "{ $.request_time = * }"
+      MetricTransformations:
+        - { MetricNamespace: Dameokja/switch, MetricName: V1RequestTime, MetricValue: "$.request_time", Unit: Seconds }
+
+  V2RequestsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref NginxLogGroup
+      FilterPattern: "{ $.status = * }"
+      MetricTransformations:
+        - { MetricNamespace: Dameokja/switch, MetricName: V2Requests, MetricValue: "1", Unit: Count }
+
+  V2Http5xxFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref NginxLogGroup
+      FilterPattern: "{ $.status >= 500 }"
+      MetricTransformations:
+        - { MetricNamespace: Dameokja/switch, MetricName: V2Http5xx, MetricValue: "1", Unit: Count }
+
+  V2RequestTimeFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref NginxLogGroup
+      FilterPattern: "{ $.request_time = * }"
+      MetricTransformations:
+        - { MetricNamespace: Dameokja/switch, MetricName: V2RequestTime, MetricValue: "$.request_time", Unit: Seconds }
+
+  # v2로 옮긴 트래픽에서 5xx가 늘면 Discord로 알림 (v1 prod 5xx 알람과 같은 기준: 5분 5건)
+  V2Http5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: dameokja-prod-switch-v2-5xx
+      AlarmDescription: v1 → v2 전환 중 v2 prod nginx 5xx가 5분에 5건 이상
+      Namespace: Dameokja/switch
+      MetricName: V2Http5xx
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopicArn]
+      OKActions: [!Ref AlarmTopicArn]
+
+  SwitchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: dameokja-prod-switch
+      DashboardBody: !Sub
+        - |
+          {"widgets":[
+            {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"요청 수 (1분)","region":"${AWS::Region}","stat":"Sum","period":60,"view":"timeSeries",
+              "metrics":[["Dameokja/switch","V1Requests",{"label":"v1"}],["Dameokja/switch","V2Requests",{"label":"v2"}]]}},
+            {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"v2 비율 (%)","region":"${AWS::Region}","period":60,"view":"timeSeries",
+              "metrics":[["Dameokja/switch","V1Requests",{"id":"v1","stat":"Sum","visible":false}],["Dameokja/switch","V2Requests",{"id":"v2","stat":"Sum","visible":false}],
+                [{"expression":"100*FILL(v2,0)/(FILL(v1,0)+FILL(v2,0))","label":"v2 %","id":"share"}]]}},
+            {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"5xx 비율 (%)","region":"${AWS::Region}","period":60,"view":"timeSeries",
+              "metrics":[["Dameokja/switch","V1Requests",{"id":"r1","stat":"Sum","visible":false}],["Dameokja/switch","V1Http5xx",{"id":"e1","stat":"Sum","visible":false}],
+                ["Dameokja/switch","V2Requests",{"id":"r2","stat":"Sum","visible":false}],["Dameokja/switch","V2Http5xx",{"id":"e2","stat":"Sum","visible":false}],
+                [{"expression":"100*FILL(e1,0)/r1","label":"v1 5xx %","id":"p1"}],[{"expression":"100*FILL(e2,0)/r2","label":"v2 5xx %","id":"p2"}]]}},
+            {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"응답 시간 p95 (초, nginx request_time)","region":"${AWS::Region}","stat":"p95","period":60,"view":"timeSeries",
+              "metrics":[["Dameokja/switch","V1RequestTime",{"label":"v1 p95"}],["Dameokja/switch","V2RequestTime",{"label":"v2 p95"}]]}},
+            {"type":"metric","x":0,"y":12,"width":24,"height":6,"properties":{"title":"v2 ALB","region":"${AWS::Region}","period":60,"view":"timeSeries",
+              "metrics":[["AWS/ApplicationELB","RequestCount","LoadBalancer","${AlbName}",{"stat":"Sum"}],[".","HTTPCode_Target_5XX_Count",".",".",{"stat":"Sum"}],
+                [".","HTTPCode_ELB_5XX_Count",".",".",{"stat":"Sum"}],[".","TargetResponseTime",".",".",{"stat":"p95","yAxis":"right"}]]}}
+          ]}
+        - AlbName: !GetAtt Alb.LoadBalancerFullName
+
   # 팀원(IAM 그룹 dameokja-iam)이 prod 설정값(SSM)을 관리하고, prod 인스턴스에 Session Manager로 접속
   TeamSsmAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -950,6 +1084,8 @@ Outputs:
     Value: !Ref Cluster
   AlbDnsName:
     Value: !GetAtt Alb.DNSName
+  AlbHostedZoneId:
+    Value: !GetAtt Alb.CanonicalHostedZoneID
   TargetGroupBlueArn:
     Value: !Ref TargetGroupBlue
   TargetGroupGreenArn:
