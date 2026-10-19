@@ -658,28 +658,29 @@ Resources:
         }
 
   # --- 컨테이너 로그 (awslogs). 서비스마다 로그 그룹 하나
+  # /dameokja/prod/*는 v1 prod(CloudWatch Agent)가 이미 쓰고 있어 v2 prod는 /dameokja/v2-prod/*
   NginxLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /dameokja/prod/nginx
+      LogGroupName: /dameokja/v2-prod/nginx
       RetentionInDays: 30
 
   FrontendLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /dameokja/prod/frontend
+      LogGroupName: /dameokja/v2-prod/frontend
       RetentionInDays: 30
 
   BackendLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /dameokja/prod/backend
+      LogGroupName: /dameokja/v2-prod/backend
       RetentionInDays: 30
 
   AiLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /dameokja/prod/ai
+      LogGroupName: /dameokja/v2-prod/ai
       RetentionInDays: 30
 
   # --- IAM
