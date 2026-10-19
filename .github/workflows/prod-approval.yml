@@ -42,8 +42,15 @@ jobs:
         run: |
           set -euo pipefail
           case "$SOURCE_REPO" in
-            KTB4-5th-FE|KTB4-5th-BE) workflow='.github/workflows/v1-cicd.yml' ;;
-            KTB4-5th-AI) workflow='.github/workflows/ai-cicd.yml' ;;
+            KTB4-5th-FE|KTB4-5th-BE)
+              workflow='.github/workflows/v1-cicd.yml'
+              requests='["앱 prod 승인 및 CLOUD 승인 요청"]'
+              ;;
+            KTB4-5th-AI)
+              workflow='.github/workflows/ai-cicd.yml'
+              # 전환 중인 기존 AI 실행과 CLOUD 승인만 사용하는 새 실행을 모두 지원한다.
+              requests='["앱 prod 승인 및 CLOUD 승인 요청", "CLOUD prod 승인 요청"]'
+              ;;
             *) exit 1 ;;
           esac
           [[ "$RUN_ID" =~ ^[0-9]+$ && "$RUN_ATTEMPT" =~ ^[0-9]+$ ]]
@@ -54,19 +61,19 @@ jobs:
             .event == "push" and .head_branch == "main" and
             .path == $path and .run_attempt == $attempt'
           # 재실행의 과거 성공 job을 승인 근거로 사용하지 않는다.
-          # 요청 job이 dispatch 직후 종료될 때까지 기다려 앱 저장소 승인도 확인한다.
+          # 요청 job이 dispatch 직후 종료될 때까지 기다린다. AI의 최종 승인은 CLOUD에서만 받는다.
           verified=false
           for ((i=0; i<20; i++)); do
             jobs=$(gh api --paginate "$source/attempts/$RUN_ATTEMPT/jobs?per_page=100" --slurp)
-            if jq -e '[.[].jobs[]] |
+            if jq -e --argjson requests "$requests" '[.[].jobs[]] |
               any(.name == "v2 stage 배포 / deploy" and .conclusion == "success") and
-              any(.name == "앱 prod 승인 및 CLOUD 승인 요청" and .conclusion == "success")' <<< "$jobs"; then
+              any(.name as $name | ($requests | index($name)) != null and .conclusion == "success")' <<< "$jobs"; then
               verified=true
               break
             fi
             sleep 5
           done
-          [[ "$verified" == true ]] || { echo 'stage 성공 또는 앱 prod 승인을 확인하지 못했습니다.'; exit 1; }
+          [[ "$verified" == true ]] || { echo 'stage 성공 또는 CLOUD 배포 요청 성공을 확인하지 못했습니다.'; exit 1; }
           {
             echo '### prod 배포 승인 대상'
             printf -- '- 요청 실행: https://github.com/100-hours-a-week/%s/actions/runs/%s/attempts/%s\n' "$SOURCE_REPO" "$RUN_ID" "$RUN_ATTEMPT"
