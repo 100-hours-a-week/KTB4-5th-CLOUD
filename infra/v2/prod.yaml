@@ -895,20 +895,6 @@ Resources:
             Condition:
               StringLike:
                 ssm:resourceTag/Name: dameokja-prod*
-          # 셸 접속과 포트 포워딩(예: 로컬에서 DB 3306)에 쓰는 Session Manager 문서
-          - Effect: Allow
-            Action: ssm:StartSession
-            Resource:
-              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/SSM-SessionManagerRunShell"
-              - !Sub "arn:aws:ssm:${AWS::Region}::document/AWS-StartPortForwardingSession"
-          # 자기 세션만 종료·재개
-          - Effect: Allow
-            Action: [ssm:TerminateSession, ssm:ResumeSession]
-            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${!aws:username}-*"
-          # CLI·콘솔에서 접속 가능한 인스턴스·세션 목록 보기
-          - Effect: Allow
-            Action: [ssm:DescribeInstanceProperties, ssm:DescribeInstanceInformation, ssm:DescribeSessions, ssm:GetConnectionStatus]
-            Resource: "*"
 
   # --- ECS Service. Task Definition은 infra/v2/ecs/prod/*.json (ecs-deploy.yml이 등록). family만 적어 최신 버전을 씀
   # nginx+FE+BE. ECS Native Blue/Green: 새 버전을 green 타겟 그룹에 띄우고 헬스체크 통과 후 리스너 규칙을 green으로 전환,
