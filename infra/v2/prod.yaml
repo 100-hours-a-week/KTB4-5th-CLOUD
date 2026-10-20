@@ -718,7 +718,7 @@ Resources:
     Properties:
       Name: /dameokja-v2-prod/cloudwatch-agent/config
       Type: String
-      Value: '{"agent":{"metrics_collection_interval":60,"omit_hostname":true},"logs":{"metrics_collected":{"prometheus":{"log_group_name":"/dameokja/v2-prod/prometheus","prometheus_config_path":"env:PROMETHEUS_CONFIG_CONTENT","emf_processor":{"metric_declaration_dedup":true,"metric_namespace":"Dameokja/v2-prod/App","metric_declaration":[{"source_labels":["job"],"label_matcher":"^dameokja-backend$","dimensions":[["env"]],"metric_selectors":["^hikaricp_connections_(active|idle|pending|max)$","^hikaricp_connections_timeout_total$"]}]}}}}}'
+      Value: '{"agent":{"metrics_collection_interval":60,"omit_hostname":true,"region":"ap-northeast-2"},"logs":{"metrics_collected":{"prometheus":{"log_group_name":"/dameokja/v2-prod/prometheus","prometheus_config_path":"env:PROMETHEUS_CONFIG_CONTENT","emf_processor":{"metric_declaration_dedup":true,"metric_namespace":"Dameokja/v2-prod/App","metric_declaration":[{"source_labels":["job"],"label_matcher":"^dameokja-backend$","dimensions":[["env"]],"metric_selectors":["^hikaricp_connections_(active|idle|pending|max)$","^hikaricp_connections_timeout_total$"]}]}}}}}'
 
   PrometheusScrapeConfigParameter:
     Type: AWS::SSM::Parameter
@@ -804,6 +804,10 @@ Resources:
                 Resource: !Sub "${PrometheusLogGroup.Arn}"
               - Effect: Allow
                 Action: logs:DescribeLogGroups
+                Resource: "*"
+              # Agent가 시작할 때 인스턴스 태그·볼륨을 조회함. 없으면 설정 변환이 실패하고 종료됨 (2026-10-20 확인)
+              - Effect: Allow
+                Action: [ec2:DescribeTags, ec2:DescribeVolumes]
                 Resource: "*"
 
   # AI 서버: BE가 올린 이미지 읽기
