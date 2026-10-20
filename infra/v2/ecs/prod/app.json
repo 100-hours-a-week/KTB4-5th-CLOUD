@@ -289,6 +289,30 @@
           "awslogs-stream-prefix": "backend"
         }
       }
+    },
+    {
+      "name": "cloudwatch-agent",
+      "image": "public.ecr.aws/cloudwatch-agent/cloudwatch-agent:1.300071.0b1720",
+      "essential": false,
+      "memory": 128,
+      "secrets": [
+        {
+          "name": "CW_CONFIG_CONTENT",
+          "valueFrom": "/dameokja-v2-prod/cloudwatch-agent/config"
+        },
+        {
+          "name": "PROMETHEUS_CONFIG_CONTENT",
+          "valueFrom": "/dameokja-v2-prod/cloudwatch-agent/prometheus"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/dameokja/v2-prod/backend",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "cloudwatch-agent"
+        }
+      }
     }
   ]
 }
