@@ -100,14 +100,6 @@
         {
           "name": "SERVER_TOMCAT_MBEANREGISTRY_ENABLED",
           "value": "true"
-        },
-        {
-          "name": "PUSH_DISPATCH_ENABLED",
-          "value": "false"
-        },
-        {
-          "name": "PUSH_EXPIRATION_BATCH_ENABLED",
-          "value": "false"
         }
       ],
       "secrets": [
