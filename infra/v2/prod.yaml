@@ -269,6 +269,17 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-prod-db }
 
+  # AI Task → DB 서버 PostgreSQL(5432). 같은 서버의 MySQL과 포트만 다름
+  DbPostgresFromAiIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref AiSecurityGroup
+      Description: AI task PostgreSQL
+
   # --- 진입점: ACM 인증서 + ALB + 타겟 그룹 2개(ECS Blue/Green) + 리스너
   Certificate:
     Type: AWS::CertificateManager::Certificate
@@ -495,6 +506,34 @@ Resources:
           - for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 10; done
           - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD --with-decryption --query Parameter.Value --output text)
           - mysql -uroot -e "CREATE DATABASE IF NOT EXISTS app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs; CREATE USER IF NOT EXISTS 'dameokja'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; ALTER USER 'dameokja'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; GRANT ALL PRIVILEGES ON app.* TO 'dameokja'@'10.20.32.0/255.255.224.0';"
+
+  # AI용 PostgreSQL 16을 MySQL과 같은 DB 서버에 둠 (dev는 AI 서버에 직접 설치). 메모리 상한 shared_buffers 512MB
+  # 계정 비밀번호는 SSM /dameokja-v2-prod-ai/POSTGRES_PASSWORD를 서버 안에서 읽음(명령 기록에 남기지 않음). 스키마·기준 데이터는 dev에서 따로 옮김
+  DbPostgresAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: DbConfigAssociation
+    Properties:
+      AssociationName: dameokja-prod-db-postgres
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref DbInstance] }
+      Parameters:
+        executionTimeout: ["1800"]
+        commands:
+          - set -e; changed=
+          - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
+          - rpm -q postgresql16-server >/dev/null 2>&1 || dnf install -y postgresql16-server postgresql16-contrib
+          - D=/var/lib/pgsql/data; [ -f $D/PG_VERSION ] || postgresql-setup --initdb
+          - echo "listen_addresses = '*'" > /tmp/dameokja.conf; echo "shared_buffers = 512MB" >> /tmp/dameokja.conf; echo "password_encryption = scram-sha-256" >> /tmp/dameokja.conf
+          - mkdir -p $D/conf.d && chown postgres:postgres $D/conf.d; grep -q "^include_dir = 'conf.d'" $D/postgresql.conf || { echo "include_dir = 'conf.d'" >> $D/postgresql.conf; changed=1; }
+          - cmp -s /tmp/dameokja.conf $D/conf.d/dameokja.conf || { install -o postgres -g postgres -m 600 /tmp/dameokja.conf $D/conf.d/dameokja.conf; changed=1; }
+          - !Sub "grep -q '^host receipt_ai receipt_ai ${PrivateSubnetACidr} scram-sha-256' $D/pg_hba.conf || { echo 'host receipt_ai receipt_ai ${PrivateSubnetACidr} scram-sha-256' >> $D/pg_hba.conf; changed=1; }"
+          - systemctl enable postgresql; if systemctl is-active -q postgresql; then [ -z "$changed" ] || systemctl restart postgresql; else systemctl start postgresql; fi
+          - !Sub "PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v2-prod-ai/POSTGRES_PASSWORD --with-decryption --query Parameter.Value --output text)"
+          - sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='receipt_ai'" | grep -q 1 || sudo -u postgres psql -c "CREATE ROLE receipt_ai LOGIN"
+          - echo "ALTER ROLE receipt_ai PASSWORD :'pw';" | sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" >/dev/null
+          - sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='receipt_ai'" | grep -q 1 || sudo -u postgres createdb -O receipt_ai receipt_ai
+          - sudo -u postgres psql -d receipt_ai -c "CREATE EXTENSION IF NOT EXISTS pg_trgm"
 
   # --- ECS 클러스터 + ASG(private 2b) + Capacity Provider
   Cluster:
