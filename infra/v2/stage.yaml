@@ -63,6 +63,15 @@ Parameters:
   S3UploadPrefix:
     Type: String
     Default: image/stage/
+  # stage 켜기·끄기 워크플로가 바꿈. off면 NAT(시간·IP 요금)를 지우고 앱 ASG 최소 대수를 0으로 둠
+  # main 머지 배포는 지금 값을 그대로 씀(꺼 둔 stage가 인프라 PR 머지로 다시 켜지지 않게)
+  Power:
+    Type: String
+    Default: "off"
+    AllowedValues: ["on", "off"]
+
+Conditions:
+  IsOn: !Equals [!Ref Power, "on"]
 
 Resources:
   Vpc:
@@ -154,6 +163,7 @@ Resources:
   # --- NAT 1개(AzA). AzA 장애 시 AzB private의 외부 통신도 끊기는 것은 감수 (구현 기록 임시 기본값)
   NatEip:
     Type: AWS::EC2::EIP
+    Condition: IsOn
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
@@ -162,6 +172,7 @@ Resources:
 
   NatGateway:
     Type: AWS::EC2::NatGateway
+    Condition: IsOn
     Properties:
       AllocationId: !GetAtt NatEip.AllocationId
       SubnetId: !Ref PublicSubnetA
@@ -177,6 +188,7 @@ Resources:
 
   PrivateDefaultRoute:
     Type: AWS::EC2::Route
+    Condition: IsOn
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       DestinationCidrBlock: 0.0.0.0/0
@@ -564,7 +576,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
-      MinSize: !Ref MinSize
+      MinSize: !If [IsOn, !Ref MinSize, 0]
       MaxSize: !Ref MaxSize
 
   # Task를 올릴 자리가 모자라면 ECS가 ASG 인스턴스 수를 늘리고, 남으면 줄임 (min~max 안에서)

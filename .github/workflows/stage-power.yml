@@ -1,6 +1,7 @@
 name: stage 켜기·끄기
 
-# 쓸 때만 stage 서버(앱 ASG, DB, Redis)를 켠다. NAT·ALB는 중지 기능이 없어 계속 켜져 있다.
+# 쓸 때만 stage 서버(앱 ASG, DB, Redis)를 켠다. NAT는 스택 Power 값으로 만들고 지운다(켤 때 먼저 만들고, 끈 뒤 지움).
+# ALB는 앱 Blue/Green 서비스와 모니터링이 물려 있어 그대로 둔다.
 # 꺼진 동안 stage 스택을 업데이트하지 않는다 (서비스 수가 템플릿 값으로 돌아갈 수 있음).
 on:
   workflow_dispatch:
@@ -20,8 +21,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  nat-on:
+    if: github.ref_name == 'main' && inputs.action == 'start'
+    uses: ./.github/workflows/stage-power-stack.yml
+    with:
+      power: "on"
+
   power:
-    if: github.ref_name == 'main'
+    needs: nat-on
+    if: always() && github.ref_name == 'main' && needs.nat-on.result != 'failure'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -73,3 +81,10 @@ jobs:
           aws ecs update-service --cluster "$CLUSTER" --service dameokja-stage-ai --desired-count 1 > /dev/null
           aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-ai
           echo "stage 켜짐"
+
+  nat-off:
+    needs: power
+    if: inputs.action == 'stop'
+    uses: ./.github/workflows/stage-power-stack.yml
+    with:
+      power: "off"

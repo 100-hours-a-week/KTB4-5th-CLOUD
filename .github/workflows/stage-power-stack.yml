@@ -1,0 +1,51 @@
+name: stage Power 값 적용
+
+# stage 켜기·끄기에서만 부름. 템플릿은 그대로 두고 Power 파라미터만 바꿔 NAT와 앱 ASG 최소 대수를 맞춤
+# 스택 배포 역할은 environment:stage만 신뢰해서 job을 따로 둠
+on:
+  workflow_call:
+    inputs:
+      power:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  stack:
+    runs-on: ubuntu-24.04
+    environment: stage
+    concurrency:
+      group: infra-v2-stage-deploy
+      cancel-in-progress: false
+    env:
+      STACK_NAME: dameokja-stage
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: Power=${{ inputs.power }} 적용
+        env:
+          POWER: ${{ inputs.power }}
+        run: |
+          params=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].Parameters[].ParameterKey' --output json |
+            jq -c --arg p "$POWER" '[.[] | select(. != "Power") | {ParameterKey: ., UsePreviousValue: true}] + [{ParameterKey: "Power", ParameterValue: $p}]')
+          CS="power-$POWER-${{ github.run_id }}"
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+            --use-previous-template --parameters "$params" \
+            --role-arn "${{ vars.AWS_CFN_EXEC_ROLE_ARN }}" --capabilities CAPABILITY_NAMED_IAM > /dev/null
+          if ! aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CS"; then
+            reason=$(aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" --query StatusReason --output text)
+            echo "$reason"
+            aws cloudformation delete-change-set --stack-name "$STACK_NAME" --change-set-name "$CS"
+            # 이미 같은 Power 값이면 변경 없음
+            case "$reason" in *"didn't contain changes"*|*"No updates"*) exit 0 ;; *) exit 1 ;; esac
+          fi
+          aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+            --query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]' --output text
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$CS"
+          aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
