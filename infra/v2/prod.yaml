@@ -48,9 +48,10 @@ Parameters:
   MaxSize:
     Type: Number
     Default: 4
+  # 10-19~24 CPU 평균 1~2%라 m7i.large(8GB)에서 줄임 (#134). MySQL 버퍼 풀 기본값 + PostgreSQL 512MB가 4GB 안에 들어감
   DbInstanceType:
     Type: String
-    Default: m7i.large
+    Default: t3.medium
   RedisInstanceType:
     Type: String
     Default: t3.small
