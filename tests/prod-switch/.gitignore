@@ -1,0 +1,4 @@
+private/
+results/
+*.env
+__pycache__/
