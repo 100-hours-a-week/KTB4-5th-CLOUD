@@ -3,19 +3,21 @@ name: v2 ECS 배포
 # BE/FE/AI CI와 CLOUD가 함께 쓰는 배포 단계.
 # infra/v2/ecs/<env>/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
 # 실패하면 ECS가 이전 버전으로 되돌리고 이 작업도 실패로 끝남.
+# 대상 이름은 입력으로 만듦: 클러스터 dameokja-<env>, 서비스 dameokja-<env>-<service>
+# prod는 GitHub Environments "prod" 승인 뒤에만 실행 (prod 배포 역할은 CLOUD environment:prod만 믿음)
 on:
   workflow_call:
     inputs:
       env:
-        description: dev, stage
+        description: dev, stage, prod
         type: string
         default: dev
       service:
-        description: "dev: nginx, frontend, backend, redis, ai / stage: app, ai"
+        description: "dev: nginx, frontend, backend, redis, ai / stage·prod: app, ai"
         type: string
         required: true
       container:
-        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (stage app은 frontend 또는 backend)
+        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (stage·prod app은 frontend 또는 backend)
         type: string
         default: ""
       image:
@@ -47,6 +49,7 @@ jobs:
   deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    environment: ${{ inputs.env == 'prod' && 'prod' || '' }}
     permissions:
       contents: read
       id-token: write
@@ -59,6 +62,7 @@ jobs:
       FILE: cloud/infra/v2/ecs/${{ inputs.env }}/${{ inputs.service }}.json
       CONTAINER: ${{ inputs.container }}
       IMAGE: ${{ inputs.image }}
+      ENV_NAME: ${{ inputs.env }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -66,6 +70,14 @@ jobs:
           ref: main
           path: cloud
           persist-credentials: false
+      - name: 배포 대상 확인
+        run: |
+          case "$ENV_NAME" in dev|stage|prod) ;; *) echo "env는 dev, stage, prod 중 하나: $ENV_NAME"; exit 1 ;; esac
+          [ -f "$FILE" ] || { echo "Task Definition 파일 없음: $FILE"; exit 1; }
+          if [ -n "$CONTAINER" ] && ! jq -e --arg c "$CONTAINER" 'any(.containerDefinitions[]; .name == $c)' "$FILE" > /dev/null; then
+            echo "$FILE에 $CONTAINER 컨테이너 없음"; exit 1
+          fi
+          echo "대상: $CLUSTER / $SERVICE / ${CONTAINER:-첫 번째 컨테이너}"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::906462447513:role/dameokja-${{ inputs.env }}-github-ecs-deploy
@@ -80,6 +92,10 @@ jobs:
           done
           current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
             --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
+          # Service가 없을 때 Task Definition만 등록하는 것은 JSON 반영(이미지 없음)일 때만. 앱 이미지 배포는 대상이 틀린 것이라 실패
+          if [ "$current" = None ] && [ -n "$IMAGE" ]; then
+            echo "Service 없음: $CLUSTER / $SERVICE"; exit 1
+          fi
           # 앱 이미지(ghcr.io)는 CI가 정하므로 지금 돌고 있는 이미지를 유지하고, 지정한 컨테이너만 새 이미지로 바꿈.
           # nginx·redis 같은 공개 이미지는 JSON에 적힌 이미지를 그대로 씀
           running='{}'
@@ -98,12 +114,20 @@ jobs:
           echo "등록: $arn"
           jq -r '.containerDefinitions[] | "  \(.name): \(.image)"' td.json
           echo "arn=$arn" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
           echo "service-exists=$([ "$current" != None ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Service 갱신 후 완료 대기
         if: steps.register.outputs.service-exists == 'true'
         env:
           ARN: ${{ steps.register.outputs.arn }}
+          READ: ${{ steps.register.outputs.current }}
         run: |
+          # BE·FE는 다른 저장소라 concurrency로 서로 막지 못함. 읽은 뒤 다른 배포가 먼저 바꿨으면 그 이미지를 덮어쓰지 않도록 멈춤
+          now=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
+          if [ "$now" != "$READ" ]; then
+            echo "다른 배포가 먼저 Service를 바꿈($READ -> $now). 이 실행을 다시 돌리면 최신 상태로 다시 등록함"; exit 1
+          fi
           id=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$ARN" \
             --query 'service.deployments[?status==`PRIMARY`]|[0].id' --output text)
           while sleep 15; do
