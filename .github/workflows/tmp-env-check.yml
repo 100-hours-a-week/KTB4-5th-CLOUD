@@ -1,0 +1,14 @@
+name: 임시 environment 확인
+on:
+  push:
+    branches: [test/92-env-check]
+jobs:
+  call:
+    strategy:
+      matrix:
+        env: [dev, stage]
+    permissions:
+      id-token: write
+    uses: ./.github/workflows/tmp-env-check-called.yml
+    with:
+      env: ${{ matrix.env }}
