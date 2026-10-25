@@ -1,7 +1,7 @@
 name: v2 Task Definition 반영
 
 # infra/v2/ecs/<env>/*.json이 main에 들어오면 바뀐 서비스만 다시 배포 (이미지는 지금 것 유지)
-# prod는 GitHub Environments "prod" 승인 뒤에만 반영 (prod 배포 역할은 environment:prod만 믿음)
+# prod는 GitHub Environments "prod" 승인 뒤에만 반영 (ecs-deploy.yml 안에서 승인)
 on:
   push:
     branches: [main]
@@ -18,7 +18,6 @@ jobs:
       contents: read
     outputs:
       targets: ${{ steps.diff.outputs.targets }}
-      prod-targets: ${{ steps.diff.outputs.prod-targets }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -32,10 +31,8 @@ jobs:
             files=$(git diff --name-only --diff-filter=d HEAD^ HEAD -- infra/v2/ecs/dev/ infra/v2/ecs/stage/ infra/v2/ecs/prod/)
           fi
           # infra/v2/ecs/stage/app.json -> {"env":"stage","service":"app"}
-          all=$(printf '%s\n' "$files" | grep '\.json$' \
-            | jq -Rnc '[inputs | split("/") | {env: .[3], service: (.[4] | rtrimstr(".json"))}]')
-          echo "targets=$(jq -c 'map(select(.env != "prod"))' <<< "$all")" >> "$GITHUB_OUTPUT"
-          echo "prod-targets=$(jq -c 'map(select(.env == "prod"))' <<< "$all")" >> "$GITHUB_OUTPUT"
+          echo "targets=$(printf '%s\n' "$files" | grep '\.json$' \
+            | jq -Rnc '[inputs | split("/") | {env: .[3], service: (.[4] | rtrimstr(".json"))}]')" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: changes
@@ -51,87 +48,3 @@ jobs:
     with:
       env: ${{ matrix.target.env }}
       service: ${{ matrix.target.service }}
-
-  # prod: ecs-deploy.yml과 같은 단계. 재사용 워크플로를 부르는 job에는 environment를 붙일 수 없어 같은 단계를 여기에 둠
-  deploy-prod:
-    needs: changes
-    if: needs.changes.outputs.prod-targets != '[]'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    environment: prod
-    strategy:
-      fail-fast: false
-      matrix:
-        target: ${{ fromJSON(needs.changes.outputs.prod-targets) }}
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: ecs-prod-${{ matrix.target.service }}
-      cancel-in-progress: false
-    env:
-      CLUSTER: dameokja-prod
-      SERVICE: dameokja-prod-${{ matrix.target.service }}
-      FILE: cloud/infra/v2/ecs/prod/${{ matrix.target.service }}.json
-      CONTAINER: ""
-      IMAGE: ""
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          repository: 100-hours-a-week/KTB4-5th-CLOUD
-          ref: main
-          path: cloud
-          persist-credentials: false
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::906462447513:role/dameokja-prod-github-ecs-deploy
-          aws-region: ap-northeast-2
-      - name: Task Definition 등록
-        id: register
-        run: |
-          # stage app은 BE·FE가 같은 Task를 써서 두 저장소의 배포가 겹칠 수 있음. 진행 중인 배포가 끝난 뒤 지금 상태를 읽음
-          while [ "$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query "length(services[?status=='ACTIVE'].deployments[] | [?rolloutState=='IN_PROGRESS'])" --output text)" != 0 ]; do
-            echo "진행 중인 배포를 기다리는 중"; sleep 15
-          done
-          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          # 앱 이미지(ghcr.io)는 CI가 정하므로 지금 돌고 있는 이미지를 유지하고, 지정한 컨테이너만 새 이미지로 바꿈.
-          # nginx·redis 같은 공개 이미지는 JSON에 적힌 이미지를 그대로 씀
-          running='{}'
-          if [ "$current" != None ]; then
-            running=$(aws ecs describe-task-definition --task-definition "$current" \
-              --query 'taskDefinition.containerDefinitions' --output json | jq 'map({(.name): .image}) | add')
-          fi
-          target=${CONTAINER:-$(jq -r '.containerDefinitions[0].name' "$FILE")}
-          jq --argjson running "$running" --arg target "$target" --arg image "$IMAGE" '
-            .containerDefinitions |= map(
-              if .name == $target and $image != "" then .image = $image
-              elif (.image | startswith("ghcr.io/")) and $running[.name] then .image = $running[.name]
-              else . end)' "$FILE" > td.json
-          arn=$(aws ecs register-task-definition --cli-input-json file://td.json \
-            --query taskDefinition.taskDefinitionArn --output text)
-          echo "등록: $arn"
-          jq -r '.containerDefinitions[] | "  \(.name): \(.image)"' td.json
-          echo "arn=$arn" >> "$GITHUB_OUTPUT"
-          echo "service-exists=$([ "$current" != None ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - name: Service 갱신 후 완료 대기
-        if: steps.register.outputs.service-exists == 'true'
-        env:
-          ARN: ${{ steps.register.outputs.arn }}
-        run: |
-          id=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$ARN" \
-            --query 'service.deployments[?status==`PRIMARY`]|[0].id' --output text)
-          while sleep 15; do
-            state=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-              --query "services[0].deployments[?id=='$id']|[0].rolloutState" --output text)
-            echo "$id: $state"
-            case "$state" in
-              COMPLETED) exit 0 ;;
-              IN_PROGRESS) ;;
-              *) echo "배포 실패. ECS 이벤트:"
-                 aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-                   --query 'services[0].events[:10].message' --output text
-                 exit 1 ;;
-            esac
-          done
