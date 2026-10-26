@@ -110,4 +110,4 @@ k6 run -e ACCOUNTS=../k6/private/prod-accounts.json --out csv=private/ramp.csv r
 - `ramp.js`: T1 점진 부하
 - `stress.js`: T2 스파이크 (예정)
 - `probe.py`: DB 쓰기 프로브(run / verify) (예정)
-- `결과.md`: 측정 결과 (예정)
+- `결과.md`: 측정 결과
