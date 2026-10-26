@@ -366,6 +366,123 @@ Resources:
             EOF
           - /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/dameokja.json
 
+  # AI 서버 CloudWatch Agent: FastAPI /metrics(RunPod 처리·LLM·프로세스)와 서버 메모리 사용률 (#137)
+  # /metrics는 루프백 요청이면 내부 API 키 없이 열림(AI 저장소). 설정을 바꾸면 이 Association이 다시 실행됨
+  AiCloudWatchAgentAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref AiInstance] }
+      Parameters:
+        commands:
+          - set -e
+          - dnf install -y amazon-cloudwatch-agent
+          - |
+            cat > /opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml <<'EOF'
+            global:
+              scrape_interval: 1m
+              scrape_timeout: 10s
+            scrape_configs:
+              - job_name: dameokja-ai
+                metrics_path: /metrics
+                static_configs:
+                  - targets: ["127.0.0.1:8000"]   # host 네트워크의 AI 포트
+                    labels:
+                      env: dev
+                metric_relabel_configs:
+                  - source_labels: [__name__]
+                    regex: "process_(cpu_seconds_total|resident_memory_bytes)|dameokja_analysis_(queue_size|active)|dameokja_remote_worker_stage_seconds_(sum|count)|dameokja_remote_llm_(tokens_total|tokens_per_second_(sum|count)|model_load_seconds_(sum|count))"
+                    action: keep
+            EOF
+          - |
+            cat > /opt/aws/amazon-cloudwatch-agent/etc/dameokja.json <<'EOF'
+            {
+              "agent": {
+                "metrics_collection_interval": 60,
+                "run_as_user": "root",
+                "omit_hostname": true
+              },
+              "logs": {
+                "metrics_collected": {
+                  "prometheus": {
+                    "log_group_name": "/dameokja/dev/prometheus",
+                    "prometheus_config_path": "/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml",
+                    "emf_processor": {
+                      "metric_declaration_dedup": true,
+                      "metric_namespace": "Dameokja/dev/Ai",
+                      "metric_declaration": [
+                        {
+                          "source_labels": [
+                            "job"
+                          ],
+                          "label_matcher": "^dameokja-ai$",
+                          "dimensions": [
+                            [
+                              "env"
+                            ]
+                          ],
+                          "metric_selectors": [
+                            "^process_(cpu_seconds_total|resident_memory_bytes)$",
+                            "^dameokja_analysis_(queue_size|active)$",
+                            "^dameokja_remote_llm_model_load_seconds_(sum|count)$"
+                          ]
+                        },
+                        {
+                          "source_labels": [
+                            "job",
+                            "stage"
+                          ],
+                          "label_matcher": "^dameokja-ai;(worker_total|worker_queue_wait|ocr|llm)$",
+                          "dimensions": [
+                            [
+                              "env",
+                              "stage"
+                            ]
+                          ],
+                          "metric_selectors": [
+                            "^dameokja_remote_worker_stage_seconds_(sum|count)$"
+                          ]
+                        },
+                        {
+                          "source_labels": [
+                            "job",
+                            "type"
+                          ],
+                          "label_matcher": "^dameokja-ai;(prompt|completion)$",
+                          "dimensions": [
+                            [
+                              "env",
+                              "type"
+                            ]
+                          ],
+                          "metric_selectors": [
+                            "^dameokja_remote_llm_tokens_total$",
+                            "^dameokja_remote_llm_tokens_per_second_(sum|count)$"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "metrics": {
+                "namespace": "CWAgent",
+                "append_dimensions": {
+                  "InstanceId": "${aws:InstanceId}"
+                },
+                "metrics_collected": {
+                  "mem": {
+                    "measurement": [
+                      "mem_used_percent"
+                    ]
+                  }
+                }
+              }
+            }
+            EOF
+          - /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/dameokja.json
+
   # 고정 IP 없이 자동 할당 공인 IP를 가리킴. 인스턴스를 중지/시작하면 IP가 바뀌므로 스택을 다시 배포해야 갱신됨
   DnsRecord:
     Type: AWS::Route53::RecordSet
@@ -729,6 +846,13 @@ Resources:
       PlacementConstraints:
         - Type: memberOf
           Expression: !Sub "attribute:ecs.instance-type == ${AiInstanceType}"
+
+  # AI 대시보드 (#137)
+  AiDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: dameokja-dev-ai
+      DashboardBody: !Sub '{"widgets": [{"type": "text", "x": 0, "y": 0, "width": 24, "height": 2, "properties": {"markdown": "## 다먹자 dev AI\nCPU·메모리는 ECS·EC2 기본 지표와 AI 서버 Agent, 나머지는 FastAPI `/metrics`를 Agent가 1분마다 수집(#137). RunPod·LLM 지표는 분석 요청이 있어야 생깁니다."}}, {"type": "text", "x": 0, "y": 2, "width": 24, "height": 1, "properties": {"markdown": "### AI 자원·FastAPI 프로세스 (Dameokja/dev/Ai, CloudWatch Agent)"}}, {"type": "metric", "x": 0, "y": 3, "width": 8, "height": 6, "properties": {"title": "AI CPU 사용률(%)", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Average", "metrics": [["AWS/ECS", "CPUUtilization", "ClusterName", "${Cluster}", "ServiceName", "dameokja-dev-ai", {"label": "ECS 서비스"}], ["AWS/EC2", "CPUUtilization", "InstanceId", "${AiInstance}", {"label": "AI 서버"}], [{"expression": "cpu / 60 * 100", "label": "FastAPI 프로세스(1 vCPU 기준)"}], ["Dameokja/dev/Ai", "process_cpu_seconds_total", "env", "dev", {"id": "cpu", "stat": "Sum", "visible": false}]], "yAxis": {"left": {"min": 0, "max": 100}}}}, {"type": "metric", "x": 8, "y": 3, "width": 8, "height": 6, "properties": {"title": "AI 메모리 사용률(%)", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Average", "metrics": [["AWS/ECS", "MemoryUtilization", "ClusterName", "${Cluster}", "ServiceName", "dameokja-dev-ai", {"label": "ECS 서비스(예약 대비)"}], ["CWAgent", "mem_used_percent", "InstanceId", "${AiInstance}", {"label": "AI 서버"}]], "yAxis": {"left": {"min": 0, "max": 100}}}}, {"type": "metric", "x": 16, "y": 3, "width": 8, "height": 6, "properties": {"title": "FastAPI 프로세스", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Average", "metrics": [[{"expression": "rss / 1048576", "label": "메모리 RSS(MB)"}], ["Dameokja/dev/Ai", "process_resident_memory_bytes", "env", "dev", {"id": "rss", "visible": false}], ["Dameokja/dev/Ai", "dameokja_analysis_queue_size", "env", "dev", {"label": "대기열", "yAxis": "right", "stat": "Maximum"}], ["Dameokja/dev/Ai", "dameokja_analysis_active", "env", "dev", {"label": "처리 중", "yAxis": "right", "stat": "Maximum"}]]}}, {"type": "text", "x": 0, "y": 9, "width": 24, "height": 1, "properties": {"markdown": "### RunPod 처리 (Worker 응답의 단계 시간)"}}, {"type": "metric", "x": 0, "y": 10, "width": 16, "height": 6, "properties": {"title": "단계별 평균 시간(초)", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Average", "metrics": [[{"expression": "IF(c0 > 0, s0 / c0, 0)", "label": "Worker 전체"}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_sum", "env", "dev", "stage", "worker_total", {"id": "s0", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_count", "env", "dev", "stage", "worker_total", {"id": "c0", "stat": "Sum", "visible": false}], [{"expression": "IF(c1 > 0, s1 / c1, 0)", "label": "Worker 대기"}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_sum", "env", "dev", "stage", "worker_queue_wait", {"id": "s1", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_count", "env", "dev", "stage", "worker_queue_wait", {"id": "c1", "stat": "Sum", "visible": false}], [{"expression": "IF(c2 > 0, s2 / c2, 0)", "label": "OCR"}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_sum", "env", "dev", "stage", "ocr", {"id": "s2", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_count", "env", "dev", "stage", "ocr", {"id": "c2", "stat": "Sum", "visible": false}], [{"expression": "IF(c3 > 0, s3 / c3, 0)", "label": "LLM"}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_sum", "env", "dev", "stage", "llm", {"id": "s3", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_count", "env", "dev", "stage", "llm", {"id": "c3", "stat": "Sum", "visible": false}]]}}, {"type": "metric", "x": 16, "y": 10, "width": 8, "height": 6, "properties": {"title": "RunPod 호출 수", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Sum", "metrics": [["Dameokja/dev/Ai", "dameokja_remote_worker_stage_seconds_count", "env", "dev", "stage", "worker_total", {"label": "RunPod 호출 성공"}]]}}, {"type": "text", "x": 0, "y": 16, "width": 24, "height": 1, "properties": {"markdown": "### LLM (RunPod Ollama)"}}, {"type": "metric", "x": 0, "y": 17, "width": 8, "height": 6, "properties": {"title": "토큰 수(분당)", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Sum", "metrics": [["Dameokja/dev/Ai", "dameokja_remote_llm_tokens_total", "env", "dev", "type", "prompt", {"label": "프롬프트"}], ["Dameokja/dev/Ai", "dameokja_remote_llm_tokens_total", "env", "dev", "type", "completion", {"label": "생성"}]]}}, {"type": "metric", "x": 8, "y": 17, "width": 8, "height": 6, "properties": {"title": "평균 처리량(토큰/초)", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Average", "metrics": [[{"expression": "IF(n0 > 0, t0 / n0, 0)", "label": "프롬프트"}], ["Dameokja/dev/Ai", "dameokja_remote_llm_tokens_per_second_sum", "env", "dev", "type", "prompt", {"id": "t0", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_llm_tokens_per_second_count", "env", "dev", "type", "prompt", {"id": "n0", "stat": "Sum", "visible": false}], [{"expression": "IF(n1 > 0, t1 / n1, 0)", "label": "생성"}], ["Dameokja/dev/Ai", "dameokja_remote_llm_tokens_per_second_sum", "env", "dev", "type", "completion", {"id": "t1", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_llm_tokens_per_second_count", "env", "dev", "type", "completion", {"id": "n1", "stat": "Sum", "visible": false}]]}}, {"type": "metric", "x": 16, "y": 17, "width": 8, "height": 6, "properties": {"title": "모델 로드 평균 시간(초)", "view": "timeSeries", "region": "${AWS::Region}", "period": 60, "stat": "Average", "metrics": [[{"expression": "IF(lc > 0, ls / lc, 0)", "label": "평균"}], ["Dameokja/dev/Ai", "dameokja_remote_llm_model_load_seconds_sum", "env", "dev", {"id": "ls", "stat": "Sum", "visible": false}], ["Dameokja/dev/Ai", "dameokja_remote_llm_model_load_seconds_count", "env", "dev", {"id": "lc", "stat": "Sum", "visible": false}]]}}]}'
 
 Outputs:
   ClusterName:
