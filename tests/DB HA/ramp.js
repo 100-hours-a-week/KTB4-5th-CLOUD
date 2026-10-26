@@ -52,10 +52,11 @@ export default function () {
   const path = `${base}/api/v1/refrigerators/${fridge}/ingredients`;
   let res;
   if (Math.random() < writeRatio) {
-    // 같은 이름·유통기한이면 기존 항목에 수량이 합쳐져(UPDATE) 냉장고 한도를 채우지 않는다.
+    // 같은 이름·유통기한이면 기존 항목에 수량이 합쳐진다(UPDATE). 항목당 수량 상한이 100이라 유통기한을 60가지로 나눈다.
+    const expiry = new Date(Date.UTC(2099, 0, 1 + Math.floor(Math.random() * 60))).toISOString().slice(0, 10);
     res = http.post(path, JSON.stringify({ items: [{ name: 'hatest', category: 'OTHER', storageType: 'REFRIGERATED',
-      measureType: 'COUNT', quantity: 1, weightValue: null, weightUnit: 'NONE', expirationDate: '2099-12-31',
-      registrationSource: 'DIRECT', imageUploadId: null }] }), params('write', csrf()));
+      measureType: 'COUNT', quantity: 1, weightValue: null, weightUnit: 'NONE', expirationDate: expiry,
+      imageUploadId: null }] }), params('write', csrf()));
   } else {
     res = http.get(`${path}?size=10&sort=${Math.random() < 0.5 ? 'CREATED_DESC' : 'EXPIRATION_ASC'}`, params('read'));
   }
