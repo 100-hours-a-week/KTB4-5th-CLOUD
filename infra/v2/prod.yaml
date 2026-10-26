@@ -541,6 +541,9 @@ Resources:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: dameokja-prod
+      # 태스크·컨테이너 단위 CPU·메모리 확인용 (#142)
+      ClusterSettings:
+        - { Name: containerInsights, Value: enabled }
 
   InstanceRole:
     Type: AWS::IAM::Role
