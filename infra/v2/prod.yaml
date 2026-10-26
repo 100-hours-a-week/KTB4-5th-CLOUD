@@ -782,6 +782,36 @@ Resources:
                 regex: "hikaricp_connections.*"
                 action: keep
 
+  # AI 지표(RunPod 처리·LLM·FastAPI 프로세스) 수집용 CloudWatch Agent 사이드카 설정 (ecs/prod/ai.json의 cloudwatch-agent 컨테이너가 읽음, #137)
+  # AI /metrics는 루프백 요청이면 내부 API 키 없이 열림(AI 저장소). 로그 그룹은 BE 사이드카와 같은 PrometheusLogGroup
+  AiCloudWatchAgentConfigParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-v2-prod-ai/cloudwatch-agent/config
+      Type: String
+      Value: '{"agent":{"metrics_collection_interval":60,"omit_hostname":true,"region":"ap-northeast-2"},"logs":{"metrics_collected":{"prometheus":{"log_group_name":"/dameokja/v2-prod/prometheus","prometheus_config_path":"env:PROMETHEUS_CONFIG_CONTENT","emf_processor":{"metric_declaration_dedup":true,"metric_namespace":"Dameokja/v2-prod/Ai","metric_declaration":[{"source_labels":["job"],"label_matcher":"^dameokja-ai$","dimensions":[["env"]],"metric_selectors":["^process_(cpu_seconds_total|resident_memory_bytes)$","^dameokja_analysis_(queue_size|active)$","^dameokja_remote_llm_model_load_seconds_(sum|count)$"]},{"source_labels":["job","stage"],"label_matcher":"^dameokja-ai;(worker_total|worker_queue_wait|ocr|llm)$","dimensions":[["env","stage"]],"metric_selectors":["^dameokja_remote_worker_stage_seconds_(sum|count)$"]},{"source_labels":["job","type"],"label_matcher":"^dameokja-ai;(prompt|completion)$","dimensions":[["env","type"]],"metric_selectors":["^dameokja_remote_llm_tokens_total$","^dameokja_remote_llm_tokens_per_second_(sum|count)$"]}]}}}}}'
+
+  AiPrometheusScrapeConfigParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-v2-prod-ai/cloudwatch-agent/prometheus
+      Type: String
+      Value: |
+        global:
+          scrape_interval: 1m
+          scrape_timeout: 10s
+        scrape_configs:
+          - job_name: dameokja-ai
+            metrics_path: /metrics
+            static_configs:
+              - targets: ["127.0.0.1:8000"]
+                labels:
+                  env: prod
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: "process_(cpu_seconds_total|resident_memory_bytes)|dameokja_analysis_(queue_size|active)|dameokja_remote_worker_stage_seconds_(sum|count)|dameokja_remote_llm_(tokens_total|tokens_per_second_(sum|count)|model_load_seconds_(sum|count))"
+                action: keep
+
   # --- IAM
   # ECS 에이전트가 이미지 받기(GHCR 토큰)와 SSM 값 읽기에 쓰는 역할
   TaskExecutionRole:
@@ -869,6 +899,20 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
+        # 같은 Task의 CloudWatch Agent 사이드카가 AI 지표를 EMF 로그로 보냄 (BackendTaskRole prometheus-emf와 같음, #137)
+        - PolicyName: prometheus-emf
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
+                Resource: !Sub "${PrometheusLogGroup.Arn}"
+              - Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: "*"
+              - Effect: Allow
+                Action: [ec2:DescribeTags, ec2:DescribeVolumes]
+                Resource: "*"
 
   # ECS Native Blue/Green이 배포 중 리스너 규칙·타겟 그룹을 바꿀 때 쓰는 역할
   EcsInfrastructureRole:
