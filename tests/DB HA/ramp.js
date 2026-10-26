@@ -38,6 +38,7 @@ function params(name, csrf) {
 const csrf = () => decodeURIComponent(http.cookieJar().cookiesForURL(base)['XSRF-TOKEN']?.[0] || '');
 
 let fridge = null;
+let logged = false;
 function login(account) {
   http.get(`${base}/api/v1/auth/csrf`, params('csrf'));
   const res = http.post(`${base}/api/v1/auth/sessions`,
@@ -52,8 +53,8 @@ export default function () {
   const path = `${base}/api/v1/refrigerators/${fridge}/ingredients`;
   let res;
   if (Math.random() < writeRatio) {
-    // 같은 이름·유통기한이면 기존 항목에 수량이 합쳐진다(UPDATE). 항목당 수량 상한이 100이라 유통기한을 60가지로 나눈다.
-    const expiry = new Date(Date.UTC(2099, 0, 1 + Math.floor(Math.random() * 60))).toISOString().slice(0, 10);
+    // 같은 이름·유통기한이면 기존 항목에 수량이 합쳐진다(UPDATE). 항목당 수량 상한이 100이라 유통기한을 60가지로 나눈다. 유통기한은 오늘부터 4년 이내만 허용된다.
+    const expiry = new Date(Date.UTC(2029, 0, 1 + Math.floor(Math.random() * 60))).toISOString().slice(0, 10);
     res = http.post(path, JSON.stringify({ items: [{ name: 'hatest', category: 'OTHER', storageType: 'REFRIGERATED',
       measureType: 'COUNT', quantity: 1, weightValue: null, weightUnit: 'NONE', expirationDate: expiry,
       imageUploadId: null }] }), params('write', csrf()));
@@ -61,5 +62,13 @@ export default function () {
     res = http.get(`${path}?size=10&sort=${Math.random() < 0.5 ? 'CREATED_DESC' : 'EXPIRATION_ASC'}`, params('read'));
   }
   if (res.status === 401) fridge = null;
-  failed.add(!check(res, { ok: (r) => r.status === 200 || r.status === 201 }));
+  const ok = check(res, { ok: (r) => r.status === 200 || r.status === 201 });
+  // 실패 원인 확인용으로 VU마다 처음 실패 1건의 오류 코드만 남긴다(본문 전체는 남기지 않는다).
+  if (!ok && !logged) {
+    logged = true;
+    let body = {};
+    try { body = res.json(); } catch (_) {}
+    console.warn(`${res.request.method} ${res.status} code=${body.code} message=${body.message} errors=${JSON.stringify(body.errors || [])}`);
+  }
+  failed.add(!ok);
 }
