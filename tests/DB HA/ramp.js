@@ -12,6 +12,8 @@ const step = Number(__ENV.STEP || 20);
 const max = Number(__ENV.MAX || 300);
 const hold = Number(__ENV.STEP_SECONDS || 180);
 const writeRatio = Number(__ENV.WRITE_RATIO || 0.2);
+// 응답이 느려질 때 k6가 VU를 계속 늘리면 새 VU마다 로그인해 부하가 커지므로 상한을 둔다. 모자라면 dropped_iterations로 남는다.
+const maxVUs = Number(__ENV.MAX_VUS || 300);
 const accounts = new SharedArray('accounts', () => {
   const file = JSON.parse(open(__ENV.ACCOUNTS));
   if (file.baseUrl !== base) throw new Error(`계정 파일 대상(${file.baseUrl})이 BASE_URL과 다릅니다.`);
@@ -24,7 +26,7 @@ for (let rps = start; rps <= max; rps += step) stages.push({ target: rps, durati
 export const options = {
   noCookiesReset: true,
   scenarios: { ramp: { executor: 'ramping-arrival-rate', startRate: start, timeUnit: '1s',
-    preAllocatedVUs: 50, maxVUs: 1000, stages } },
+    preAllocatedVUs: 50, maxVUs, stages } },
   // 누적 실패율이 10%를 넘으면 자동 중단한다. 그 전에 회복되지 않는 단계는 사람이 Ctrl+C로 멈춘다.
   thresholds: { flow_failed: [{ threshold: 'rate<0.1', abortOnFail: true, delayAbortEval: '1m' }] },
 };
@@ -38,16 +40,27 @@ function params(name, csrf) {
 const csrf = () => decodeURIComponent(http.cookieJar().cookiesForURL(base)['XSRF-TOKEN']?.[0] || '');
 
 let fridge = null;
+let renewAt = 0;
 let logged = false;
+// 실제 사용자처럼 VU마다 처음 한 번만 로그인하고, 이후에는 refresh token으로 갱신한다(로그인 bcrypt를 반복하지 않음).
+// access token 15분 만료가 모든 VU에서 같은 순간에 오지 않도록 10~14분 사이 임의 시각에 미리 갱신한다.
+const nextRenewal = () => Date.now() + (10 + Math.random() * 4) * 60000;
 function login(account) {
   http.get(`${base}/api/v1/auth/csrf`, params('csrf'));
   const res = http.post(`${base}/api/v1/auth/sessions`,
     JSON.stringify({ loginId: account.loginId, password: account.password }), params('login', csrf()));
   fridge = res.status === 200 ? res.json('data.activeRefrigeratorIds.0') : null;
+  renewAt = nextRenewal();
+}
+function renew() {
+  const res = http.post(`${base}/api/v1/auth/token-renewals`, null, params('renew', csrf()));
+  if (res.status === 200) renewAt = nextRenewal();
+  else fridge = null;
 }
 
 export default function () {
   const account = accounts[(exec.vu.idInTest - 1) % accounts.length];
+  if (fridge && Date.now() > renewAt) renew();
   if (!fridge) login(account);
   if (!fridge) { failed.add(true); return; }
   const path = `${base}/api/v1/refrigerators/${fridge}/ingredients`;
@@ -61,7 +74,7 @@ export default function () {
   } else {
     res = http.get(`${path}?size=10&sort=${Math.random() < 0.5 ? 'CREATED_DESC' : 'EXPIRATION_ASC'}`, params('read'));
   }
-  if (res.status === 401) fridge = null;
+  if (res.status === 401) renew();
   const ok = check(res, { ok: (r) => r.status === 200 || r.status === 201 });
   // 실패 원인 확인용으로 VU마다 처음 실패 1건의 오류 코드만 남긴다(본문 전체는 남기지 않는다).
   if (!ok && !logged) {

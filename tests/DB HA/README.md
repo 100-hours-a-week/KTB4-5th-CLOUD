@@ -29,7 +29,7 @@ DB 장애에 대한 자동 대응이 없으므로 **스트레스 테스트는 #1
 
 ### T1 점진 부하
 
-- `ramp.js`. k6 `ramping-arrival-rate`로 요청 수를 단계별로 올린다. 요청 1건 = 재고 조회 80% / 재고 등록 20%(`WRITE_RATIO`). 로그인은 VU마다 처음 한 번(401이면 다시).
+- `ramp.js`. k6 `ramping-arrival-rate`로 요청 수를 단계별로 올린다. 요청 1건 = 재고 조회 80% / 재고 등록 20%(`WRITE_RATIO`). 로그인은 VU마다 처음 한 번만 하고, access token(15분)은 10~14분 사이 임의 시각에 refresh token으로 갱신한다(401이 나도 갱신). VU 상한 `MAX_VUS`(기본 300): 응답이 느려질 때 VU가 늘며 새 로그인이 몰리는 것을 막는다(2026-10-27 결과 참고).
 - 재고 등록은 이름 `hatest`, 유통기한 2029-01-01~03-01 중 하나(BE는 오늘부터 4년 이내만 허용)(60가지)로 보내 대부분 기존 항목에 수량이 합쳐진다(UPDATE). 항목당 수량 상한 100, 냉장고 한도 1,500을 넘지 않는다(300 RPS까지 가도 계정당 항목 60개, 항목당 평균 약 27). 끝나면 시험 계정의 `hatest` 항목을 지운다.
 - 각 단계 3분 유지. 단계마다 p95·5xx·Hikari 활성/대기 커넥션·ECS 태스크 수·DB CPU를 기록한다.
 - **장애 시작 시점**: 5xx 1% 초과 또는 p95 1초 초과가 1분 넘게 이어진 첫 단계.
@@ -102,7 +102,7 @@ cd "tests/DB HA" && mkdir -p private
 k6 run -e ACCOUNTS=../k6/private/prod-accounts.json --out csv=private/ramp.csv ramp.js
 ```
 
-조정: `START`(10), `STEP`(20), `STEP_SECONDS`(180), `MAX`(300), `WRITE_RATIO`(0.2). 300 RPS까지 가면 약 45분이다. 단계별 결과는 csv의 `step` 태그로 나눠 본다.
+조정: `START`(10), `STEP`(20), `STEP_SECONDS`(180), `MAX`(300), `WRITE_RATIO`(0.2), `MAX_VUS`(300). 300 RPS까지 가면 약 45분이다. 단계별 결과는 csv의 `step` 태그로 나눠 본다.
 
 ## 파일
 
