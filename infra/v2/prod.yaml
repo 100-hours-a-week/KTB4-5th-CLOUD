@@ -293,8 +293,8 @@ Resources:
 
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    # internet-facing ALB는 VPC에 IGW가 붙어 있어야 만들어짐
-    DependsOn: InternetGatewayAttachment
+    # internet-facing ALB는 VPC에 IGW가 붙어 있어야 만들어짐. 액세스 로그는 버킷 정책이 먼저 있어야 켜짐
+    DependsOn: [InternetGatewayAttachment, AlbLogBucketPolicy]
     Properties:
       Name: dameokja-prod-alb
       Type: application
@@ -303,6 +303,43 @@ Resources:
       SecurityGroups: [!Ref AlbSecurityGroup]
       LoadBalancerAttributes:
         - { Key: idle_timeout.timeout_seconds, Value: "300" } # SSE 연결 유지 (구현 기록 임시 기본값)
+        # 요청별 로그(경로·상태 코드·처리 시간). nginx 로그 대신 SLO 집계에 씀(#147). Athena 테이블은 모니터링 스택
+        - { Key: access_logs.s3.enabled, Value: "true" }
+        - { Key: access_logs.s3.bucket, Value: !Ref AlbLogBucket }
+        - { Key: access_logs.s3.prefix, Value: alb }
+
+  # ALB 액세스 로그 보관(30일). ALB는 버킷 정책을 확인한 뒤에야 로그 설정을 받음
+  AlbLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "dameokja-prod-alb-logs-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-30d, Status: Enabled, ExpirationInDays: 30 }
+
+  # 서울 리전은 ELB 계정(600734575887)이 로그를 씀
+  AlbLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AlbLogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { AWS: arn:aws:iam::600734575887:root }
+            Action: s3:PutObject
+            Resource: !Sub "${AlbLogBucket.Arn}/alb/AWSLogs/${AWS::AccountId}/*"
 
   TargetGroupBlue:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
