@@ -404,11 +404,14 @@ Resources:
           FixedResponseConfig: { StatusCode: "404", ContentType: text/plain, MessageBody: not found }
 
   # ECS Native Blue/Green이 배포 때 이 규칙의 가중치를 바꿔 blue <-> green을 전환
+  # app을 backend·frontend로 나누는 중(#147). 우선순위를 100으로 내려서 요청은 backend(10)·frontend(20) 규칙으로 감
+  # 새 서비스 Task가 healthy가 된 뒤에 바뀌도록 서비스에 DependsOn. 되돌릴 때는 1로 바꾼다
   ProductionListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    DependsOn: [BackendService, FrontendService]
     Properties:
       ListenerArn: !Ref HttpsListener
-      Priority: 1
+      Priority: 100
       Conditions:
         - Field: path-pattern
           PathPatternConfig: { Values: ["/*"] }
@@ -1249,7 +1252,7 @@ Resources:
       ServiceName: dameokja-prod-backend
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-prod-backend
-      DesiredCount: 0
+      DesiredCount: 2
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       NetworkConfiguration:
@@ -1279,7 +1282,7 @@ Resources:
       ServiceName: dameokja-prod-frontend
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-prod-frontend
-      DesiredCount: 0
+      DesiredCount: 2
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       NetworkConfiguration:
@@ -1345,14 +1348,13 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization
 
-  # 전환 전에는 Task를 띄우지 않게 최소 0으로 둔다. 전환 PR에서 최소 2로 올린다
   BackendScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${BackendService.Name}"
-      MinCapacity: 0
+      MinCapacity: 2
       MaxCapacity: 4
 
   BackendCpuScalingPolicy:
@@ -1372,7 +1374,7 @@ Resources:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${FrontendService.Name}"
-      MinCapacity: 0
+      MinCapacity: 2
       MaxCapacity: 4
 
   FrontendCpuScalingPolicy:
