@@ -77,7 +77,7 @@
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
         "AlarmName": "dameokja-stage-http-5xx-ticket",
-        "AlarmDescription": "전체 요청 5xx가 5분간 기준 건수 이상(ALB 지표: 서버 5xx + ALB 5xx)",
+        "AlarmDescription": "전체 요청 5xx가 5분간 기준 건수 이상(ALB 지표: 서버 5xx + ALB 5xx). 정상 타깃이 없을 때(stage 꺼짐)는 ALB 503뿐이라 세지 않음",
         "ActionsEnabled": true,
         "AlarmActions": [
           {
@@ -92,7 +92,7 @@
         "Metrics": [
           {
             "Id": "total",
-            "Expression": "FILL(target, 0) + FILL(elb, 0)",
+            "Expression": "IF(FILL(hbb, 0) + FILL(hbg, 0) + FILL(hfb, 0) + FILL(hfg, 0) > 0, FILL(target, 0) + FILL(elb, 0), 0)",
             "Label": "5xx",
             "ReturnData": true
           },
@@ -134,6 +134,110 @@
               },
               "Period": 300,
               "Stat": "Sum"
+            }
+          },
+          {
+            "Id": "hbb",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HealthyHostCount",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  },
+                  {
+                    "Name": "TargetGroup",
+                    "Value": {
+                      "Ref": "BackendBlueTargetGroupFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Maximum"
+            }
+          },
+          {
+            "Id": "hbg",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HealthyHostCount",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  },
+                  {
+                    "Name": "TargetGroup",
+                    "Value": {
+                      "Ref": "BackendGreenTargetGroupFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Maximum"
+            }
+          },
+          {
+            "Id": "hfb",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HealthyHostCount",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  },
+                  {
+                    "Name": "TargetGroup",
+                    "Value": {
+                      "Ref": "FrontendBlueTargetGroupFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Maximum"
+            }
+          },
+          {
+            "Id": "hfg",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HealthyHostCount",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  },
+                  {
+                    "Name": "TargetGroup",
+                    "Value": {
+                      "Ref": "FrontendGreenTargetGroupFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Maximum"
             }
           }
         ],
