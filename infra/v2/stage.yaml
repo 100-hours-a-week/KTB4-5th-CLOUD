@@ -1061,6 +1061,8 @@ Resources:
         DeploymentCircuitBreaker: { Enable: true, Rollback: true }
 
   # BE, FE. Task Definition은 infra/v2/ecs/stage/backend.json, frontend.json
+  # 0개로 만들고 Task 수는 자동 조정(켜져 있을 때 2~4)과 켜기·끄기 워크플로가 정함.
+  # 꺼진 상태(NAT·DB 없음)에서 스택이 적용돼도 Task·서버가 뜨지 않게 하기 위함
   BackendService:
     Type: AWS::ECS::Service
     DependsOn: ClusterCapacityProviders
@@ -1068,7 +1070,7 @@ Resources:
       ServiceName: dameokja-stage-backend
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-stage-backend
-      DesiredCount: 2
+      DesiredCount: 0
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       NetworkConfiguration:
@@ -1098,7 +1100,7 @@ Resources:
       ServiceName: dameokja-stage-frontend
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-stage-frontend
-      DesiredCount: 2
+      DesiredCount: 0
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       NetworkConfiguration:
@@ -1170,8 +1172,8 @@ Resources:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${BackendService.Name}"
-      MinCapacity: 2
-      MaxCapacity: 4
+      MinCapacity: !If [IsOn, 2, 0]
+      MaxCapacity: !If [IsOn, 4, 0]
 
   BackendCpuScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
@@ -1190,8 +1192,8 @@ Resources:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${FrontendService.Name}"
-      MinCapacity: 2
-      MaxCapacity: 4
+      MinCapacity: !If [IsOn, 2, 0]
+      MaxCapacity: !If [IsOn, 4, 0]
 
   FrontendCpuScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
