@@ -53,13 +53,15 @@ jobs:
         if: inputs.action == 'stop'
         run: |
           # 앱 오토스케일링이 다시 늘리지 않게 0으로 묶은 뒤 Task를 내리고, 빈 서버를 ASG에서 뺀다
-          aws application-autoscaling register-scalable-target --service-namespace ecs \
-            --scalable-dimension ecs:service:DesiredCount \
-            --resource-id "service/$CLUSTER/dameokja-stage-app" --min-capacity 0 --max-capacity 0
-          for s in app ai; do
+          for s in app backend frontend; do
+            aws application-autoscaling register-scalable-target --service-namespace ecs \
+              --scalable-dimension ecs:service:DesiredCount \
+              --resource-id "service/$CLUSTER/dameokja-stage-$s" --min-capacity 0 --max-capacity 0
+          done
+          for s in app backend frontend ai; do
             aws ecs update-service --cluster "$CLUSTER" --service "dameokja-stage-$s" --desired-count 0 > /dev/null
           done
-          aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-ai
+          aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-backend dameokja-stage-frontend dameokja-stage-ai
           aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --desired-capacity 0
           # 앱 서버 종료는 몇 분 걸려서, 0대가 될 때까지 기다린 뒤 끝낸다
           until [ "$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
@@ -74,12 +76,14 @@ jobs:
           aws ec2 start-instances --instance-ids $IDS > /dev/null
           aws ec2 wait instance-status-ok --instance-ids $IDS
           aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 2
-          aws application-autoscaling register-scalable-target --service-namespace ecs \
-            --scalable-dimension ecs:service:DesiredCount \
-            --resource-id "service/$CLUSTER/dameokja-stage-app" --min-capacity 2 --max-capacity 4
-          aws ecs update-service --cluster "$CLUSTER" --service dameokja-stage-app --desired-count 2 > /dev/null
+          for s in app backend frontend; do
+            aws application-autoscaling register-scalable-target --service-namespace ecs \
+              --scalable-dimension ecs:service:DesiredCount \
+              --resource-id "service/$CLUSTER/dameokja-stage-$s" --min-capacity 2 --max-capacity 4
+            aws ecs update-service --cluster "$CLUSTER" --service "dameokja-stage-$s" --desired-count 2 > /dev/null
+          done
           aws ecs update-service --cluster "$CLUSTER" --service dameokja-stage-ai --desired-count 1 > /dev/null
-          aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-ai
+          aws ecs wait services-stable --cluster "$CLUSTER" --services dameokja-stage-app dameokja-stage-backend dameokja-stage-frontend dameokja-stage-ai
           echo "stage 켜짐"
 
   nat-off:
