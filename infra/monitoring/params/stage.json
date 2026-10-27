@@ -1,8 +1,10 @@
 [
   {"ParameterKey": "AlarmTopicArn", "ParameterValue": "arn:aws:sns:ap-northeast-2:906462447513:dameokja-v1-discord-alerts-Topic-sM5PwAp9GIcJ"},
   {"ParameterKey": "AlbFullName", "ParameterValue": "app/dameokja-stage-alb/4b33865b35bf5490"},
-  {"ParameterKey": "BlueTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-tg-blue/346d6663748aa88d"},
-  {"ParameterKey": "GreenTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-tg-green/fa593c22454f193c"},
+  {"ParameterKey": "BackendBlueTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-be-blue/9e4056679ca59ddc"},
+  {"ParameterKey": "BackendGreenTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-be-green/8e450e1e5d7ff514"},
+  {"ParameterKey": "FrontendBlueTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-fe-blue/4956e4444229b81a"},
+  {"ParameterKey": "FrontendGreenTargetGroupFullName", "ParameterValue": "targetgroup/dameokja-stage-fe-green/3ba138c9076609b6"},
   {"ParameterKey": "DbInstanceId", "ParameterValue": "i-0daa6ac3cc3176c79"},
   {"ParameterKey": "RedisInstanceId", "ParameterValue": "i-04eaa46357865915a"}
 ]

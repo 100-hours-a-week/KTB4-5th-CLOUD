@@ -16,9 +16,13 @@
       "Type": "String",
       "Default": "dameokja-stage"
     },
-    "AppServiceName": {
+    "BackendServiceName": {
       "Type": "String",
-      "Default": "dameokja-stage-app"
+      "Default": "dameokja-stage-backend"
+    },
+    "FrontendServiceName": {
+      "Type": "String",
+      "Default": "dameokja-stage-frontend"
     },
     "AiServiceName": {
       "Type": "String",
@@ -28,11 +32,19 @@
       "Type": "String",
       "Description": "ALB 지표 차원 값 app/<이름>/<ID> (ALB ARN의 loadbalancer/ 뒤)"
     },
-    "BlueTargetGroupFullName": {
+    "BackendBlueTargetGroupFullName": {
       "Type": "String",
       "Description": "targetgroup/<이름>/<ID>"
     },
-    "GreenTargetGroupFullName": {
+    "BackendGreenTargetGroupFullName": {
+      "Type": "String",
+      "Description": "targetgroup/<이름>/<ID>"
+    },
+    "FrontendBlueTargetGroupFullName": {
+      "Type": "String",
+      "Description": "targetgroup/<이름>/<ID>"
+    },
+    "FrontendGreenTargetGroupFullName": {
       "Type": "String",
       "Description": "targetgroup/<이름>/<ID>"
     },
@@ -44,40 +56,6 @@
     }
   },
   "Resources": {
-    "Http5xxFilter": {
-      "Type": "AWS::Logs::MetricFilter",
-      "Properties": {
-        "LogGroupName": "/dameokja/stage/nginx",
-        "FilterName": "dameokja-stage-Http5xx",
-        "FilterPattern": "{ $.status >= 500 }",
-        "MetricTransformations": [
-          {
-            "MetricNamespace": "Dameokja/stage",
-            "MetricName": "Http5xx",
-            "MetricValue": "1",
-            "DefaultValue": 0,
-            "Unit": "Count"
-          }
-        ]
-      }
-    },
-    "Http4xxFilter": {
-      "Type": "AWS::Logs::MetricFilter",
-      "Properties": {
-        "LogGroupName": "/dameokja/stage/nginx",
-        "FilterName": "dameokja-stage-Http4xx",
-        "FilterPattern": "{ $.status >= 400 && $.status < 500 }",
-        "MetricTransformations": [
-          {
-            "MetricNamespace": "Dameokja/stage",
-            "MetricName": "Http4xx",
-            "MetricValue": "1",
-            "DefaultValue": 0,
-            "Unit": "Count"
-          }
-        ]
-      }
-    },
     "BackendErrorFilter": {
       "Type": "AWS::Logs::MetricFilter",
       "Properties": {
@@ -99,7 +77,7 @@
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
         "AlarmName": "dameokja-stage-http-5xx-ticket",
-        "AlarmDescription": "전체 API 5xx가 5분간 기준 건수 이상(nginx 로그 기준)",
+        "AlarmDescription": "전체 요청 5xx가 5분간 기준 건수 이상(ALB 지표: 서버 5xx + ALB 5xx)",
         "ActionsEnabled": true,
         "AlarmActions": [
           {
@@ -111,10 +89,54 @@
             "Ref": "AlarmTopicArn"
           }
         ],
-        "Namespace": "Dameokja/stage",
-        "MetricName": "Http5xx",
-        "Statistic": "Sum",
-        "Period": 300,
+        "Metrics": [
+          {
+            "Id": "total",
+            "Expression": "FILL(target, 0) + FILL(elb, 0)",
+            "Label": "5xx",
+            "ReturnData": true
+          },
+          {
+            "Id": "target",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HTTPCode_Target_5XX_Count",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Sum"
+            }
+          },
+          {
+            "Id": "elb",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HTTPCode_ELB_5XX_Count",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Sum"
+            }
+          }
+        ],
         "EvaluationPeriods": 1,
         "DatapointsToAlarm": 1,
         "Threshold": {
@@ -128,7 +150,7 @@
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
         "AlarmName": "dameokja-stage-memory-ticket",
-        "AlarmDescription": "앱 서비스(nginx+FE+BE Task) 메모리 사용률 평균 90% 이상 10분 지속(ECS 지표)",
+        "AlarmDescription": "backend·frontend 서비스 중 하나라도 메모리 사용률 평균 90% 이상 10분 지속(ECS 지표)",
         "ActionsEnabled": true,
         "AlarmActions": [
           {
@@ -140,59 +162,71 @@
             "Ref": "AlarmTopicArn"
           }
         ],
-        "Namespace": "AWS/ECS",
-        "MetricName": "MemoryUtilization",
-        "Statistic": "Average",
-        "Period": 300,
+        "Metrics": [
+          {
+            "Id": "worst",
+            "Expression": "MAX([be, fe])",
+            "Label": "메모리 최대(%)",
+            "ReturnData": true
+          },
+          {
+            "Id": "be",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ECS",
+                "MetricName": "MemoryUtilization",
+                "Dimensions": [
+                  {
+                    "Name": "ClusterName",
+                    "Value": {
+                      "Ref": "ClusterName"
+                    }
+                  },
+                  {
+                    "Name": "ServiceName",
+                    "Value": {
+                      "Ref": "BackendServiceName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Average"
+            }
+          },
+          {
+            "Id": "fe",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ECS",
+                "MetricName": "MemoryUtilization",
+                "Dimensions": [
+                  {
+                    "Name": "ClusterName",
+                    "Value": {
+                      "Ref": "ClusterName"
+                    }
+                  },
+                  {
+                    "Name": "ServiceName",
+                    "Value": {
+                      "Ref": "FrontendServiceName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Average"
+            }
+          }
+        ],
         "EvaluationPeriods": 2,
         "DatapointsToAlarm": 2,
         "Threshold": 90,
         "ComparisonOperator": "GreaterThanOrEqualToThreshold",
-        "TreatMissingData": "notBreaching",
-        "Dimensions": [
-          {
-            "Name": "ClusterName",
-            "Value": {
-              "Ref": "ClusterName"
-            }
-          },
-          {
-            "Name": "ServiceName",
-            "Value": {
-              "Ref": "AppServiceName"
-            }
-          }
-        ]
-      }
-    },
-    "SloMonthlyQuery": {
-      "Type": "AWS::Logs::QueryDefinition",
-      "Properties": {
-        "Name": "dameokja-stage/SLO 작업별 응답 코드 건수",
-        "LogGroupNames": [
-          "/dameokja/stage/nginx"
-        ],
-        "QueryString": "filter ispresent(status)\n| filter route != \"-\"\n| fields floor(status / 100) as class\n| stats count(*) as requests by route, class\n| sort route, class"
-      }
-    },
-    "Status4xxQuery": {
-      "Type": "AWS::Logs::QueryDefinition",
-      "Properties": {
-        "Name": "dameokja-stage/4xx 코드별 건수",
-        "LogGroupNames": [
-          "/dameokja/stage/nginx"
-        ],
-        "QueryString": "filter ispresent(status)\n| filter status >= 400 and status < 500\n| stats count(*) as requests by status, route\n| sort requests desc"
-      }
-    },
-    "LatencyQuery": {
-      "Type": "AWS::Logs::QueryDefinition",
-      "Properties": {
-        "Name": "dameokja-stage/API 서버 처리시간 p95·p99(보조, nginx request_time)",
-        "LogGroupNames": [
-          "/dameokja/stage/nginx"
-        ],
-        "QueryString": "filter ispresent(status)\n| filter route != \"-\" and (status < 400 or status >= 500)\n| stats count(*) as requests, pct(request_time, 95) as p95_sec, pct(request_time, 99) as p99_sec by route"
+        "TreatMissingData": "notBreaching"
       }
     },
     "MorningBatchQuery": {
@@ -220,7 +254,7 @@
       "Properties": {
         "DashboardName": "dameokja-stage-infra",
         "DashboardBody": {
-          "Fn::Sub": "{\"widgets\": [{\"type\": \"text\", \"x\": 0, \"y\": 0, \"width\": 24, \"height\": 2, \"properties\": {\"markdown\": \"## 다먹자 stage 서비스 자원\\n알람: API 5xx(nginx 로그), 앱 서비스 메모리 90%. ECS·ALB·EC2 기본 지표라 서버 Agent 없이 표시됩니다.\"}}, {\"type\": \"text\", \"x\": 0, \"y\": 2, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 진입점 (ALB)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"요청 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"RequestCount\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"요청\"}]]}}, {\"type\": \"metric\", \"x\": 8, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 코드\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HTTPCode_Target_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_ELB_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"ALB 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_Target_4XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 4xx\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p95\", \"label\": \"p95\"}], [\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p99\", \"label\": \"p99\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 9, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱·AI (ECS 서비스)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AppServiceName}\", {\"label\": \"앱\"}], [\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"메모리 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AppServiceName}\", {\"label\": \"앱\"}], [\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}, \"annotations\": {\"horizontal\": [{\"label\": \"알람\", \"value\": 90}]}}}, {\"type\": \"metric\", \"x\": 16, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"정상 대상 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Minimum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${BlueTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"blue\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${GreenTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"green\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 16, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### DB·Redis (EC2 기본 지표, 5분)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Average\", \"metrics\": [[\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"상태 검사 실패(1=실패)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Maximum\", \"metrics\": [[\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"디스크 쓰기(EBS 바이트)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"AWS/EC2\", \"EBSWriteBytes\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 23, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱 로그 기반 지표 (Dameokja/stage)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 24, \"width\": 24, \"height\": 6, \"properties\": {\"title\": \"오류 건수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/stage\", \"Http5xx\", {\"label\": \"API 5xx\"}], [\"Dameokja/stage\", \"Http4xx\", {\"label\": \"API 4xx\"}], [\"Dameokja/stage\", \"BackendError\", {\"label\": \"BE ERROR 로그\"}]]}}]}"
+          "Fn::Sub": "{\"widgets\": [{\"type\": \"text\", \"x\": 0, \"y\": 0, \"width\": 24, \"height\": 2, \"properties\": {\"markdown\": \"## 다먹자 stage 서비스 자원\\n알람: 전체 5xx(ALB 지표), backend·frontend 메모리 90%. ECS·ALB·EC2 기본 지표라 서버 Agent 없이 표시됩니다.\"}}, {\"type\": \"text\", \"x\": 0, \"y\": 2, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 진입점 (ALB)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"요청 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"RequestCount\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"요청\"}]]}}, {\"type\": \"metric\", \"x\": 8, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 코드\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HTTPCode_Target_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_ELB_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"ALB 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_Target_4XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 4xx\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p95\", \"label\": \"p95\"}], [\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p99\", \"label\": \"p99\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 9, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱·AI (ECS 서비스)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${BackendServiceName}\", {\"label\": \"backend\"}], [\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${FrontendServiceName}\", {\"label\": \"frontend\"}], [\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"메모리 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${BackendServiceName}\", {\"label\": \"backend\"}], [\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${FrontendServiceName}\", {\"label\": \"frontend\"}], [\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}, \"annotations\": {\"horizontal\": [{\"label\": \"알람\", \"value\": 90}]}}}, {\"type\": \"metric\", \"x\": 16, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"정상 대상 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Minimum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${BackendBlueTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"backend blue\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${BackendGreenTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"backend green\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${FrontendBlueTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"frontend blue\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${FrontendGreenTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"frontend green\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 16, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### DB·Redis (EC2 기본 지표, 5분)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Average\", \"metrics\": [[\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"상태 검사 실패(1=실패)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Maximum\", \"metrics\": [[\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"디스크 쓰기(EBS 바이트)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"AWS/EC2\", \"EBSWriteBytes\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 23, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱 로그 기반 지표 (Dameokja/stage)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 24, \"width\": 24, \"height\": 6, \"properties\": {\"title\": \"오류 건수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/stage\", \"BackendError\", {\"label\": \"BE ERROR 로그\"}]]}}]}"
         }
       }
     }
