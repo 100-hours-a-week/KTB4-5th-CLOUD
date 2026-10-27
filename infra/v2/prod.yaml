@@ -1107,6 +1107,7 @@ Resources:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       PlacementStrategies:
         - { Type: binpack, Field: memory }
+      AvailabilityZoneRebalancing: DISABLED # 앱 서버는 2b 한 곳이라 쓸 일 없고, 켜져 있으면 binpack을 못 씀
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnetA]
@@ -1139,6 +1140,7 @@ Resources:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       PlacementStrategies:
         - { Type: binpack, Field: memory }
+      AvailabilityZoneRebalancing: DISABLED # 앱 서버는 2b 한 곳이라 쓸 일 없고, 켜져 있으면 binpack을 못 씀
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnetA]
@@ -1172,6 +1174,7 @@ Resources:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       PlacementStrategies:
         - { Type: binpack, Field: memory }
+      AvailabilityZoneRebalancing: DISABLED # 앱 서버는 2b 한 곳이라 쓸 일 없고, 켜져 있으면 binpack을 못 씀
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnetA]
