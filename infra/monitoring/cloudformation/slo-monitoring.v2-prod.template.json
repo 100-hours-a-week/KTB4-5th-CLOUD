@@ -20,6 +20,14 @@
       "Type": "String",
       "Default": "dameokja-prod-app"
     },
+    "BackendServiceName": {
+      "Type": "String",
+      "Default": "dameokja-prod-backend"
+    },
+    "FrontendServiceName": {
+      "Type": "String",
+      "Default": "dameokja-prod-frontend"
+    },
     "AiServiceName": {
       "Type": "String",
       "Default": "dameokja-prod-ai"
@@ -99,7 +107,7 @@
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
         "AlarmName": "dameokja-v2-prod-http-5xx-ticket",
-        "AlarmDescription": "전체 API 5xx가 5분간 기준 건수 이상(nginx 로그 기준)",
+        "AlarmDescription": "전체 요청 5xx가 5분간 기준 건수 이상(ALB 지표: 서버 5xx + ALB 5xx)",
         "ActionsEnabled": true,
         "AlarmActions": [
           {
@@ -111,10 +119,54 @@
             "Ref": "AlarmTopicArn"
           }
         ],
-        "Namespace": "Dameokja/v2-prod",
-        "MetricName": "Http5xx",
-        "Statistic": "Sum",
-        "Period": 300,
+        "Metrics": [
+          {
+            "Id": "total",
+            "Expression": "FILL(target, 0) + FILL(elb, 0)",
+            "Label": "5xx",
+            "ReturnData": true
+          },
+          {
+            "Id": "target",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HTTPCode_Target_5XX_Count",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Sum"
+            }
+          },
+          {
+            "Id": "elb",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ApplicationELB",
+                "MetricName": "HTTPCode_ELB_5XX_Count",
+                "Dimensions": [
+                  {
+                    "Name": "LoadBalancer",
+                    "Value": {
+                      "Ref": "AlbFullName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Sum"
+            }
+          }
+        ],
         "EvaluationPeriods": 1,
         "DatapointsToAlarm": 1,
         "Threshold": {
@@ -128,7 +180,7 @@
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
         "AlarmName": "dameokja-v2-prod-memory-ticket",
-        "AlarmDescription": "앱 서비스(nginx+FE+BE Task) 메모리 사용률 평균 90% 이상 10분 지속(ECS 지표)",
+        "AlarmDescription": "app·backend·frontend 서비스 중 하나라도 메모리 사용률 평균 90% 이상 10분 지속(ECS 지표). app은 분리(#147)가 끝나면 뺌",
         "ActionsEnabled": true,
         "AlarmActions": [
           {
@@ -140,29 +192,97 @@
             "Ref": "AlarmTopicArn"
           }
         ],
-        "Namespace": "AWS/ECS",
-        "MetricName": "MemoryUtilization",
-        "Statistic": "Average",
-        "Period": 300,
+        "Metrics": [
+          {
+            "Id": "worst",
+            "Expression": "MAX([app, be, fe])",
+            "Label": "메모리 최대(%)",
+            "ReturnData": true
+          },
+          {
+            "Id": "app",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ECS",
+                "MetricName": "MemoryUtilization",
+                "Dimensions": [
+                  {
+                    "Name": "ClusterName",
+                    "Value": {
+                      "Ref": "ClusterName"
+                    }
+                  },
+                  {
+                    "Name": "ServiceName",
+                    "Value": {
+                      "Ref": "AppServiceName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Average"
+            }
+          },
+          {
+            "Id": "be",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ECS",
+                "MetricName": "MemoryUtilization",
+                "Dimensions": [
+                  {
+                    "Name": "ClusterName",
+                    "Value": {
+                      "Ref": "ClusterName"
+                    }
+                  },
+                  {
+                    "Name": "ServiceName",
+                    "Value": {
+                      "Ref": "BackendServiceName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Average"
+            }
+          },
+          {
+            "Id": "fe",
+            "ReturnData": false,
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/ECS",
+                "MetricName": "MemoryUtilization",
+                "Dimensions": [
+                  {
+                    "Name": "ClusterName",
+                    "Value": {
+                      "Ref": "ClusterName"
+                    }
+                  },
+                  {
+                    "Name": "ServiceName",
+                    "Value": {
+                      "Ref": "FrontendServiceName"
+                    }
+                  }
+                ]
+              },
+              "Period": 300,
+              "Stat": "Average"
+            }
+          }
+        ],
         "EvaluationPeriods": 2,
         "DatapointsToAlarm": 2,
         "Threshold": 90,
         "ComparisonOperator": "GreaterThanOrEqualToThreshold",
-        "TreatMissingData": "notBreaching",
-        "Dimensions": [
-          {
-            "Name": "ClusterName",
-            "Value": {
-              "Ref": "ClusterName"
-            }
-          },
-          {
-            "Name": "ServiceName",
-            "Value": {
-              "Ref": "AppServiceName"
-            }
-          }
-        ]
+        "TreatMissingData": "notBreaching"
       }
     },
     "SloMonthlyQuery": {
@@ -213,6 +333,207 @@
           "/dameokja/v2-prod/backend"
         ],
         "QueryString": "filter @message like /푸시를 전송하지 못했습니다|Web Push 전송에 실패했습니다|푸시 발송 작업을 처리하지 못했습니다/\n| stats count(*) as failures by bin(1h)"
+      }
+    },
+    "AlbLogDatabase": {
+      "Type": "AWS::Glue::Database",
+      "Properties": {
+        "CatalogId": {
+          "Ref": "AWS::AccountId"
+        },
+        "DatabaseInput": {
+          "Name": "dameokja_v2_prod",
+          "Description": "prod ALB 액세스 로그(prod.yaml AlbLogBucket)"
+        }
+      }
+    },
+    "AlbLogTable": {
+      "Type": "AWS::Glue::Table",
+      "Properties": {
+        "CatalogId": {
+          "Ref": "AWS::AccountId"
+        },
+        "DatabaseName": {
+          "Ref": "AlbLogDatabase"
+        },
+        "TableInput": {
+          "Name": "alb_logs",
+          "TableType": "EXTERNAL_TABLE",
+          "Parameters": {
+            "EXTERNAL": "TRUE",
+            "projection.enabled": "true",
+            "projection.day.type": "date",
+            "projection.day.range": "2026/10/27,NOW",
+            "projection.day.format": "yyyy/MM/dd",
+            "projection.day.interval": "1",
+            "projection.day.interval.unit": "DAYS",
+            "storage.location.template": {
+              "Fn::Sub": "s3://dameokja-prod-alb-logs-${AWS::AccountId}/alb/AWSLogs/${AWS::AccountId}/elasticloadbalancing/${AWS::Region}/${!day}"
+            }
+          },
+          "PartitionKeys": [
+            {
+              "Name": "day",
+              "Type": "string"
+            }
+          ],
+          "StorageDescriptor": {
+            "Location": {
+              "Fn::Sub": "s3://dameokja-prod-alb-logs-${AWS::AccountId}/alb/AWSLogs/${AWS::AccountId}/elasticloadbalancing/${AWS::Region}/"
+            },
+            "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+            "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+            "SerdeInfo": {
+              "SerializationLibrary": "org.apache.hadoop.hive.serde2.RegexSerDe",
+              "Parameters": {
+                "serialization.format": "1",
+                "input.regex": "([^ ]*) ([^ ]*) ([^ ]*) ([^ ]*):([0-9]*) ([^ ]*)[:-]([0-9]*) ([-.0-9]*) ([-.0-9]*) ([-.0-9]*) (|[-0-9]*) (-|[-0-9]*) ([-0-9]*) ([-0-9]*) \"([^ ]*) (.*) (- |[^ ]*)\" \"([^\"]*)\" ([A-Z0-9-_]+) ([A-Za-z0-9.-]*) ([^ ]*) .*"
+              }
+            },
+            "Columns": [
+              {
+                "Name": "type",
+                "Type": "string"
+              },
+              {
+                "Name": "time",
+                "Type": "string"
+              },
+              {
+                "Name": "elb",
+                "Type": "string"
+              },
+              {
+                "Name": "client_ip",
+                "Type": "string"
+              },
+              {
+                "Name": "client_port",
+                "Type": "int"
+              },
+              {
+                "Name": "target_ip",
+                "Type": "string"
+              },
+              {
+                "Name": "target_port",
+                "Type": "int"
+              },
+              {
+                "Name": "request_processing_time",
+                "Type": "double"
+              },
+              {
+                "Name": "target_processing_time",
+                "Type": "double"
+              },
+              {
+                "Name": "response_processing_time",
+                "Type": "double"
+              },
+              {
+                "Name": "elb_status_code",
+                "Type": "int"
+              },
+              {
+                "Name": "target_status_code",
+                "Type": "string"
+              },
+              {
+                "Name": "received_bytes",
+                "Type": "bigint"
+              },
+              {
+                "Name": "sent_bytes",
+                "Type": "bigint"
+              },
+              {
+                "Name": "request_verb",
+                "Type": "string"
+              },
+              {
+                "Name": "request_url",
+                "Type": "string"
+              },
+              {
+                "Name": "request_proto",
+                "Type": "string"
+              },
+              {
+                "Name": "user_agent",
+                "Type": "string"
+              },
+              {
+                "Name": "ssl_cipher",
+                "Type": "string"
+              },
+              {
+                "Name": "ssl_protocol",
+                "Type": "string"
+              },
+              {
+                "Name": "target_group_arn",
+                "Type": "string"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "AthenaWorkGroup": {
+      "Type": "AWS::Athena::WorkGroup",
+      "Properties": {
+        "Name": "dameokja-v2-prod",
+        "Description": "prod ALB 로그 조회. 결과는 로그 버킷 athena/(30일 뒤 삭제)",
+        "RecursiveDeleteOption": true,
+        "WorkGroupConfiguration": {
+          "EnforceWorkGroupConfiguration": true,
+          "BytesScannedCutoffPerQuery": 1073741824,
+          "ResultConfiguration": {
+            "OutputLocation": {
+              "Fn::Sub": "s3://dameokja-prod-alb-logs-${AWS::AccountId}/athena/"
+            }
+          }
+        }
+      }
+    },
+    "AlbSloQuery": {
+      "Type": "AWS::Athena::NamedQuery",
+      "Properties": {
+        "Name": "SLO 작업별 응답 코드 건수(최근 30일, ALB 로그)",
+        "Database": {
+          "Ref": "AlbLogDatabase"
+        },
+        "WorkGroup": {
+          "Ref": "AthenaWorkGroup"
+        },
+        "QueryString": "WITH r AS (\n  SELECT *, CASE WHEN request_verb = 'POST' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/ingredients$') THEN 'ingredient_create' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/ingredients$') THEN 'ingredient_read' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/ingredients/[^/]+$') THEN 'ingredient_read' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/notifications(/stream|/unread-count)?$') THEN 'notification_poll' WHEN request_verb = 'POST' AND regexp_like(path, '^/api/v1/ingredients/[^/]+$') THEN 'aux_consume' WHEN request_verb = 'POST' AND path = '/api/v1/push-subscriptions' THEN 'aux_push_subscribe' ELSE '-' END AS route\n  FROM (SELECT *, url_extract_path(request_url) AS path FROM alb_logs\n        WHERE day >= date_format(current_date - interval '30' day, '%Y/%m/%d'))\n)\nSELECT route, elb_status_code / 100 AS class, count(*) AS requests\nFROM r WHERE route <> '-'\nGROUP BY 1, 2 ORDER BY 1, 2"
+      }
+    },
+    "AlbStatus4xxQuery": {
+      "Type": "AWS::Athena::NamedQuery",
+      "Properties": {
+        "Name": "4xx 코드별 건수(최근 30일, ALB 로그)",
+        "Database": {
+          "Ref": "AlbLogDatabase"
+        },
+        "WorkGroup": {
+          "Ref": "AthenaWorkGroup"
+        },
+        "QueryString": "WITH r AS (\n  SELECT *, CASE WHEN request_verb = 'POST' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/ingredients$') THEN 'ingredient_create' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/ingredients$') THEN 'ingredient_read' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/ingredients/[^/]+$') THEN 'ingredient_read' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/notifications(/stream|/unread-count)?$') THEN 'notification_poll' WHEN request_verb = 'POST' AND regexp_like(path, '^/api/v1/ingredients/[^/]+$') THEN 'aux_consume' WHEN request_verb = 'POST' AND path = '/api/v1/push-subscriptions' THEN 'aux_push_subscribe' ELSE '-' END AS route\n  FROM (SELECT *, url_extract_path(request_url) AS path FROM alb_logs\n        WHERE day >= date_format(current_date - interval '30' day, '%Y/%m/%d'))\n)\nSELECT elb_status_code AS status, route, count(*) AS requests\nFROM r WHERE elb_status_code BETWEEN 400 AND 499\nGROUP BY 1, 2 ORDER BY 3 DESC"
+      }
+    },
+    "AlbLatencyQuery": {
+      "Type": "AWS::Athena::NamedQuery",
+      "Properties": {
+        "Name": "API 서버 처리시간 p95·p99(최근 30일, ALB target_processing_time)",
+        "Database": {
+          "Ref": "AlbLogDatabase"
+        },
+        "WorkGroup": {
+          "Ref": "AthenaWorkGroup"
+        },
+        "QueryString": "WITH r AS (\n  SELECT *, CASE WHEN request_verb = 'POST' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/ingredients$') THEN 'ingredient_create' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/ingredients$') THEN 'ingredient_read' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/ingredients/[^/]+$') THEN 'ingredient_read' WHEN request_verb = 'GET' AND regexp_like(path, '^/api/v1/refrigerators/[^/]+/notifications(/stream|/unread-count)?$') THEN 'notification_poll' WHEN request_verb = 'POST' AND regexp_like(path, '^/api/v1/ingredients/[^/]+$') THEN 'aux_consume' WHEN request_verb = 'POST' AND path = '/api/v1/push-subscriptions' THEN 'aux_push_subscribe' ELSE '-' END AS route\n  FROM (SELECT *, url_extract_path(request_url) AS path FROM alb_logs\n        WHERE day >= date_format(current_date - interval '30' day, '%Y/%m/%d'))\n)\nSELECT route, count(*) AS requests,\n  approx_percentile(target_processing_time, 0.95) AS p95_sec,\n  approx_percentile(target_processing_time, 0.99) AS p99_sec\nFROM r WHERE route <> '-' AND target_processing_time >= 0 AND (elb_status_code < 400 OR elb_status_code >= 500)\nGROUP BY 1"
       }
     },
     "InfraDashboard": {
