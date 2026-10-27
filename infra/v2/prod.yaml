@@ -1090,6 +1090,7 @@ Resources:
             Resource: "*"
 
   # --- ECS Service. Task Definition은 infra/v2/ecs/prod/*.json (ecs-deploy.yml이 등록). family만 적어 최신 버전을 씀
+  # Task는 메모리가 덜 남은 서버부터 채움(binpack). ECS는 돌던 Task를 옮기지 않아서, 흩어지면 빈 서버가 안 생겨 서버 수가 줄지 않음(#147)
   # ECS Native Blue/Green: 새 버전을 다른 쪽 타겟 그룹에 띄우고 헬스체크 통과 후 리스너 규칙을 그쪽으로 전환,
   # 대기(Bake) 시간 동안 문제가 생기면 되돌림
   # BE, FE. Task Definition은 infra/v2/ecs/prod/backend.json, frontend.json
@@ -1104,6 +1105,8 @@ Resources:
       DesiredCount: 2
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      PlacementStrategies:
+        - { Type: binpack, Field: memory }
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnetA]
@@ -1134,6 +1137,8 @@ Resources:
       DesiredCount: 2
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      PlacementStrategies:
+        - { Type: binpack, Field: memory }
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnetA]
@@ -1165,6 +1170,8 @@ Resources:
       DesiredCount: 1
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      PlacementStrategies:
+        - { Type: binpack, Field: memory }
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnetA]
