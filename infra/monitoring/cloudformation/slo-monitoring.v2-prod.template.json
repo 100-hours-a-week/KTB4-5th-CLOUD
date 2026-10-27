@@ -16,10 +16,6 @@
       "Type": "String",
       "Default": "dameokja-prod"
     },
-    "AppServiceName": {
-      "Type": "String",
-      "Default": "dameokja-prod-app"
-    },
     "BackendServiceName": {
       "Type": "String",
       "Default": "dameokja-prod-backend"
@@ -36,11 +32,19 @@
       "Type": "String",
       "Description": "ALB 지표 차원 값 app/<이름>/<ID> (ALB ARN의 loadbalancer/ 뒤)"
     },
-    "BlueTargetGroupFullName": {
+    "BackendBlueTargetGroupFullName": {
       "Type": "String",
       "Description": "targetgroup/<이름>/<ID>"
     },
-    "GreenTargetGroupFullName": {
+    "BackendGreenTargetGroupFullName": {
+      "Type": "String",
+      "Description": "targetgroup/<이름>/<ID>"
+    },
+    "FrontendBlueTargetGroupFullName": {
+      "Type": "String",
+      "Description": "targetgroup/<이름>/<ID>"
+    },
+    "FrontendGreenTargetGroupFullName": {
       "Type": "String",
       "Description": "targetgroup/<이름>/<ID>"
     },
@@ -52,40 +56,6 @@
     }
   },
   "Resources": {
-    "Http5xxFilter": {
-      "Type": "AWS::Logs::MetricFilter",
-      "Properties": {
-        "LogGroupName": "/dameokja/v2-prod/nginx",
-        "FilterName": "dameokja-v2-prod-Http5xx",
-        "FilterPattern": "{ $.status >= 500 }",
-        "MetricTransformations": [
-          {
-            "MetricNamespace": "Dameokja/v2-prod",
-            "MetricName": "Http5xx",
-            "MetricValue": "1",
-            "DefaultValue": 0,
-            "Unit": "Count"
-          }
-        ]
-      }
-    },
-    "Http4xxFilter": {
-      "Type": "AWS::Logs::MetricFilter",
-      "Properties": {
-        "LogGroupName": "/dameokja/v2-prod/nginx",
-        "FilterName": "dameokja-v2-prod-Http4xx",
-        "FilterPattern": "{ $.status >= 400 && $.status < 500 }",
-        "MetricTransformations": [
-          {
-            "MetricNamespace": "Dameokja/v2-prod",
-            "MetricName": "Http4xx",
-            "MetricValue": "1",
-            "DefaultValue": 0,
-            "Unit": "Count"
-          }
-        ]
-      }
-    },
     "BackendErrorFilter": {
       "Type": "AWS::Logs::MetricFilter",
       "Properties": {
@@ -180,7 +150,7 @@
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
         "AlarmName": "dameokja-v2-prod-memory-ticket",
-        "AlarmDescription": "app·backend·frontend 서비스 중 하나라도 메모리 사용률 평균 90% 이상 10분 지속(ECS 지표). app은 분리(#147)가 끝나면 뺌",
+        "AlarmDescription": "backend·frontend 서비스 중 하나라도 메모리 사용률 평균 90% 이상 10분 지속(ECS 지표)",
         "ActionsEnabled": true,
         "AlarmActions": [
           {
@@ -195,35 +165,9 @@
         "Metrics": [
           {
             "Id": "worst",
-            "Expression": "MAX([app, be, fe])",
+            "Expression": "MAX([be, fe])",
             "Label": "메모리 최대(%)",
             "ReturnData": true
-          },
-          {
-            "Id": "app",
-            "ReturnData": false,
-            "MetricStat": {
-              "Metric": {
-                "Namespace": "AWS/ECS",
-                "MetricName": "MemoryUtilization",
-                "Dimensions": [
-                  {
-                    "Name": "ClusterName",
-                    "Value": {
-                      "Ref": "ClusterName"
-                    }
-                  },
-                  {
-                    "Name": "ServiceName",
-                    "Value": {
-                      "Ref": "AppServiceName"
-                    }
-                  }
-                ]
-              },
-              "Period": 300,
-              "Stat": "Average"
-            }
           },
           {
             "Id": "be",
@@ -283,36 +227,6 @@
         "Threshold": 90,
         "ComparisonOperator": "GreaterThanOrEqualToThreshold",
         "TreatMissingData": "notBreaching"
-      }
-    },
-    "SloMonthlyQuery": {
-      "Type": "AWS::Logs::QueryDefinition",
-      "Properties": {
-        "Name": "dameokja-v2-prod/SLO 작업별 응답 코드 건수",
-        "LogGroupNames": [
-          "/dameokja/v2-prod/nginx"
-        ],
-        "QueryString": "filter ispresent(status)\n| filter route != \"-\"\n| fields floor(status / 100) as class\n| stats count(*) as requests by route, class\n| sort route, class"
-      }
-    },
-    "Status4xxQuery": {
-      "Type": "AWS::Logs::QueryDefinition",
-      "Properties": {
-        "Name": "dameokja-v2-prod/4xx 코드별 건수",
-        "LogGroupNames": [
-          "/dameokja/v2-prod/nginx"
-        ],
-        "QueryString": "filter ispresent(status)\n| filter status >= 400 and status < 500\n| stats count(*) as requests by status, route\n| sort requests desc"
-      }
-    },
-    "LatencyQuery": {
-      "Type": "AWS::Logs::QueryDefinition",
-      "Properties": {
-        "Name": "dameokja-v2-prod/API 서버 처리시간 p95·p99(보조, nginx request_time)",
-        "LogGroupNames": [
-          "/dameokja/v2-prod/nginx"
-        ],
-        "QueryString": "filter ispresent(status)\n| filter route != \"-\" and (status < 400 or status >= 500)\n| stats count(*) as requests, pct(request_time, 95) as p95_sec, pct(request_time, 99) as p99_sec by route"
       }
     },
     "MorningBatchQuery": {
@@ -541,7 +455,7 @@
       "Properties": {
         "DashboardName": "dameokja-v2-prod-infra",
         "DashboardBody": {
-          "Fn::Sub": "{\"widgets\": [{\"type\": \"text\", \"x\": 0, \"y\": 0, \"width\": 24, \"height\": 2, \"properties\": {\"markdown\": \"## 다먹자 v2 prod 서비스 자원\\n알람: API 5xx(nginx 로그), 앱 서비스 메모리 90%. ECS·ALB·EC2 기본 지표라 서버 Agent 없이 표시됩니다.\"}}, {\"type\": \"text\", \"x\": 0, \"y\": 2, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 진입점 (ALB)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"요청 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"RequestCount\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"요청\"}]]}}, {\"type\": \"metric\", \"x\": 8, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 코드\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HTTPCode_Target_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_ELB_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"ALB 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_Target_4XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 4xx\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p95\", \"label\": \"p95\"}], [\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p99\", \"label\": \"p99\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 9, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱·AI (ECS 서비스)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AppServiceName}\", {\"label\": \"앱\"}], [\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"메모리 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AppServiceName}\", {\"label\": \"앱\"}], [\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}, \"annotations\": {\"horizontal\": [{\"label\": \"알람\", \"value\": 90}]}}}, {\"type\": \"metric\", \"x\": 16, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"정상 대상 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Minimum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${BlueTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"blue\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${GreenTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"green\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 16, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### DB·Redis (EC2 기본 지표, 5분)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Average\", \"metrics\": [[\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"상태 검사 실패(1=실패)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Maximum\", \"metrics\": [[\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"디스크 쓰기(EBS 바이트)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"AWS/EC2\", \"EBSWriteBytes\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 23, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱 로그 기반 지표 (Dameokja/v2-prod)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 24, \"width\": 24, \"height\": 6, \"properties\": {\"title\": \"오류 건수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/v2-prod\", \"Http5xx\", {\"label\": \"API 5xx\"}], [\"Dameokja/v2-prod\", \"Http4xx\", {\"label\": \"API 4xx\"}], [\"Dameokja/v2-prod\", \"BackendError\", {\"label\": \"BE ERROR 로그\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 30, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### BE DB 연결 풀 (HikariCP, CloudWatch Agent 사이드카)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 31, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"연결 수 (Task 합계)\", \"region\": \"${AWS::Region}\", \"view\": \"timeSeries\", \"stat\": \"Sum\", \"period\": 60, \"metrics\": [[\"Dameokja/v2-prod/App\", \"hikaricp_connections_active\", \"env\", \"prod\", {\"label\": \"active\"}], [\"Dameokja/v2-prod/App\", \"hikaricp_connections_idle\", \"env\", \"prod\", {\"label\": \"idle\"}], [\"Dameokja/v2-prod/App\", \"hikaricp_connections_max\", \"env\", \"prod\", {\"label\": \"max\"}]]}}, {\"type\": \"metric\", \"x\": 12, \"y\": 31, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"대기 중 요청·연결 시간 초과\", \"region\": \"${AWS::Region}\", \"view\": \"timeSeries\", \"period\": 60, \"metrics\": [[\"Dameokja/v2-prod/App\", \"hikaricp_connections_pending\", \"env\", \"prod\", {\"label\": \"pending (Task 중 최대)\", \"stat\": \"Maximum\"}], [\"Dameokja/v2-prod/App\", \"hikaricp_connections_timeout_total\", \"env\", \"prod\", {\"label\": \"timeout 누적 (Task 합계)\", \"stat\": \"Sum\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 37, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### AI 자원·FastAPI 프로세스 (Dameokja/v2-prod/Ai, CloudWatch Agent)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 38, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"AI CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"ECS 서비스\"}], [{\"expression\": \"cpu / 60 * 100\", \"label\": \"FastAPI 프로세스(1 vCPU 기준)\"}], [\"Dameokja/v2-prod/Ai\", \"process_cpu_seconds_total\", \"env\", \"prod\", {\"id\": \"cpu\", \"stat\": \"Sum\", \"visible\": false}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 38, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"AI 메모리 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"ECS 서비스(예약 대비)\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 16, \"y\": 38, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"FastAPI 프로세스\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"rss / 1048576\", \"label\": \"메모리 RSS(MB)\"}], [\"Dameokja/v2-prod/Ai\", \"process_resident_memory_bytes\", \"env\", \"prod\", {\"id\": \"rss\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_analysis_queue_size\", \"env\", \"prod\", {\"label\": \"대기열\", \"yAxis\": \"right\", \"stat\": \"Maximum\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_analysis_active\", \"env\", \"prod\", {\"label\": \"처리 중\", \"yAxis\": \"right\", \"stat\": \"Maximum\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 44, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### RunPod 처리 (Worker 응답의 단계 시간)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 45, \"width\": 16, \"height\": 6, \"properties\": {\"title\": \"단계별 평균 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"IF(c0 > 0, s0 / c0, 0)\", \"label\": \"Worker 전체\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"worker_total\", {\"id\": \"s0\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"worker_total\", {\"id\": \"c0\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(c1 > 0, s1 / c1, 0)\", \"label\": \"Worker 대기\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"worker_queue_wait\", {\"id\": \"s1\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"worker_queue_wait\", {\"id\": \"c1\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(c2 > 0, s2 / c2, 0)\", \"label\": \"OCR\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"ocr\", {\"id\": \"s2\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"ocr\", {\"id\": \"c2\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(c3 > 0, s3 / c3, 0)\", \"label\": \"LLM\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"llm\", {\"id\": \"s3\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"llm\", {\"id\": \"c3\", \"stat\": \"Sum\", \"visible\": false}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 45, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"RunPod 호출 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"worker_total\", {\"label\": \"RunPod 호출 성공\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 51, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### LLM (RunPod Ollama)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 52, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"토큰 수(분당)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_total\", \"env\", \"prod\", \"type\", \"prompt\", {\"label\": \"프롬프트\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_total\", \"env\", \"prod\", \"type\", \"completion\", {\"label\": \"생성\"}]]}}, {\"type\": \"metric\", \"x\": 8, \"y\": 52, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"평균 처리량(토큰/초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"IF(n0 > 0, t0 / n0, 0)\", \"label\": \"프롬프트\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_sum\", \"env\", \"prod\", \"type\", \"prompt\", {\"id\": \"t0\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_count\", \"env\", \"prod\", \"type\", \"prompt\", {\"id\": \"n0\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(n1 > 0, t1 / n1, 0)\", \"label\": \"생성\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_sum\", \"env\", \"prod\", \"type\", \"completion\", {\"id\": \"t1\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_count\", \"env\", \"prod\", \"type\", \"completion\", {\"id\": \"n1\", \"stat\": \"Sum\", \"visible\": false}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 52, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"모델 로드 평균 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"IF(lc > 0, ls / lc, 0)\", \"label\": \"평균\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_model_load_seconds_sum\", \"env\", \"prod\", {\"id\": \"ls\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_model_load_seconds_count\", \"env\", \"prod\", {\"id\": \"lc\", \"stat\": \"Sum\", \"visible\": false}]]}}]}"
+          "Fn::Sub": "{\"widgets\": [{\"type\": \"text\", \"x\": 0, \"y\": 0, \"width\": 24, \"height\": 2, \"properties\": {\"markdown\": \"## 다먹자 v2 prod 서비스 자원\\n알람: API 5xx(ALB 지표), backend·frontend 메모리 90%. ECS·ALB·EC2 기본 지표라 서버 Agent 없이 표시됩니다.\"}}, {\"type\": \"text\", \"x\": 0, \"y\": 2, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 진입점 (ALB)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"요청 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"RequestCount\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"요청\"}]]}}, {\"type\": \"metric\", \"x\": 8, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 코드\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HTTPCode_Target_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_ELB_5XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"ALB 5xx\"}], [\"AWS/ApplicationELB\", \"HTTPCode_Target_4XX_Count\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"Target 4xx\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 3, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"응답 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p95\", \"label\": \"p95\"}], [\"AWS/ApplicationELB\", \"TargetResponseTime\", \"LoadBalancer\", \"${AlbFullName}\", {\"stat\": \"p99\", \"label\": \"p99\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 9, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱·AI (ECS 서비스)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${BackendServiceName}\", {\"label\": \"backend\"}], [\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${FrontendServiceName}\", {\"label\": \"frontend\"}], [\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"메모리 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${BackendServiceName}\", {\"label\": \"backend\"}], [\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${FrontendServiceName}\", {\"label\": \"frontend\"}], [\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"AI\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}, \"annotations\": {\"horizontal\": [{\"label\": \"알람\", \"value\": 90}]}}}, {\"type\": \"metric\", \"x\": 16, \"y\": 10, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"정상 대상 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Minimum\", \"metrics\": [[\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${BackendBlueTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"backend blue\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${BackendGreenTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"backend green\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${FrontendBlueTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"frontend blue\"}], [\"AWS/ApplicationELB\", \"HealthyHostCount\", \"TargetGroup\", \"${FrontendGreenTargetGroupFullName}\", \"LoadBalancer\", \"${AlbFullName}\", {\"label\": \"frontend green\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 16, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### DB·Redis (EC2 기본 지표, 5분)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Average\", \"metrics\": [[\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"CPUUtilization\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"상태 검사 실패(1=실패)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Maximum\", \"metrics\": [[\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}], [\"AWS/EC2\", \"StatusCheckFailed\", \"InstanceId\", \"${RedisInstanceId}\", {\"label\": \"Redis\"}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 17, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"디스크 쓰기(EBS 바이트)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"AWS/EC2\", \"EBSWriteBytes\", \"InstanceId\", \"${DbInstanceId}\", {\"label\": \"DB\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 23, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### 앱 로그 기반 지표 (Dameokja/v2-prod)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 24, \"width\": 24, \"height\": 6, \"properties\": {\"title\": \"오류 건수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 300, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/v2-prod\", \"BackendError\", {\"label\": \"BE ERROR 로그\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 30, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### BE DB 연결 풀 (HikariCP, CloudWatch Agent 사이드카)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 31, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"연결 수 (Task 합계)\", \"region\": \"${AWS::Region}\", \"view\": \"timeSeries\", \"stat\": \"Sum\", \"period\": 60, \"metrics\": [[\"Dameokja/v2-prod/App\", \"hikaricp_connections_active\", \"env\", \"prod\", {\"label\": \"active\"}], [\"Dameokja/v2-prod/App\", \"hikaricp_connections_idle\", \"env\", \"prod\", {\"label\": \"idle\"}], [\"Dameokja/v2-prod/App\", \"hikaricp_connections_max\", \"env\", \"prod\", {\"label\": \"max\"}]]}}, {\"type\": \"metric\", \"x\": 12, \"y\": 31, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"대기 중 요청·연결 시간 초과\", \"region\": \"${AWS::Region}\", \"view\": \"timeSeries\", \"period\": 60, \"metrics\": [[\"Dameokja/v2-prod/App\", \"hikaricp_connections_pending\", \"env\", \"prod\", {\"label\": \"pending (Task 중 최대)\", \"stat\": \"Maximum\"}], [\"Dameokja/v2-prod/App\", \"hikaricp_connections_timeout_total\", \"env\", \"prod\", {\"label\": \"timeout 누적 (Task 합계)\", \"stat\": \"Sum\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 37, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### AI 자원·FastAPI 프로세스 (Dameokja/v2-prod/Ai, CloudWatch Agent)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 38, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"AI CPU 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"CPUUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"ECS 서비스\"}], [{\"expression\": \"cpu / 60 * 100\", \"label\": \"FastAPI 프로세스(1 vCPU 기준)\"}], [\"Dameokja/v2-prod/Ai\", \"process_cpu_seconds_total\", \"env\", \"prod\", {\"id\": \"cpu\", \"stat\": \"Sum\", \"visible\": false}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 8, \"y\": 38, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"AI 메모리 사용률(%)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[\"AWS/ECS\", \"MemoryUtilization\", \"ClusterName\", \"${ClusterName}\", \"ServiceName\", \"${AiServiceName}\", {\"label\": \"ECS 서비스(예약 대비)\"}]], \"yAxis\": {\"left\": {\"min\": 0, \"max\": 100}}}}, {\"type\": \"metric\", \"x\": 16, \"y\": 38, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"FastAPI 프로세스\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"rss / 1048576\", \"label\": \"메모리 RSS(MB)\"}], [\"Dameokja/v2-prod/Ai\", \"process_resident_memory_bytes\", \"env\", \"prod\", {\"id\": \"rss\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_analysis_queue_size\", \"env\", \"prod\", {\"label\": \"대기열\", \"yAxis\": \"right\", \"stat\": \"Maximum\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_analysis_active\", \"env\", \"prod\", {\"label\": \"처리 중\", \"yAxis\": \"right\", \"stat\": \"Maximum\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 44, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### RunPod 처리 (Worker 응답의 단계 시간)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 45, \"width\": 16, \"height\": 6, \"properties\": {\"title\": \"단계별 평균 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"IF(c0 > 0, s0 / c0, 0)\", \"label\": \"Worker 전체\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"worker_total\", {\"id\": \"s0\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"worker_total\", {\"id\": \"c0\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(c1 > 0, s1 / c1, 0)\", \"label\": \"Worker 대기\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"worker_queue_wait\", {\"id\": \"s1\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"worker_queue_wait\", {\"id\": \"c1\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(c2 > 0, s2 / c2, 0)\", \"label\": \"OCR\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"ocr\", {\"id\": \"s2\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"ocr\", {\"id\": \"c2\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(c3 > 0, s3 / c3, 0)\", \"label\": \"LLM\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_sum\", \"env\", \"prod\", \"stage\", \"llm\", {\"id\": \"s3\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"llm\", {\"id\": \"c3\", \"stat\": \"Sum\", \"visible\": false}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 45, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"RunPod 호출 수\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/v2-prod/Ai\", \"dameokja_remote_worker_stage_seconds_count\", \"env\", \"prod\", \"stage\", \"worker_total\", {\"label\": \"RunPod 호출 성공\"}]]}}, {\"type\": \"text\", \"x\": 0, \"y\": 51, \"width\": 24, \"height\": 1, \"properties\": {\"markdown\": \"### LLM (RunPod Ollama)\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 52, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"토큰 수(분당)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"metrics\": [[\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_total\", \"env\", \"prod\", \"type\", \"prompt\", {\"label\": \"프롬프트\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_total\", \"env\", \"prod\", \"type\", \"completion\", {\"label\": \"생성\"}]]}}, {\"type\": \"metric\", \"x\": 8, \"y\": 52, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"평균 처리량(토큰/초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"IF(n0 > 0, t0 / n0, 0)\", \"label\": \"프롬프트\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_sum\", \"env\", \"prod\", \"type\", \"prompt\", {\"id\": \"t0\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_count\", \"env\", \"prod\", \"type\", \"prompt\", {\"id\": \"n0\", \"stat\": \"Sum\", \"visible\": false}], [{\"expression\": \"IF(n1 > 0, t1 / n1, 0)\", \"label\": \"생성\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_sum\", \"env\", \"prod\", \"type\", \"completion\", {\"id\": \"t1\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_tokens_per_second_count\", \"env\", \"prod\", \"type\", \"completion\", {\"id\": \"n1\", \"stat\": \"Sum\", \"visible\": false}]]}}, {\"type\": \"metric\", \"x\": 16, \"y\": 52, \"width\": 8, \"height\": 6, \"properties\": {\"title\": \"모델 로드 평균 시간(초)\", \"view\": \"timeSeries\", \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Average\", \"metrics\": [[{\"expression\": \"IF(lc > 0, ls / lc, 0)\", \"label\": \"평균\"}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_model_load_seconds_sum\", \"env\", \"prod\", {\"id\": \"ls\", \"stat\": \"Sum\", \"visible\": false}], [\"Dameokja/v2-prod/Ai\", \"dameokja_remote_llm_model_load_seconds_count\", \"env\", \"prod\", {\"id\": \"lc\", \"stat\": \"Sum\", \"visible\": false}]]}}]}"
         }
       }
     }
