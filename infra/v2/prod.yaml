@@ -236,8 +236,21 @@ Resources:
       VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 80, ToPort: 80, SourceSecurityGroupId: !Ref AlbSecurityGroup }
+        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, SourceSecurityGroupId: !Ref AlbSecurityGroup }
       Tags:
         - { Key: Name, Value: dameokja-prod-app }
+
+  # frontend Task(FE). ALB에서 오는 3000만. DB·Redis·AI에는 접근하지 않음
+  # backend Task는 AppSecurityGroup을 그대로 씀(DB·Redis·AI 허용 규칙 유지, ALB에서 오는 8080 추가)
+  FrontendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja v2 prod frontend task (3000 from ALB)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 3000, ToPort: 3000, SourceSecurityGroupId: !Ref AlbSecurityGroup }
+      Tags:
+        - { Key: Name, Value: dameokja-prod-frontend }
 
   # AI API Task. 앱 Task(BE)에서 오는 8000만
   AiSecurityGroup:
@@ -405,6 +418,94 @@ Resources:
             TargetGroups:
               - { TargetGroupArn: !Ref TargetGroupBlue, Weight: 100 }
               - { TargetGroupArn: !Ref TargetGroupGreen, Weight: 0 }
+
+  # --- app을 backend·frontend 서비스로 나누는 중(#147). nginx 없이 ALB가 경로로 나눠 보냄
+  # 서비스마다 타겟 그룹 2개(Blue/Green)와 리스너 규칙 하나. swagger는 밖에 열지 않음(/api만)
+  # 우선순위 1인 app 규칙이 먼저 걸려서, app 규칙 우선순위를 내리기 전까지 아래 규칙으로는 요청이 가지 않음
+  BackendTargetGroupBlue:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: dameokja-prod-be-blue
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 8080
+      TargetType: ip
+      HealthCheckPath: /actuator/health
+      Matcher: { HttpCode: "200" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  BackendTargetGroupGreen:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: dameokja-prod-be-green
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 8080
+      TargetType: ip
+      HealthCheckPath: /actuator/health
+      Matcher: { HttpCode: "200" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  FrontendTargetGroupBlue:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: dameokja-prod-fe-blue
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 3000
+      TargetType: ip
+      HealthCheckPath: /
+      Matcher: { HttpCode: "200-399" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  FrontendTargetGroupGreen:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: dameokja-prod-fe-green
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 3000
+      TargetType: ip
+      HealthCheckPath: /
+      Matcher: { HttpCode: "200-399" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  # ECS Native Blue/Green이 배포 때마다 아래 두 규칙의 가중치를 바꿔 blue <-> green을 전환
+  # 그래서 실제 가중치는 템플릿(blue 100)과 다를 수 있음(stage에서는 첫 배포 뒤 green 100이었음).
+  # 규칙 속성을 고치면 CloudFormation이 템플릿 가중치로 되돌려 빈 타겟 그룹으로 요청이 갈 수 있으니, 먼저 실제 가중치를 확인하고 템플릿을 맞춘다
+  BackendListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 10
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig: { Values: ["/api", "/api/*"] }
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - { TargetGroupArn: !Ref BackendTargetGroupBlue, Weight: 100 }
+              - { TargetGroupArn: !Ref BackendTargetGroupGreen, Weight: 0 }
+
+  FrontendListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 20
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig: { Values: ["/*"] }
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - { TargetGroupArn: !Ref FrontendTargetGroupBlue, Weight: 100 }
+              - { TargetGroupArn: !Ref FrontendTargetGroupGreen, Weight: 0 }
 
   # --- Redis: EC2 자체 구축 단일 노드, 이중화 없음 (v2 22번), AOF 영속화
   # AMI는 DB와 같은 고정 일반 AL2023, 역할도 DB와 같은 SSM 접속용
@@ -1139,6 +1240,68 @@ Resources:
         MaximumPercent: 200
         DeploymentCircuitBreaker: { Enable: true, Rollback: true }
 
+  # BE, FE. Task Definition은 infra/v2/ecs/prod/backend.json, frontend.json
+  # 0개로 만들고 Task 수는 자동 조정(2~4)이 정함. 자동 조정이 2개로 올린 뒤에도 스택이 Task 수를 되돌리지 않게 하기 위함
+  BackendService:
+    Type: AWS::ECS::Service
+    DependsOn: ClusterCapacityProviders
+    Properties:
+      ServiceName: dameokja-prod-backend
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-prod-backend
+      DesiredCount: 0
+      CapacityProviderStrategy:
+        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnetA]
+          SecurityGroups: [!Ref AppSecurityGroup]
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: backend
+          ContainerPort: 8080
+          TargetGroupArn: !Ref BackendTargetGroupBlue
+          AdvancedConfiguration:
+            AlternateTargetGroupArn: !Ref BackendTargetGroupGreen
+            ProductionListenerRule: !Ref BackendListenerRule
+            RoleArn: !GetAtt EcsInfrastructureRole.Arn
+      DeploymentConfiguration:
+        Strategy: BLUE_GREEN
+        BakeTimeInMinutes: 5
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+
+  FrontendService:
+    Type: AWS::ECS::Service
+    DependsOn: ClusterCapacityProviders
+    Properties:
+      ServiceName: dameokja-prod-frontend
+      Cluster: !Ref Cluster
+      TaskDefinition: dameokja-prod-frontend
+      DesiredCount: 0
+      CapacityProviderStrategy:
+        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnetA]
+          SecurityGroups: [!Ref FrontendSecurityGroup]
+      HealthCheckGracePeriodSeconds: 300
+      LoadBalancers:
+        - ContainerName: frontend
+          ContainerPort: 3000
+          TargetGroupArn: !Ref FrontendTargetGroupBlue
+          AdvancedConfiguration:
+            AlternateTargetGroupArn: !Ref FrontendTargetGroupGreen
+            ProductionListenerRule: !Ref FrontendListenerRule
+            RoleArn: !GetAtt EcsInfrastructureRole.Arn
+      DeploymentConfiguration:
+        Strategy: BLUE_GREEN
+        BakeTimeInMinutes: 5
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+
   # AI API. BE는 ai.prod.dameokja.internal:8000으로 호출 (Cloud Map에 Task IP 등록)
   AiService:
     Type: AWS::ECS::Service
@@ -1177,6 +1340,47 @@ Resources:
       PolicyName: dameokja-prod-app-cpu
       PolicyType: TargetTrackingScaling
       ScalingTargetId: !Ref AppScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  # 전환 전에는 Task를 띄우지 않게 최소 0으로 둔다. 전환 PR에서 최소 2로 올린다
+  BackendScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: !Sub "service/${Cluster}/${BackendService.Name}"
+      MinCapacity: 0
+      MaxCapacity: 4
+
+  BackendCpuScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: dameokja-prod-backend-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref BackendScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  FrontendScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: !Sub "service/${Cluster}/${FrontendService.Name}"
+      MinCapacity: 0
+      MaxCapacity: 4
+
+  FrontendCpuScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: dameokja-prod-frontend-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref FrontendScalableTarget
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: 60
         PredefinedMetricSpecification:

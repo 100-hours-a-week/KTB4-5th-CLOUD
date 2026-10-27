@@ -34,6 +34,11 @@ jobs:
         run: |
           pipx install cfn-lint
           cfn-lint --regions "$AWS_REGION" -- "$TEMPLATE"
+      # 템플릿이 인라인 한도(51,200바이트)를 넘어서, 주석·들여쓰기를 뺀 JSON으로 바꿔 보낸다
+      - name: 템플릿 압축
+        run: |
+          pipx install cfn-flip
+          cfn-flip -j "$TEMPLATE" | jq -c . > "$RUNNER_TEMP/t.json" && mv "$RUNNER_TEMP/t.json" "$TEMPLATE"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_CFN_PLAN_ROLE_ARN }}
@@ -93,6 +98,11 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v6
+      # 템플릿이 인라인 한도(51,200바이트)를 넘어서, 주석·들여쓰기를 뺀 JSON으로 바꿔 보낸다
+      - name: 템플릿 압축
+        run: |
+          pipx install cfn-flip
+          cfn-flip -j "$TEMPLATE" | jq -c . > "$RUNNER_TEMP/t.json" && mv "$RUNNER_TEMP/t.json" "$TEMPLATE"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
