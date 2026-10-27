@@ -1345,13 +1345,14 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization
 
+  # 전환 전에는 Task를 띄우지 않게 최소 0으로 둔다. 전환 PR에서 최소 2로 올린다
   BackendScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${BackendService.Name}"
-      MinCapacity: 2
+      MinCapacity: 0
       MaxCapacity: 4
 
   BackendCpuScalingPolicy:
@@ -1371,7 +1372,7 @@ Resources:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${FrontendService.Name}"
-      MinCapacity: 2
+      MinCapacity: 0
       MaxCapacity: 4
 
   FrontendCpuScalingPolicy:
