@@ -1,0 +1,53 @@
+{
+  "family": "dameokja-prod-frontend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::906462447513:role/dameokja-prod-ecs-task-execution",
+  "volumes": [
+    {
+      "name": "localtime",
+      "host": {
+        "sourcePath": "/etc/localtime"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "ghcr.io/100-hours-a-week/ktb4-5th-fe@sha256:36b5b704e3fd9a586faca7ce7da32c77e1698120f8083a453adfb5bce97c7f27",
+      "essential": true,
+      "memory": 768,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "BACKEND_ORIGIN",
+          "value": "https://dameokja.com"
+        }
+      ],
+      "repositoryCredentials": {
+        "credentialsParameter": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-dev/ghcr-zDHfef"
+      },
+      "secrets": [
+        {
+          "name": "DISCORD_BUG_REPORT_WEBHOOK_URL",
+          "valueFrom": "/dameokja-v2-prod-fe/DISCORD_BUG_REPORT_WEBHOOK_URL"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/dameokja/v2-prod/frontend",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "frontend"
+        }
+      }
+    }
+  ]
+}
