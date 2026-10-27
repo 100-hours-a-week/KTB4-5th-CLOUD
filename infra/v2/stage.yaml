@@ -36,9 +36,11 @@ Parameters:
   InstanceType:
     Type: String
     Default: m7i.large
+  # 지금 stage 앱 서버의 ECS 최적화 AMI로 고정(LaunchTemplate v3·v5). SSM 권장 AMI 경로를 쓰면 AWS가 새 AMI를 낼 때마다
+  # 상관없는 스택 업데이트에도 LaunchTemplate이 바뀜 (#147)
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+    Type: AWS::EC2::Image::Id
+    Default: ami-03fe595bfa08c00b8
   MinSize:
     Type: Number
     Default: 2
