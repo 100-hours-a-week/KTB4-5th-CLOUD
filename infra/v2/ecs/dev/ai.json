@@ -103,6 +103,10 @@
           "valueFrom": "/dameokja-v2-dev-ai/RUNPOD_WORKER_PORT"
         },
         {
+          "name": "TAVILY_API_KEY",
+          "valueFrom": "/dameokja-v2-dev-ai/TAVILY_API_KEY"
+        },
+        {
           "name": "REMOTE_INFERENCE_API_KEY",
           "valueFrom": "/dameokja-v2-dev-ai/REMOTE_INFERENCE_API_KEY"
         },
