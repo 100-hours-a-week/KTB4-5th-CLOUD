@@ -26,8 +26,6 @@ const stages = [];
 for (let rps = start; rps <= max; rps += step) stages.push({ target: rps, duration: '10s' }, { target: rps, duration: `${hold - 10}s` });
 export const options = {
   noCookiesReset: true,
-  // 측정끼리 같은 요청 순서를 쓰도록 난수를 고정한다
-  randomSeed: Number(__ENV.SEED || 1),
   scenarios: { db: { executor: 'ramping-arrival-rate', startRate: start, timeUnit: '1s',
     preAllocatedVUs: 50, maxVUs, stages } },
   // 한계를 넘긴 뒤의 모습도 보려고 ramp.js(10%)보다 느슨하게 둔다. 누적 실패율 30%를 넘으면 자동 중단한다.
