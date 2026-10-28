@@ -1,5 +1,6 @@
 // DB 한계 부하: 요청마다 DB를 많이 쓰는 API를 읽기·쓰기로 섞어 DB가 먼저 버티지 못하는 지점을 찾는다. 설계는 README.md 참고.
-// 실행: k6 run -e ACCOUNTS=../k6/private/prod-accounts.json --out csv=private/db-stress.csv db-stress.js
+// 실행: 먼저 db-reset.js로 시험 냉장고를 같은 상태로 맞춘 뒤
+//   k6 run -e ACCOUNTS=../k6/private/prod-accounts.json --out csv=private/db-stress.csv db-stress.js
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
@@ -25,6 +26,8 @@ const stages = [];
 for (let rps = start; rps <= max; rps += step) stages.push({ target: rps, duration: '10s' }, { target: rps, duration: `${hold - 10}s` });
 export const options = {
   noCookiesReset: true,
+  // 측정끼리 같은 요청 순서를 쓰도록 난수를 고정한다
+  randomSeed: Number(__ENV.SEED || 1),
   scenarios: { db: { executor: 'ramping-arrival-rate', startRate: start, timeUnit: '1s',
     preAllocatedVUs: 50, maxVUs, stages } },
   // 한계를 넘긴 뒤의 모습도 보려고 ramp.js(10%)보다 느슨하게 둔다. 누적 실패율 30%를 넘으면 자동 중단한다.
@@ -125,12 +128,12 @@ export default function () {
   if (!fridge) login(account);
   if (!fridge) { failed.add(true); return; }
   const path = `${base}/api/v1/refrigerators/${fridge}/ingredients`;
-  // 읽기 45%(목록 35, 마이페이지 10) / 쓰기 55%(등록 15, 소비 20, 수정 20). 소비가 등록보다 많아 냉장고에 빈칸이 생긴다
+  // 읽기 45%(목록 35, 마이페이지 10) / 쓰기 55%(등록 17.5, 소비 17.5, 수정 20). 등록과 소비를 같게 둬 측정 중에도 항목 수가 거의 그대로다
   const r = Math.random();
   let res;
   if (r < 0.35) res = list(path);
   else if (r < 0.45) res = http.get(`${base}/api/v1/refrigerators/${fridge}/mypage`, params('mypage'));
-  else if (r < 0.60) res = create(path);
+  else if (r < 0.625) res = create(path);
   else if (r < 0.80) res = consume(path);
   else res = update(path);
   if (!res) { failed.add(false); return; }
