@@ -667,6 +667,8 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-prod-db-replica }
 
+  # super_read_only를 설정 파일에 두면 root 계정 변경·플러그인 설치가 막혀 첫 실행이 실패함(ERROR 1290, 2026-10-28).
+  # 설정 파일은 read_only만 두고(root는 쓰기 가능), 복제를 시작한 뒤 SET PERSIST로 super_read_only를 켬
   # 설정(server_id 3, 읽기 전용) → 복제가 아직 없으면 Primary를 CLONE으로 복사하고 GTID 복제 시작. 이미 복제 중이면 설정만 맞춤
   # CLONE은 Replica의 기존 데이터를 지우고 MySQL을 재시작함. 첫 실행은 Primary 부하가 낮을 때
   ReplicaAssociation:
@@ -683,20 +685,20 @@ Resources:
           - set -e; changed=
           - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
           - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
-          - printf '[mysqld]\nserver_id=3\nlog_bin=binlog\ngtid_mode=ON\nenforce_gtid_consistency=ON\ndefault_time_zone=+09:00\nread_only=ON\nsuper_read_only=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
+          - printf '[mysqld]\nserver_id=3\nlog_bin=binlog\ngtid_mode=ON\nenforce_gtid_consistency=ON\ndefault_time_zone=+09:00\nread_only=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
           - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
           - if systemctl is-active -q mysqld; then [ -z "$changed" ] || systemctl restart mysqld; else systemctl start mysqld; fi
           - waitdb() { for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && return 0; sleep 10; done; return 1; }
           # 새로 설치한 MySQL은 root가 임시 비밀번호 상태라 Primary처럼 sudo 접속(auth_socket)으로 바꿈. CLONE 뒤에는 Primary 계정이 그대로 옴
           - "if ! mysql -uroot -e 'SELECT 1' >/dev/null 2>&1; then for i in $(seq 1 30); do grep -q 'temporary password' /var/log/mysqld.log && break; sleep 10; done; TMP=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}'); R=Aa1-$(openssl rand -hex 16); mysql -uroot -p\"$TMP\" --connect-expired-password -e \"ALTER USER root@localhost IDENTIFIED BY '$R'\"; mysql -uroot -p\"$R\" -e \"INSTALL PLUGIN auth_socket SONAME 'auth_socket.so'; ALTER USER root@localhost IDENTIFIED WITH auth_socket;\"; fi"
           - waitdb
-          - if mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -q 'Source_Host'; then echo '이미 복제 중'; exit 0; fi
+          - if mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -q 'Source_Host'; then mysql -uroot -e 'SET PERSIST super_read_only=ON'; echo '이미 복제 중'; exit 0; fi
           - !Sub PW=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id ${ReplicationSecret} --query SecretString --output text)
           - mysql -uroot -Ne "SELECT 1 FROM information_schema.plugins WHERE plugin_name='clone'" | grep -q 1 || mysql -uroot -e "INSTALL PLUGIN clone SONAME 'mysql_clone.so'"
           - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; SET GLOBAL clone_valid_donor_list='${DbInstance.PrivateIp}:3306'; CLONE INSTANCE FROM 'repl'@'${DbInstance.PrivateIp}':3306 IDENTIFIED BY '$PW';\" || true"
           - sleep 20; systemctl is-active -q mysqld || systemctl start mysqld; waitdb
           - mysql -uroot -e 'USE app' || { echo 'CLONE 실패(app 스키마 없음)'; exit 1; }
-          - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; CHANGE REPLICATION SOURCE TO SOURCE_HOST='${DbInstance.PrivateIp}', SOURCE_USER='repl', SOURCE_PASSWORD='$PW', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET GLOBAL super_read_only=ON;\""
+          - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; CHANGE REPLICATION SOURCE TO SOURCE_HOST='${DbInstance.PrivateIp}', SOURCE_USER='repl', SOURCE_PASSWORD='$PW', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET PERSIST super_read_only=ON;\""
           - sleep 10; mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -E 'Replica_(IO|SQL)_Running:|Seconds_Behind_Source|Last_.*Error:'
 
   # AI용 PostgreSQL 16을 MySQL과 같은 DB 서버에 둠 (dev는 AI 서버에 직접 설치). 메모리 상한 shared_buffers 512MB
