@@ -19,6 +19,7 @@
       "name": "backend",
       "image": "ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:cc037e1556edd18d5021ef75ea4eba6399bcae6370f87b3d682edecb5a38e1e7",
       "essential": true,
+      "cpu": 1024,
       "memory": 2560,
       "portMappings": [
         {
