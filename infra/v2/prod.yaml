@@ -701,6 +701,60 @@ Resources:
           - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; CHANGE REPLICATION SOURCE TO SOURCE_HOST='${DbInstance.PrivateIp}', SOURCE_USER='repl', SOURCE_PASSWORD='$PW', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET PERSIST super_read_only=ON;\""
           - sleep 10; mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -E 'Replica_(IO|SQL)_Running:|Seconds_Behind_Source|Last_.*Error:'
 
+  # --- 읽기 전용 Replica 2호기. 1호기와 같은 설정에 server_id만 4 (#169, #120 조회 분산 측정)
+  Replica2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref DbAmiId
+      InstanceType: !Ref DbInstanceType
+      SubnetId: !Ref PrivateSubnetA
+      SecurityGroupIds: [!Ref DbSecurityGroup]
+      IamInstanceProfile: !Ref DbInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 30, VolumeType: gp3 }
+      # 설정은 아래 Association이 함(Primary에서 UserData 설정이 적용되지 않았던 문제를 피함)
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm
+          dnf install -y mysql-community-server
+          systemctl enable mysqld
+      Tags:
+        - { Key: Name, Value: dameokja-prod-db-replica-2 }
+
+  Replica2Association:
+    Type: AWS::SSM::Association
+    DependsOn: DbReplicationSourceAssociation
+    Properties:
+      AssociationName: dameokja-prod-db-replica-2
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref Replica2Instance] }
+      Parameters:
+        executionTimeout: ["3600"]
+        commands:
+          - set -e; changed=
+          - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
+          - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
+          - printf '[mysqld]\nserver_id=4\nlog_bin=binlog\ngtid_mode=ON\nenforce_gtid_consistency=ON\ndefault_time_zone=+09:00\nread_only=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
+          - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
+          - if systemctl is-active -q mysqld; then [ -z "$changed" ] || systemctl restart mysqld; else systemctl start mysqld; fi
+          - waitdb() { for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && return 0; sleep 10; done; return 1; }
+          # 새로 설치한 MySQL은 root가 임시 비밀번호 상태라 Primary처럼 sudo 접속(auth_socket)으로 바꿈. CLONE 뒤에는 Primary 계정이 그대로 옴
+          - "if ! mysql -uroot -e 'SELECT 1' >/dev/null 2>&1; then for i in $(seq 1 30); do grep -q 'temporary password' /var/log/mysqld.log && break; sleep 10; done; TMP=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}'); R=Aa1-$(openssl rand -hex 16); mysql -uroot -p\"$TMP\" --connect-expired-password -e \"ALTER USER root@localhost IDENTIFIED BY '$R'\"; mysql -uroot -p\"$R\" -e \"INSTALL PLUGIN auth_socket SONAME 'auth_socket.so'; ALTER USER root@localhost IDENTIFIED WITH auth_socket;\"; fi"
+          - waitdb
+          - if mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -q 'Source_Host'; then mysql -uroot -e 'SET PERSIST super_read_only=ON'; echo '이미 복제 중'; exit 0; fi
+          - !Sub PW=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id ${ReplicationSecret} --query SecretString --output text)
+          - mysql -uroot -Ne "SELECT 1 FROM information_schema.plugins WHERE plugin_name='clone'" | grep -q 1 || mysql -uroot -e "INSTALL PLUGIN clone SONAME 'mysql_clone.so'"
+          - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; SET GLOBAL clone_valid_donor_list='${DbInstance.PrivateIp}:3306'; CLONE INSTANCE FROM 'repl'@'${DbInstance.PrivateIp}':3306 IDENTIFIED BY '$PW';\" || true"
+          - sleep 20; systemctl is-active -q mysqld || systemctl start mysqld; waitdb
+          - mysql -uroot -e 'USE app' || { echo 'CLONE 실패(app 스키마 없음)'; exit 1; }
+          - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; CHANGE REPLICATION SOURCE TO SOURCE_HOST='${DbInstance.PrivateIp}', SOURCE_USER='repl', SOURCE_PASSWORD='$PW', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET PERSIST super_read_only=ON;\""
+          - sleep 10; mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -E 'Replica_(IO|SQL)_Running:|Seconds_Behind_Source|Last_.*Error:'
+
   # AI용 PostgreSQL 16을 MySQL과 같은 DB 서버에 둠 (dev는 AI 서버에 직접 설치). 메모리 상한 shared_buffers 512MB
   # 계정 비밀번호는 SSM /dameokja-v2-prod-ai/POSTGRES_PASSWORD를 서버 안에서 읽음(명령 기록에 남기지 않음). 스키마·기준 데이터는 dev에서 따로 옮김
   DbPostgresAssociation:
@@ -1352,3 +1406,5 @@ Outputs:
     Value: !GetAtt DbInstance.PrivateIp
   ReplicaPrivateIp:
     Value: !GetAtt ReplicaInstance.PrivateIp
+  Replica2PrivateIp:
+    Value: !GetAtt Replica2Instance.PrivateIp
