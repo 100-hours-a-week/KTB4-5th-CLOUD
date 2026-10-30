@@ -149,6 +149,7 @@ Resources:
       Roles: [!Ref OrchestratorRole]
 
   # Percona Orchestrator 3.2.6(MySQL 8.4 용어 지원, Amazon Linux 2023 패키지)를 버전 고정으로 설치
+  # MySQL이 접속 IP를 역방향 DNS로 바꿔 processlist에 호스트 이름이 보여, 그 이름으로는 발견하지 않고 IP만 씀 (#185)
   # UserData를 바꾸면 Launch Template 새 버전만 생기고 지금 서버는 그대로임. 반영하려면 서버를 종료해 ASG가 새로 띄우게 함
   OrchestratorLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -199,6 +200,7 @@ Resources:
               "MySQLHostnameResolveMethod": "",
               "SkipBinlogServerUnresolveCheck": true,
               "DetectClusterAliasQuery": "SELECT 'dameokja-prod'",
+              "DiscoveryIgnoreHostnameFilters": ["compute.internal"],
               "RecoverMasterClusterFilters": ["*"],
               "RecoverIntermediateMasterClusterFilters": [],
               "RecoveryPeriodBlockSeconds": 600,
@@ -216,7 +218,9 @@ Resources:
             # 승격 뒤 훅: 1) 기존 Primary 격리(보안 그룹 교체, 계획된 교체는 제외) 2) DB 고정 이름을 새 Primary로 3) 새 Primary 쓰기 허용을 재시작 뒤에도 유지 4) 기존 Primary super_read_only(닿을 때만)
             cat > /usr/local/bin/dameokja-db-failover.sh <<'EOF'
             #!/bin/bash
-            cmd=$1; failed=$2; new=$3
+            # Orchestrator가 AWS 호스트 이름(ip-...compute.internal)을 넘겨도 DNS A 레코드·보안 그룹 조회에는 IP가 필요함 (#185)
+            toip() { case "$1" in *[a-z]*) getent hosts "$1" | awk '{print $1; exit}' ;; *) echo "$1" ;; esac; }
+            cmd=$1; failed=$(toip "$2"); new=$(toip "$3")
             log() { echo "$(date '+%F %T') $*"; }
             log "시작 command=$cmd failed=$failed successor=$new"
             if [ "$cmd" != graceful-master-takeover ]; then
