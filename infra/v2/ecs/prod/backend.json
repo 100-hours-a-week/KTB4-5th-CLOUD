@@ -38,6 +38,10 @@
         {
           "name": "SPRING_JPA_SHOWSQL",
           "value": "false"
+        },
+        {
+          "name": "SPRING_DATASOURCE_URL",
+          "value": "jdbc:mysql://db.prod.dameokja.internal:3306/app?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
         }
       ],
       "secrets": [
@@ -52,10 +56,6 @@
         {
           "name": "SERVER_FORWARD_HEADERS_STRATEGY",
           "valueFrom": "/dameokja-v2-prod/SERVER_FORWARD_HEADERS_STRATEGY"
-        },
-        {
-          "name": "SPRING_DATASOURCE_URL",
-          "valueFrom": "/dameokja-v2-prod/SPRING_DATASOURCE_URL"
         },
         {
           "name": "SPRING_DATASOURCE_USERNAME",
