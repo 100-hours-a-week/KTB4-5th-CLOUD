@@ -1,0 +1,141 @@
+name: v2 인프라 CloudFormation (prod DB 장애조치)
+
+# prod(infra-v2-cfn-prod.yml)와 같은 흐름. Orchestrator 등 DB 장애조치 자원은 별도 스택 (#183)
+# main 머지 후 GitHub Environments "prod" 승인이 있어야 적용
+on:
+  pull_request:
+    paths:
+      - "infra/v2/prod-db-ha.yaml"
+      - "infra/v2/params/prod-db-ha.json"
+      - ".github/workflows/infra-v2-cfn-prod-db-ha.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/v2/prod-db-ha.yaml"
+      - "infra/v2/params/prod-db-ha.json"
+      - ".github/workflows/infra-v2-cfn-prod-db-ha.yml"
+
+env:
+  AWS_REGION: ap-northeast-2
+  STACK_NAME: dameokja-prod-db-ha
+  TEMPLATE: infra/v2/prod-db-ha.yaml
+  PARAMS: infra/v2/params/prod-db-ha.json
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: cfn-lint
+        run: |
+          pipx install cfn-lint
+          cfn-lint --regions "$AWS_REGION" -- "$TEMPLATE"
+      # 템플릿이 인라인 한도(51,200바이트)를 넘어서, 주석·들여쓰기를 뺀 JSON으로 바꿔 보낸다
+      - name: 템플릿 압축
+        run: |
+          pipx install cfn-flip
+          cfn-flip -j "$TEMPLATE" | jq -c . > "$RUNNER_TEMP/t.json" && mv "$RUNNER_TEMP/t.json" "$TEMPLATE"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 상태
+        id: st
+        run: echo "status=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE)" >> "$GITHUB_OUTPUT"
+      # 첫 생성 전에는 미리보기 change set 때문에 스택이 REVIEW_IN_PROGRESS로 남는데,
+      # 이 액션은 그 상태를 "있는 스택"으로 보고 UPDATE를 시도해 실패함 -> CREATE change set을 직접 만듦
+      - name: 첫 생성 전이면 CREATE change set 만들기
+        id: new
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        run: |
+          CS="pr-${{ github.event.pull_request.number }}-${{ github.run_number }}"
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+            --change-set-type CREATE --template-body "file://$TEMPLATE" --parameters "file://$PARAMS" \
+            --role-arn "${{ vars.AWS_CFN_EXEC_ROLE_ARN }}" --capabilities CAPABILITY_NAMED_IAM > /dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CS"
+          {
+            echo 'md<<EOF'
+            echo "새 스택 생성: $(aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" --query 'length(Changes)') 개 추가"
+            echo
+            aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+              --query 'Changes[].ResourceChange.[LogicalResourceId,ResourceType]' --output text | awk '{print "- 🟢 " $1 " `" $2 "`"}'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: change set 만들기 (적용하지 않음)
+        id: cs
+        if: steps.st.outputs.status != 'REVIEW_IN_PROGRESS'
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: create-only
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
+          change-set-name: pr-${{ github.event.pull_request.number }}-${{ github.run_number }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_NAMED_IAM
+          # 워크플로 파일만 바뀌어 템플릿 변경이 없을 때 실패하지 않게
+          fail-on-empty-changeset: false
+      - name: PR에 미리보기 댓글
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.new.outputs.md || steps.cs.outputs.changes-markdown || '변경 없음' }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body "$(printf '**prod DB 장애조치** (`%s`)\n\n%s' "$STACK_NAME" "$BODY")"
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    # 승인자가 Actions 화면에서 승인해야 시작. 이 job의 OIDC sub는 environment:prod
+    environment: prod
+    concurrency:
+      group: infra-v2-prod-db-ha-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      # 템플릿이 인라인 한도(51,200바이트)를 넘어서, 주석·들여쓰기를 뺀 JSON으로 바꿔 보낸다
+      - name: 템플릿 압축
+        run: |
+          pipx install cfn-flip
+          cfn-flip -j "$TEMPLATE" | jq -c . > "$RUNNER_TEMP/t.json" && mv "$RUNNER_TEMP/t.json" "$TEMPLATE"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: 스택 상태
+        id: st
+        run: echo "status=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE)" >> "$GITHUB_OUTPUT"
+      - name: 첫 생성이면 CREATE change set 만들기
+        id: new
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        run: |
+          CS="main-${{ github.run_number }}"
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$CS" \
+            --change-set-type CREATE --template-body "file://$TEMPLATE" --parameters "file://$PARAMS" \
+            --role-arn "${{ vars.AWS_CFN_EXEC_ROLE_ARN }}" --capabilities CAPABILITY_NAMED_IAM > /dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CS"
+          echo "cs=$CS" >> "$GITHUB_OUTPUT"
+      - name: 스택 생성
+        if: steps.st.outputs.status == 'REVIEW_IN_PROGRESS'
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: execute-only
+          name: ${{ env.STACK_NAME }}
+          execute-change-set-id: ${{ steps.new.outputs.cs }}
+      - name: 스택 적용
+        if: steps.st.outputs.status != 'REVIEW_IN_PROGRESS'
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE }}
+          parameter-overrides: file:///${{ github.workspace }}/${{ env.PARAMS }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_NAMED_IAM
+          # 워크플로 파일만 바뀌어 템플릿 변경이 없을 때 실패하지 않게
+          fail-on-empty-changeset: false

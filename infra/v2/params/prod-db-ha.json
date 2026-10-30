@@ -1,0 +1,11 @@
+[
+  {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"},
+  {"ParameterKey": "SubnetId", "ParameterValue": "subnet-0f86136fb72318e11"},
+  {"ParameterKey": "DbSecurityGroupId", "ParameterValue": "sg-058cf8b2c520e1ebd"},
+  {"ParameterKey": "DbHostedZoneId", "ParameterValue": "Z0250116J914X2AL86C8"},
+  {"ParameterKey": "PrimaryInstanceId", "ParameterValue": "i-0f1cc72a461d3e808"},
+  {"ParameterKey": "DbRoleName", "ParameterValue": "dameokja-prod-DbRole-5kjzHoNvA9jS"},
+  {"ParameterKey": "PrimaryIp", "ParameterValue": "10.20.33.212"},
+  {"ParameterKey": "StandbyIp", "ParameterValue": "10.20.57.32"},
+  {"ParameterKey": "AmiId", "ParameterValue": "ami-05f7192721061f4e2"}
+]
