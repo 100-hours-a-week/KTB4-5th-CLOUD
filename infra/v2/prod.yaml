@@ -700,12 +700,21 @@ Resources:
           - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; CHANGE REPLICATION SOURCE TO SOURCE_HOST='${DbInstance.PrivateIp}', SOURCE_USER='repl', SOURCE_PASSWORD='$PW', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET PERSIST super_read_only=ON;\""
           - sleep 10; mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -E 'Replica_(IO|SQL)_Running:|Seconds_Behind_Source|Last_.*Error:'
 
-  # --- BE가 DB를 찾는 고정 이름: db.prod.dameokja.internal (TTL 5초). 아래 PrivateNamespace의 사설 호스팅 영역에 둠 (#179)
+  # --- BE가 DB를 찾는 고정 이름: db.prod.dameokja.internal (TTL 5초) (#179)
+  # Cloud Map 영역(prod.dameokja.internal)에는 레코드를 직접 넣을 수 없어(403) DB 전용 사설 영역을 따로 둠 (#181)
+  # 이름이 더 구체적이라 같은 VPC에서 Cloud Map 영역보다 먼저 쓰임. Orchestrator 훅 권한도 이 영역 하나로 좁힐 수 있음
+  DbHostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: db.prod.dameokja.internal
+      VPCs:
+        - { VPCId: !Ref Vpc, VPCRegion: !Ref AWS::Region }
+
   # 장애조치 때 Orchestrator 훅이 이 레코드를 새 Primary IP로 바꿈. 템플릿 값(DbInstance IP)이 바뀌지 않으면 스택 업데이트가 되돌리지 않음
   DbDnsRecord:
     Type: AWS::Route53::RecordSet
     Properties:
-      HostedZoneId: !GetAtt PrivateNamespace.HostedZoneId
+      HostedZoneId: !Ref DbHostedZone
       Name: db.prod.dameokja.internal.
       Type: A
       TTL: "5"
