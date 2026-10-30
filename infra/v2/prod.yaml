@@ -798,11 +798,12 @@ Resources:
       LogGroupName: /dameokja/v2-prod/frontend
       RetentionInDays: 30
 
+  # BE 로그는 수집·저장 비용이 가장 커서 14일만 보관 (#175)
   BackendLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /dameokja/v2-prod/backend
-      RetentionInDays: 30
+      RetentionInDays: 14
 
   AiLogGroup:
     Type: AWS::Logs::LogGroup
