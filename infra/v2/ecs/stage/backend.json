@@ -33,6 +33,10 @@
         {
           "name": "SERVER_TOMCAT_MBEANREGISTRY_ENABLED",
           "value": "true"
+        },
+        {
+          "name": "SPRING_DATASOURCE_URL",
+          "value": "jdbc:mysql://db.stage.dameokja.internal:3306/app?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
         }
       ],
       "secrets": [
@@ -47,10 +51,6 @@
         {
           "name": "SERVER_FORWARD_HEADERS_STRATEGY",
           "valueFrom": "/dameokja-v2-stage/SERVER_FORWARD_HEADERS_STRATEGY"
-        },
-        {
-          "name": "SPRING_DATASOURCE_URL",
-          "valueFrom": "/dameokja-v2-stage/SPRING_DATASOURCE_URL"
         },
         {
           "name": "SPRING_DATASOURCE_USERNAME",

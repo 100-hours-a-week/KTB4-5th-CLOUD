@@ -44,7 +44,7 @@ jobs:
         run: |
           ids=$(aws ec2 describe-instances \
             --filters Name=tag:aws:cloudformation:stack-name,Values=dameokja-stage \
-                      Name=tag:aws:cloudformation:logical-id,Values=DbInstance,RedisInstance \
+                      Name=tag:aws:cloudformation:logical-id,Values=DbInstance,StandbyInstance,RedisInstance \
                       Name=instance-state-name,Values=pending,running,stopping,stopped \
             --query 'Reservations[].Instances[].InstanceId' --output text)
           echo "DB·Redis: $ids"

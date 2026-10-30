@@ -291,6 +291,17 @@ Resources:
       Tags:
         - { Key: Name, Value: dameokja-stage-db }
 
+  # Standby → Primary 복제·CLONE(3306). 같은 보안 그룹 안에서만 허용 (#120)
+  DbReplicationIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref DbSecurityGroup
+      Description: DB standby to primary
+
   # AI Task → DB 서버 PostgreSQL(5432). 같은 서버의 MySQL과 포트만 다름
   DbPostgresFromAiIngress:
     Type: AWS::EC2::SecurityGroupIngress
@@ -522,7 +533,7 @@ Resources:
           - mkdir -p /var/lib/redis-data
           - if [ -z "$(docker ps -q --filter name=^redis$ --filter ancestor=redis:7.4-alpine)" ]; then docker rm -f redis || true; docker run -d --name redis --restart unless-stopped --network host -v /var/lib/redis-data:/data redis:7.4-alpine redis-server --protected-mode no --appendonly yes; fi
 
-  # --- stage 전용 MySQL 8.4 (Primary 1대). Standby·Replica·Orchestrator는 DB 이중화 작업에서 추가
+  # --- stage 전용 MySQL 8.4. Primary(2b) + Standby(2c, 아래 StandbyInstance). Orchestrator는 DB 이중화 다음 단계에서 추가 (#120)
   # 복제를 붙일 수 있게 처음부터 binlog·GTID를 켬. 계정·스키마는 처음 한 번 Session Manager로 만듦
   DbRole:
     Type: AWS::IAM::Role
@@ -535,6 +546,26 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      # 복제 Association이 복제 계정 비밀번호를 서버 안에서 읽도록 (명령 기록에 비밀번호를 남기지 않음)
+      Policies:
+        - PolicyName: read-db-replication-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref ReplicationSecret
+
+  # 복제 계정(repl) 비밀번호. 사람이 만들지 않고 생성 시 자동으로 정함 (prod #145와 같은 방식)
+  ReplicationSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: dameokja-v2-stage/db-replication
+      GenerateSecretString:
+        PasswordLength: 32
+        # MySQL 기본 비밀번호 정책(대소문자·숫자·특수문자)을 맞추되 셸·SQL 따옴표에 걸리는 문자는 뺌
+        RequireEachIncludedType: true
+        ExcludeCharacters: "'\"`$\\/@%&;|<>(){}[]!*?#~^ "
 
   DbInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -589,6 +620,92 @@ Resources:
           - printf '[mysqld]\nserver_id=2\nlog_replica_updates=ON\nskip_replica_start=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
           - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
           - if [ -n "$changed" ]; then systemctl restart mysqld; fi
+
+  # Primary에 복제 계정과 CLONE 플러그인을 둠. Standby가 처음 한 번 CLONE으로 데이터를 받고 이후 GTID로 복제 (#120)
+  # 10.10.32.0/19 = private 서브넷 A(2b)·B(2c)
+  DbReplicationSourceAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: DbConfigAssociation
+    Properties:
+      AssociationName: dameokja-stage-db-replication-source
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref DbInstance] }
+      Parameters:
+        commands:
+          - set -e
+          - for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 10; done
+          - mysql -uroot -Ne "SELECT 1 FROM information_schema.plugins WHERE plugin_name='clone'" | grep -q 1 || mysql -uroot -e "INSTALL PLUGIN clone SONAME 'mysql_clone.so'"
+          - !Sub PW=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id ${ReplicationSecret} --query SecretString --output text)
+          - mysql -uroot -e "CREATE USER IF NOT EXISTS 'repl'@'10.10.32.0/255.255.224.0' IDENTIFIED BY '$PW'; ALTER USER 'repl'@'10.10.32.0/255.255.224.0' IDENTIFIED BY '$PW'; GRANT REPLICATION SLAVE, BACKUP_ADMIN ON *.* TO 'repl'@'10.10.32.0/255.255.224.0';"
+
+  # --- Standby: Primary와 다른 AZ(private 서브넷 B, 2c)에 두는 승격 대상. 평소에는 읽기 전용으로 GTID 복제만 받음 (#120)
+  # 앱 트래픽은 받지 않음(읽기 분산 없음). 승격은 다음 단계의 Orchestrator가 함
+  StandbyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref DbAmiId
+      InstanceType: !Ref DbInstanceType
+      SubnetId: !Ref PrivateSubnetB
+      SecurityGroupIds: [!Ref DbSecurityGroup]
+      IamInstanceProfile: !Ref DbInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 30, VolumeType: gp3 }
+      # 설정은 아래 Association이 함(Primary에서 UserData 설정이 적용되지 않았던 문제를 피함)
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm
+          dnf install -y mysql-community-server
+          systemctl enable mysqld
+      Tags:
+        - { Key: Name, Value: dameokja-stage-db-standby }
+
+  # prod Replica(#145)와 같은 순서: 설정 → root를 sudo 접속으로 → Primary에서 CLONE → GTID 복제 시작
+  # 승격되면 Primary로 쓰이므로 binlog·log_replica_updates를 켜 둠. 이미 복제 중이면 아무것도 하지 않음
+  StandbyAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: DbReplicationSourceAssociation
+    Properties:
+      AssociationName: dameokja-stage-db-standby
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref StandbyInstance] }
+      Parameters:
+        executionTimeout: ["3600"]
+        commands:
+          - set -e; changed=
+          - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
+          - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
+          - printf '[mysqld]\nserver_id=3\nlog_bin=binlog\ngtid_mode=ON\nenforce_gtid_consistency=ON\nlog_replica_updates=ON\ndefault_time_zone=+09:00\nread_only=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
+          - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
+          - if systemctl is-active -q mysqld; then [ -z "$changed" ] || systemctl restart mysqld; else systemctl start mysqld; fi
+          - waitdb() { for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && return 0; sleep 10; done; return 1; }
+          # 새로 설치한 MySQL은 root가 임시 비밀번호 상태라 Primary처럼 sudo 접속(auth_socket)으로 바꿈. CLONE 뒤에는 Primary 계정이 그대로 옴
+          - "if ! mysql -uroot -e 'SELECT 1' >/dev/null 2>&1; then for i in $(seq 1 30); do grep -q 'temporary password' /var/log/mysqld.log && break; sleep 10; done; TMP=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}'); R=Aa1-$(openssl rand -hex 16); mysql -uroot -p\"$TMP\" --connect-expired-password -e \"ALTER USER root@localhost IDENTIFIED BY '$R'\"; mysql -uroot -p\"$R\" -e \"INSTALL PLUGIN auth_socket SONAME 'auth_socket.so'; ALTER USER root@localhost IDENTIFIED WITH auth_socket;\"; fi"
+          - waitdb
+          - if mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -q 'Source_Host'; then mysql -uroot -e 'SET PERSIST super_read_only=ON'; echo '이미 복제 중'; exit 0; fi
+          - !Sub PW=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id ${ReplicationSecret} --query SecretString --output text)
+          - mysql -uroot -Ne "SELECT 1 FROM information_schema.plugins WHERE plugin_name='clone'" | grep -q 1 || mysql -uroot -e "INSTALL PLUGIN clone SONAME 'mysql_clone.so'"
+          - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; SET GLOBAL clone_valid_donor_list='${DbInstance.PrivateIp}:3306'; CLONE INSTANCE FROM 'repl'@'${DbInstance.PrivateIp}':3306 IDENTIFIED BY '$PW';\" || true"
+          - sleep 20; systemctl is-active -q mysqld || systemctl start mysqld; waitdb
+          - mysql -uroot -e 'USE app' || { echo 'CLONE 실패(app 스키마 없음)'; exit 1; }
+          - !Sub "mysql -uroot -e \"SET GLOBAL super_read_only=OFF; CHANGE REPLICATION SOURCE TO SOURCE_HOST='${DbInstance.PrivateIp}', SOURCE_USER='repl', SOURCE_PASSWORD='$PW', SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET PERSIST super_read_only=ON;\""
+          - sleep 10; mysql -uroot -e 'SHOW REPLICA STATUS\G' | grep -E 'Replica_(IO|SQL)_Running:|Seconds_Behind_Source|Last_.*Error:'
+
+  # --- BE가 DB를 찾는 고정 이름: db.stage.dameokja.internal (TTL 5초). 아래 PrivateNamespace의 사설 호스팅 영역에 둠 (#120)
+  # 장애조치 때 Orchestrator 훅이 이 레코드를 새 Primary IP로 바꿈. 템플릿 값(DbInstance IP)이 바뀌지 않으면 스택 업데이트가 되돌리지 않음
+  DbDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !GetAtt PrivateNamespace.HostedZoneId
+      Name: db.stage.dameokja.internal.
+      Type: A
+      TTL: "5"
+      ResourceRecords: [!GetAtt DbInstance.PrivateIp]
 
   # AI용 PostgreSQL 16을 MySQL과 같은 DB 서버에 둠 (dev는 AI 서버에 직접 설치). 메모리 상한 shared_buffers 512MB
   # 계정 비밀번호는 SSM /dameokja-v2-stage-ai/POSTGRES_PASSWORD를 서버 안에서 읽음(명령 기록에 남기지 않음). 스키마·기준 데이터는 dev에서 따로 옮김
@@ -910,6 +1027,7 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${DbInstance}"
                   - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${RedisInstance}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${StandbyInstance}"
               - Effect: Allow
                 Action:
                   - application-autoscaling:RegisterScalableTarget
@@ -1100,3 +1218,5 @@ Outputs:
     Value: !Ref DbInstance
   DbPrivateIp:
     Value: !GetAtt DbInstance.PrivateIp
+  StandbyPrivateIp:
+    Value: !GetAtt StandbyInstance.PrivateIp
