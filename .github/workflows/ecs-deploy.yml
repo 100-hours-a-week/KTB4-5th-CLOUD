@@ -160,3 +160,49 @@ jobs:
                  exit 1 ;;
             esac
           done
+      # blue/green은 기존 Task 묶음을 한꺼번에 꺼서 남은 Task가 여러 서버에 흩어지고, ECS는 빈 서버만 줄여 서버가 남음 (#189)
+      # 기존 Task가 다 내려간 뒤, Task를 다른 서버로 모두 옮길 수 있는 서버 하나를 DRAINING으로 바꿔 비움
+      # 빈 서버는 Capacity Provider 종료 보호(#187) 덕분에 그 서버만 축소됨. 실패해도 배포 결과에는 영향 없음
+      - name: 흩어진 Task 모으기
+        if: inputs.env == 'prod' && steps.register.outputs.service-exists == 'true'
+        continue-on-error: true
+        run: |
+          for i in $(seq 1 40); do
+            stopped=$(aws ecs list-tasks --cluster "$CLUSTER" --desired-status STOPPED --query taskArns --output text)
+            left=0
+            [ -z "$stopped" ] || left=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $stopped \
+              --query "length(tasks[?lastStatus!='STOPPED'])" --output text)
+            [ "$left" = 0 ] && break
+            echo "내려가는 중인 Task $left개"; sleep 15
+          done
+          cis=$(aws ecs list-container-instances --cluster "$CLUSTER" --status ACTIVE --query containerInstanceArns --output text)
+          aws ecs describe-container-instances --cluster "$CLUSTER" --container-instances $cis > ci.json
+          aws ecs describe-tasks --cluster "$CLUSTER" \
+            --tasks $(aws ecs list-tasks --cluster "$CLUSTER" --desired-status RUNNING --query taskArns --output text) > tasks.json
+          cat > pick.jq <<'EOF'
+          # 입력 $c(describe-container-instances), $t(describe-tasks), $spread(서버마다 1개만 둘 서비스 group). 출력: 비울 컨테이너 인스턴스 ARN, 없으면 ""
+          def res($n): [.remainingResources[] | select(.name == $n) | .integerValue][0];
+          ($t.tasks | map({ci: .containerInstanceArn, g: .group, cpu: (.cpu // "0" | tonumber), mem: (.memory // "0" | tonumber)})) as $tasks
+          | ($c.containerInstances | map(.containerInstanceArn as $a | {arn: $a, cpu: res("CPU"), mem: res("MEMORY"),
+              n: (.runningTasksCount + .pendingTasksCount), gs: [$tasks[] | select(.ci == $a) | .g]})) as $inst
+          | if ($inst | length) < 2 or any($inst[]; .n == 0) then ""
+            else
+              [ $inst | sort_by(.n)[] as $cand
+                | ($tasks | map(select(.ci == $cand.arn)) | sort_by(-.mem)) as $mine
+                # 큰 Task부터 처음 들어가는 서버에 넣어 봄(first-fit). backend는 이미 backend가 있는 서버에는 넣지 않음(#171처럼 한 서버에 몰리지 않게)
+                | (reduce $mine[] as $x ({o: ($inst | map(select(.arn != $cand.arn))), ok: true};
+                    if .ok | not then . else
+                      ([.o | to_entries[] | select(.value.cpu >= $x.cpu and .value.mem >= $x.mem
+                         and (($x.g != $spread) or (.value.gs | index($x.g) | not))) | .key][0]) as $k
+                      | if $k == null then .ok = false
+                        else .o[$k].cpu -= $x.cpu | .o[$k].mem -= $x.mem | .o[$k].gs += [$x.g] end
+                    end)) as $r
+                | select($r.ok) | $cand.arn ] | first // ""
+            end
+          EOF
+          pick=$(jq -n -r --slurpfile c ci.json --slurpfile t tasks.json --arg spread "service:dameokja-$ENV_NAME-backend" \
+            '$c[0] as $c | $t[0] as $t | '"$(cat pick.jq)")
+          jq -r '.containerInstances[] | "  \(.ec2InstanceId): Task \(.runningTasksCount)개"' ci.json
+          if [ -z "$pick" ]; then echo "비울 서버 없음(빈 서버가 이미 있거나 옮길 자리가 없음)"; exit 0; fi
+          aws ecs update-container-instances-state --cluster "$CLUSTER" --container-instances "$pick" --status DRAINING \
+            --query 'containerInstances[].[ec2InstanceId,status]' --output text
