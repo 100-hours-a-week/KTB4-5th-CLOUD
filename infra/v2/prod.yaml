@@ -809,8 +809,11 @@ Resources:
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
       MinSize: !Ref MinSize
       MaxSize: !Ref MaxSize
+      # 아래 ManagedTerminationProtection의 전제. 새 서버는 축소 보호 상태로 뜨고, ECS가 Task가 없을 때만 보호를 풂 (#187)
+      NewInstancesProtectedFromScaleIn: true
 
   # Task를 올릴 자리가 모자라면 ECS가 ASG 인스턴스 수를 늘리고, 남으면 줄임 (min~max 안에서)
+  # 축소할 때 Task가 있는 서버는 고르지 않음. 꺼져 있을 때 빈 서버 대신 Task가 있는 서버가 종료된 적 있음(10/29 측정 중, 10/31) (#187)
   CapacityProvider:
     Type: AWS::ECS::CapacityProvider
     Properties:
@@ -819,7 +822,7 @@ Resources:
         ManagedScaling:
           Status: ENABLED
           TargetCapacity: 100
-        ManagedTerminationProtection: DISABLED
+        ManagedTerminationProtection: ENABLED
 
   ClusterCapacityProviders:
     Type: AWS::ECS::ClusterCapacityProviderAssociations
