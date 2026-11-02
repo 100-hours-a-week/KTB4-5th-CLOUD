@@ -14,6 +14,9 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
   DbSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
+  # prod AI Task 보안 그룹. 격리된 서버에서도 같은 서버의 AI용 PostgreSQL(5432)은 계속 쓰게 함 (#197)
+  AiSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
   DbHostedZoneId:
     Type: String
   PrimaryInstanceId:
@@ -52,7 +55,8 @@ Resources:
       SourceSecurityGroupId: !Ref OrchestratorSecurityGroup
       Description: orchestrator to MySQL
 
-  # 장애조치 때 기존 Primary에 붙이는 격리 보안 그룹. 앱·복제 접속은 막고 Orchestrator만 허용(상태 확인용)
+  # 장애조치 때 기존 Primary에 붙이는 격리 보안 그룹. MySQL(3306)은 Orchestrator만 허용(상태 확인용)해 앱·복제 접속을 막음
+  # 같은 서버의 AI용 PostgreSQL(5432)은 MySQL 장애조치와 상관없으므로 AI에서 계속 접속하게 둠 (#197)
   # 보안 그룹을 바꿔도 이미 맺어진 연결은 바로 끊기지 않으므로 훅에서 super_read_only도 함께 켬
   DbFencedSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -61,6 +65,7 @@ Resources:
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref OrchestratorSecurityGroup }
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref AiSecurityGroupId }
       Tags:
         - { Key: Name, Value: dameokja-prod-db-fenced }
 
