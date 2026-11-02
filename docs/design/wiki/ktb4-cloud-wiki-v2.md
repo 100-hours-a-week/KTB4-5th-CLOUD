@@ -1,5 +1,14 @@
 # 다먹자 v2 인프라 위키 — 4단계: 트래픽 급증 대비 인프라 확장 및 Auto Scaling 설계
 
+## 설계 변경 이력
+
+- **2026-10-13 개정**: v2 DB는 M7i 계열·AMD64(x86-64)를 사용한다. 소프트웨어·운영 도구의 호환성과 향후 확장을 고려해 채택했다. M7i와 M7a의 성능 비교는 부하 검증에서 확인한다. 인스턴스 크기는 부하·장애 시 잔여 용량·비용 검증 후 확정한다. [AWS M7i 사양](https://aws.amazon.com/ec2/instance-types/m7i/)
+
+- **2026-10-12 개정**: Read Replica를 1대에서 2대로 늘려 AZ별로 배치한다. Primary 1대와 Standby 1대는 유지한다.
+- 비용 절감보다 장애 시 읽기 경로 유지와 승격된 Primary의 과부하 방지를 우선한다. 추가 비용과 잔여 Replica 처리 용량 검증이 필요하다.
+- 설계 결정이며 구현·무중단·AZ 장애 복구가 검증되었다는 뜻은 아니다. 기존 비용 수치는 당시 가정의 비교 자료이며 현재 4대 구성의 실제 견적은 재산정한다.
+- [변경 이유](../인프라%20설계%20의사결정%20근거.md#db-가용성-설계-개정-2026-10-12) · [이전 및 검증 절차](../../implementation/v2%20데이터베이스%20마이그레이션%20계획.md)
+
 > KTB 4조 다먹자 팀의 v1 인프라 설계 문서입니다. 이 문서는 **4단계(트래픽 급증 대비 인프라 확장 및 Auto Scaling 설계)** 만 다룹니다. 1단계(EC2 + Docker Compose 기반 초기 배포)는 `ktb4-cloud-wiki-v1.md`, 2단계(CI)는 `ktb4-cloud-wiki-ci.md`, 3단계(CD)는 `ktb4-cloud-wiki-cd.md`를 참고하세요.
 > **GitHub Wiki에 그대로 옮겨지는 원본**으로, 결과를 바로 파악할 수 있도록 **상황 → 결론** 위주로 작성합니다. 상세 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`, 트래픽 가정 산출 과정은 `인프라 설계 작업노트.md`를 참고하세요.
 
@@ -25,6 +34,8 @@
 
 ## 전체 아키텍처 개요
 
+> **현재 구축 상태:** 아래 그림은 목표 설계다. 실제 dev·stage·prod의 구성과 가동 상태는 [v2 환경별 구축 아키텍처](../v2%20환경별%20구축%20아키텍처.md)를 참고한다. 2026-10-22 조회 기준 stage·prod DB는 각각 한 대이며, 아래의 DB 이중화·Read Replica·Orchestrator 구성이 모두 배포된 것은 아니다.
+
 아래는 16-22번 결정을 종합한 v2 목표 아키텍처 다이어그램. 각 구성요소 옆 괄호 숫자는 해당 결정을 다룬 섹션 번호(세부 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`의 같은 번호 참고).
 
 ```mermaid
@@ -45,9 +56,11 @@ flowchart TB
     subgraph DB["MySQL 자체구축 — Multi-AZ + Read Replica (19)"]
         Primary[("Primary — Write (AZ-a)")]
         Standby[("Standby — Failover 대기 (AZ-b)")]
-        Replica[("Read Replica — Read")]
+        Replica[("Read Replica A — Read (AZ-a)")]
+        ReplicaB[("Read Replica B — Read (AZ-b)")]
         Primary -.동기/준동기 복제.-> Standby
         Primary -.비동기 복제.-> Replica
+        Primary -.비동기 복제.-> ReplicaB
     end
 
     Orch["Orchestrator<br/>장애 감지·승격 자동화(22)"]
@@ -64,9 +77,11 @@ flowchart TB
     App1 -."SSE 연결 없을 시 발송 요청".-> Push
     ASG -->|Write| Primary
     ASG -->|Read| Replica
+    ASG -->|Read| ReplicaB
     Orch -.모니터링.-> Primary
     Orch -.모니터링.-> Standby
     Orch -.모니터링.-> Replica
+    Orch -.모니터링.-> ReplicaB
     Orch =="장애 시 승격"==> Standby
 ```
 
@@ -160,9 +175,9 @@ flowchart TB
 
 - **상황**: 16번에서 DB의 읽기 트래픽을 Read Replica로 분산하기로 방향은 정했지만, 이를 관리형 서비스(RDS)로 전환할지 v1처럼 EC2에 직접 구축(자체구축)할지, 그리고 가용성(Multi-AZ)은 어떻게 확보할지는 아직 정하지 않음.
 
-- **결론**: v1의 EC2 직접 구동 MySQL 구조를 유지하며 **Multi-AZ(자체구축 Standby) + Read Replica**로 확장(16번 결론과 연결, RDS는 비용 검토 후 배제) — 컴퓨트만 비교하면 자체구축이 RDS보다 월 약 21% 저렴한데, 이 격차를 상쇄하려면 월 약 1,000GB 수준의 AZ 간 복제 트래픽이 필요한 반면 실제 예상 복제 트래픽은 월 약 0.8GB에 그쳐 RDS의 무료 복제 혜택이 사실상 작동하지 않음(상세 계산은 의사결정 근거 문서 19번 참고). 단, 클라우드 인프라팀의 DB 운영 부담이 과중해지면 RDS 도입을 다시 고려
+- **결론**: v1의 EC2 직접 구동 MySQL 구조를 유지하며 **Multi-AZ(자체구축 Standby) + Read Replica**로 확장(16번 결론과 연결, RDS는 비용 검토 후 배제) — 서울 리전 단가로 Orchestrator 인스턴스까지 포함해 비교해도 자체구축이 RDS보다 월 약 49-51% 저렴한데, 이 격차를 상쇄하려면 월 약 2,900-4,000GB 수준의 AZ 간 복제 트래픽이 필요한 반면 실제 예상 복제 트래픽은 월 약 0.8GB에 그쳐 RDS의 무료 복제 혜택이 사실상 작동하지 않음(상세 계산은 의사결정 근거 문서 19번 참고). 단, 클라우드 인프라팀의 DB 운영 부담이 과중해지면 RDS 도입을 다시 고려
 
-  DB 구조는 18번 목표 아키텍처 다이어그램의 DB 서브그래프 참고(Primary — Write / Standby — Failover 대기 / Read Replica — Read, Primary→Standby 동기·준동기 복제, Primary→Replica 비동기 복제)
+  DB는 Primary 1대 + Standby 1대 + Read Replica 2대(총 4대)로 구성한다. Replica는 AZ별 1대씩 배치하고 각각 Primary에서 직접 복제한다. DB 구조는 18번 목표 아키텍처 다이어그램의 DB 서브그래프 참고(Primary — Write / Standby — Failover 대기 / Read Replica — Read, Primary→Standby 동기·준동기 복제, Primary→Replica 비동기 복제)
 
 - **이유·근거·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(19번) 참고.
 
@@ -205,10 +220,10 @@ flowchart TB
 
 - **결론**: 컴포넌트별 장애 시나리오와 대응을 정리한 결과:
   - **해결**: 앱서버 인스턴스 장애(ALB 헬스체크+ASG 대체 인스턴스 기동), 앱서버 AZ 분산(멀티 AZ 배치로 AZ 전체 장애에도 트래픽 지속 처리), ALB·S3 장애(AWS 관리형)
-  - **부분 해결**: AZ 전체 장애 시 DB — Primary/Standby가 서로 다른 AZ(19번)라 쓰기는 Standby로 failover 가능하지만, Read Replica가 Primary와 같은 AZ에 있어 함께 사라짐. DB Primary 장애조치 자동화(아래 항목)는 Primary 한 대만 죽는 상황을 전제로 한 설계라 AZ 전체 장애는 이번 설계 범위 밖 — 상세는 22번 근거 문서 참고
+  - **설계 개정·검증 필요**: AZ별 Read Replica 1대씩 총 2대로 배치한다. AZ-a 장애 시 Standby 승격과 AZ-b Replica로 읽기 전환을 목표로 한다. Orchestrator 가용성, 기존 Primary 쓰기 차단, 복제 소스 재연결, 클라이언트 재연결과 잔여 용량은 리허설로 검증한다.
   - **신규 정의**: Refresh Token 탈취 감지 시 해당 유저의 모든 활성 세션을 로그아웃 처리하는 절차를 17번의 RTR 설계에 이어 추가함. 또한 18번의 ECS EC2 launch type에서 한 호스트에 여러 Task가 자원을 공유하는 구조로 인해 생기는 Noisy Neighbor 문제에 대응하기 위해, 컨테이너별 memory·memoryReservation 설정 계획을 추가함(수치는 부하테스트 이후 산정)
-  - **DB Primary 장애조치 자동화**: 자동 failover 도구로 **Orchestrator**를 채택 — 쿼럼 기반 장애 판단으로 split-brain 위험을 줄일 수 있다는 근거를 바탕으로 함(후보 비교·근거는 22번 참고). Orchestrator 자체의 HA는 **Semi HA**, 장애 후 클라이언트 리다이렉션은 **VIP/DNS** 방식으로 결정(ProxySQL은 비용·운영 부담으로 v2에서 배제, v3 후보로 유지) — 후보 비교·근거는 22번 참고
-  - **보류(적극적 대응 없이 감수)**: Read Replica 장애 시 Primary·Standby 어디로도 읽기를 돌리지 않고 성능 저하를 감수하기로 정함 — 읽기:쓰기 비율이 높은 트래픽 구조상 Primary를 쓰기 전용으로 유지하는 것이 우선이라는 판단. Redis 이중화도 장애 영향 범위(로그인 갱신·로그아웃·SSE Pub/Sub)가 제한적이라 판단해 별도 가용성 처리 없이 단일 인스턴스를 유지하기로 결정
+  - **DB Primary 장애조치 자동화**: v2 가용성 목표 99.9%(월 오류 예산 약 43분)는 수동 failover로 맞추기 어려워 자동 failover 도구로 **Orchestrator**를 채택 — Replica의 복제 상태까지 확인하는 장애 판단으로 split-brain 위험을 줄일 수 있다는 근거를 바탕으로 함(후보 비교·근거는 22번 참고). Orchestrator 자체는 **단일 인스턴스**(ASG로 자동 복구, 운영 중 장애가 실제로 발생하면 2대로 확장), 장애 후 클라이언트 리다이렉션은 **VIP/DNS** 방식으로 결정(ProxySQL은 비용·운영 부담으로 v2에서 배제, v3 후보로 유지) — 후보 비교·근거는 22번 참고
+  - **Read Replica 장애 대응**: 정상 Replica로 읽기를 전환하며 Primary·Standby에 읽기를 집중시키지 않는다. 라우팅과 Replica 1대의 부하 처리 용량은 검증 전이다. Redis는 기존 결정대로 단일 인스턴스를 유지한다.
   - 신규 배포로 인한 장애 대응은 23번(CI/CD 변경사항 설계)에서 이어서 다룸
 
 - **이유·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(22번) 참고.
