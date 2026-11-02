@@ -53,7 +53,7 @@
 
 ## 4. 근거 자료
 
-- [dev Compose](../../v1/dev/compose.yaml), [prod Compose](../../v1/prod/compose.yaml)
+- dev Compose(v2 dev 전환 때 삭제, 커밋 7c7940c), [prod Compose](../../v1/prod/compose.yaml)
 - [v1 배포 스크립트](../../v1/scripts/deploy-v1.sh)
 - FE·BE 저장소의 `.github/workflows/v1-cicd.yml`
 - [CloudWatch 적용 기록](../observability/cloudwatch-agent-setup.md)

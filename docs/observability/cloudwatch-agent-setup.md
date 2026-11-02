@@ -302,3 +302,10 @@ ls -l /var/log/dameokja/nginx/      # 크기가 0보다 커지면 정상
 3. 알람 → Discord 전달 테스트, 대시보드 수치 확인
 4. nginx 연결 수(stub_status) 수집 방식 결정
 5. 보류: Push 발송 결과(`event=web_push_send`) 집계 — 아침 알림 SLI 방식 결정 후
+
+## 8. v2에서 달라진 점
+
+> 기준: 2026-11-02. 이 문서는 v1 EC2(Compose) 서버의 Agent 적용 기록이다.
+
+- v2 dev는 같은 Agent 설정을 SSM Association(`infra/v2/dev.yaml`의 `CloudWatchAgentAssociation`)으로 적용한다.
+- v2 stage·prod는 nginx·호스트 Agent 대신 `awslogs` 로그 드라이버와 Container Insights를 쓰고, prod는 backend·AI Task의 사이드카 Agent가 HikariCP·AI 지표를 모은다(#121, #137, #142).

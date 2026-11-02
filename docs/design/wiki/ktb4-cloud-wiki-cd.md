@@ -9,6 +9,7 @@
 12. [배포 전략 결정](#12-배포-전략-결정)
 13. [배포 검증 및 Rollback 설계](#13-배포-검증-및-rollback-설계)
 14. [배포 보안 설계](#14-배포-보안-설계)
+15. [설계와 달라진 점](#15-설계와-달라진-점)
 
 ---
 
@@ -143,3 +144,15 @@ flowchart TB
   - Application Secret을 배포마다 GitHub Actions → SSH → 서버로 전달하면, 그 경로 자체가 반복적인 노출 지점이 됨 — SSH 세션이 탈취되거나 스크립트 실수로 로그에 값이 남으면 배포 횟수만큼 위험이 반복됨. 최초 1회만 심어두고 이후엔 건드리지 않는 방식에 비하면 보안 표면은 넓어지지만, Secret 변경이 자동으로 반영되는 실무 편의와 1단계 결정과의 일관성을 우선한 선택.
   - 팀원마다 IAM 사용자(또는 역할)를 만들어 관리해야 해서, 팀원이 늘거나 빠질 때마다 권한을 새로 부여·회수하는 관리 비용이 새로 생김 — 이전의 "IAM을 아예 쓰지 않는다"는 선택보다는 관리할 대상이 하나 늘어나는 셈. 다만 권한 범위를 CloudWatch 조회로만 좁혀뒀기 때문에, 계정 하나가 유출되더라도 로그 열람 이상의 피해(배포 실행, 다른 리소스 변경 등)로는 이어지지 않음.
 - **추후 고려할 요소**: SSH Key 주기적 교체(Rotation), 보안 그룹에서 GitHub Actions Runner IP 대역만 22번 포트를 허용하는 IP allowlist, Vault/step-ca 등을 이용한 단기 유효 SSH 인증서 발급, 배포 전용 저권한 계정 분리 등은 지금 단계에서는 다루지 않음 — 13번의 Smoke Test와 같은 맥락으로, 서비스가 커지거나 실제 필요성이 생기면 그때 검토.
+
+### 15. 설계와 달라진 점
+
+> 기준: 2026-11-02. v1 SSH 배포는 dev가 2026-10-11, prod가 2026-10-19에 v2 ECS 배포로 바뀌어 지금은 쓰지 않는다. v2 CD는 [v2 위키 23번](ktb4-cloud-wiki-v2.md#23-cicd-변경사항-설계)을 따른다.
+
+| 항목 | 설계 | 실제 | 이유·경과 |
+|---|---|---|---|
+| 배포 전략(10·12번) | Rolling Update | v1: 컨테이너 교체 + 헬스체크 실패 시 이전 이미지·설정 복구. v2: backend·frontend는 ECS Native Blue/Green, AI는 Rolling | v1은 복제본이 하나라 롤링이 성립하지 않음 |
+| Rollback(13번) | 직전 Git SHA 태그 이미지로 재기동 | v1: 배포 전 이미지 digest와 설정을 저장해 두고 되돌림. v2: 회로 차단기가 이전 태스크 정의로 되돌림 | 태그는 다시 지정될 수 있어 digest로 고정 |
+| Registry Credential(14번) | GHCR Public이라 불필요 | v1은 GitHub Actions 토큰으로 로그인 후 임시 인증 정보 삭제, v2는 Secrets Manager의 GHCR 인증 정보 | GHCR 패키지를 의도적으로 비공개로 둠. GitHub Actions가 이미지를 올리고 배포를 호출하는 흐름은 설계 그대로 |
+| 배포 경로·보안(11·14번) | GitHub Actions → SSH | v2는 SSH 없이 GitHub OIDC로 받은 AWS 역할이 ECS API를 부름. 서버 접속은 SSM Session Manager | ECS로 바뀌며 배포 대상이 서버가 아니라 서비스가 됨 |
+| Prod 승인(10번) | 수동 승인 후 배포 | 앱 CI가 stage에 자동 배포 → CLOUD GitHub Environments `prod` 승인 → 같은 digest로 prod 배포 | v2 전환(#83~#85, #92) |

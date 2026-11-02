@@ -1,0 +1,1548 @@
+{
+  "capturedAtKST": "2026-11-02T21:20:21+09:00",
+  "account": "906462447513",
+  "region": "ap-northeast-2",
+  "environments": {
+    "dev": {
+      "stackStatus": "UPDATE_COMPLETE",
+      "parameters": {
+        "VpcId": "vpc-0dc397a47a708f727",
+        "AiInstanceType": "t3.small",
+        "HostedZoneId": "Z08470472LJSW357027J9",
+        "SubnetId": "subnet-0bad53d02a1be9048",
+        "S3BucketName": "dameokja-906462447513-ap-northeast-2-an",
+        "InstanceType": "t3.medium",
+        "S3UploadPrefix": "image/",
+        "AmiId": "ami-01c8e9f48048c29a4",
+        "DbSecurityGroupId": "sg-039d80e4bb3d2aa4d"
+      },
+      "resourceTypeCounts": {
+        "AWS::SSM::Association": 4,
+        "AWS::CloudWatch::Dashboard": 1,
+        "AWS::EC2::Instance": 2,
+        "AWS::EC2::SecurityGroup": 2,
+        "AWS::ECS::Service": 5,
+        "AWS::IAM::Role": 5,
+        "AWS::ECS::Cluster": 1,
+        "AWS::EC2::SecurityGroupIngress": 1,
+        "AWS::Route53::RecordSet": 2,
+        "AWS::IAM::InstanceProfile": 1,
+        "AWS::SSM::Parameter": 1,
+        "AWS::IAM::ManagedPolicy": 1
+      },
+      "resources": [
+        {
+          "LogicalResourceId": "AiCloudWatchAgentAssociation",
+          "PhysicalResourceId": "dad7284a-8b3d-47d1-a1e2-1e31fcc08a20",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "AiDashboard",
+          "PhysicalResourceId": "dameokja-dev-ai",
+          "ResourceType": "AWS::CloudWatch::Dashboard"
+        },
+        {
+          "LogicalResourceId": "AiInstance",
+          "PhysicalResourceId": "i-0572ef1adecaf0855",
+          "ResourceType": "AWS::EC2::Instance"
+        },
+        {
+          "LogicalResourceId": "AiSecurityGroup",
+          "PhysicalResourceId": "sg-0edf19c9df5f05348",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AiService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-dev/dameokja-dev-ai",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "AiTaskRole",
+          "PhysicalResourceId": "dameokja-dev-ai-task",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "BackendService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-dev/dameokja-dev-backend",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "BackendTaskRole",
+          "PhysicalResourceId": "dameokja-dev-backend-task",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "CloudWatchAgentAssociation",
+          "PhysicalResourceId": "79af7540-effd-4da8-864c-6af2f4d82716",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "Cluster",
+          "PhysicalResourceId": "dameokja-dev",
+          "ResourceType": "AWS::ECS::Cluster"
+        },
+        {
+          "LogicalResourceId": "DbIngressFromApp",
+          "PhysicalResourceId": "sgr-084cd7aefca987903",
+          "ResourceType": "AWS::EC2::SecurityGroupIngress"
+        },
+        {
+          "LogicalResourceId": "DevDomainV2Record",
+          "PhysicalResourceId": "dev.dameokja.com",
+          "ResourceType": "AWS::Route53::RecordSet"
+        },
+        {
+          "LogicalResourceId": "DnsRecord",
+          "PhysicalResourceId": "v2.dameokja.com",
+          "ResourceType": "AWS::Route53::RecordSet"
+        },
+        {
+          "LogicalResourceId": "FrontendService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-dev/dameokja-dev-frontend",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "GitHubEcsDeployRole",
+          "PhysicalResourceId": "dameokja-dev-github-ecs-deploy",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "Instance",
+          "PhysicalResourceId": "i-035563477d331b380",
+          "ResourceType": "AWS::EC2::Instance"
+        },
+        {
+          "LogicalResourceId": "InstanceProfile",
+          "PhysicalResourceId": "dameokja-dev-InstanceProfile-GxnvWaMdmGZE",
+          "ResourceType": "AWS::IAM::InstanceProfile"
+        },
+        {
+          "LogicalResourceId": "InstanceRole",
+          "PhysicalResourceId": "dameokja-dev-InstanceRole-YSo5cE9McbDK",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "InstanceSecurityGroup",
+          "PhysicalResourceId": "sg-088be0c32f8930f21",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "LogDirAssociation",
+          "PhysicalResourceId": "a891255a-4cb2-4f5b-883c-ae1641a4df4b",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "NginxConfParameter",
+          "PhysicalResourceId": "/dameokja-v2-dev/nginx/default.conf",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "NginxService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-dev/dameokja-dev-nginx",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "RedisService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-dev/dameokja-dev-redis",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "TaskExecutionRole",
+          "PhysicalResourceId": "dameokja-dev-ecs-task-execution",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "TeamSsmAccessPolicy",
+          "PhysicalResourceId": "arn:aws:iam::906462447513:policy/dameokja-v2-dev-ssm-team",
+          "ResourceType": "AWS::IAM::ManagedPolicy"
+        },
+        {
+          "LogicalResourceId": "TimezoneAssociation",
+          "PhysicalResourceId": "9839ff55-909c-4457-92fe-45893a32414e",
+          "ResourceType": "AWS::SSM::Association"
+        }
+      ],
+      "services": [
+        {
+          "name": "dameokja-dev-redis",
+          "desired": 1,
+          "running": 1,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-dev-redis:1",
+          "subnets": [],
+          "placementStrategy": [],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "redis",
+              "cpu": 0,
+              "memory": null,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": "192"
+        },
+        {
+          "name": "dameokja-dev-frontend",
+          "desired": 1,
+          "running": 1,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-dev-frontend:77",
+          "subnets": [],
+          "placementStrategy": [],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "frontend",
+              "cpu": 0,
+              "memory": null,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": "768"
+        },
+        {
+          "name": "dameokja-dev-ai",
+          "desired": 1,
+          "running": 1,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-dev-ai:55",
+          "subnets": [],
+          "placementStrategy": [],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "ai",
+              "cpu": 0,
+              "memory": null,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": "1536"
+        },
+        {
+          "name": "dameokja-dev-backend",
+          "desired": 1,
+          "running": 1,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-dev-backend:189",
+          "subnets": [],
+          "placementStrategy": [],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "backend",
+              "cpu": 0,
+              "memory": null,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": "2560"
+        },
+        {
+          "name": "dameokja-dev-nginx",
+          "desired": 1,
+          "running": 1,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-dev-nginx:1",
+          "subnets": [],
+          "placementStrategy": [],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "nginx",
+              "cpu": 0,
+              "memory": null,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": "256"
+        }
+      ],
+      "instances": [
+        {
+          "id": "i-035563477d331b380",
+          "name": "dameokja-dev-v2",
+          "type": "t3.medium",
+          "az": "ap-northeast-2b",
+          "state": "running",
+          "privateIp": "172.31.19.21"
+        },
+        {
+          "id": "i-0572ef1adecaf0855",
+          "name": "dameokja-dev-v2-ai",
+          "type": "t3.small",
+          "az": "ap-northeast-2b",
+          "state": "running",
+          "privateIp": "172.31.16.150"
+        }
+      ]
+    },
+    "stage": {
+      "stackStatus": "UPDATE_COMPLETE",
+      "parameters": {
+        "PrivateSubnetACidr": "10.10.32.0/20",
+        "PublicSubnetBCidr": "10.10.16.0/20",
+        "DomainName": "stage.dameokja.com",
+        "HostedZoneId": "Z08470472LJSW357027J9",
+        "AzB": "ap-northeast-2c",
+        "DbInstanceType": "m7i.large",
+        "AzA": "ap-northeast-2b",
+        "PublicSubnetACidr": "10.10.0.0/20",
+        "MaxSize": "4",
+        "MinSize": "2",
+        "PrivateSubnetBCidr": "10.10.48.0/20",
+        "DbAmiId": "ami-05f7192721061f4e2",
+        "VpcCidr": "10.10.0.0/16",
+        "RedisInstanceType": "t3.small",
+        "S3BucketName": "dameokja-906462447513-ap-northeast-2-an",
+        "InstanceType": "m7i.large",
+        "S3UploadPrefix": "image/stage/",
+        "Power": "on",
+        "AmiId": "ami-03fe595bfa08c00b8"
+      },
+      "resourceTypeCounts": {
+        "AWS::SSM::Parameter": 3,
+        "AWS::ServiceDiscovery::Service": 1,
+        "AWS::Logs::LogGroup": 3,
+        "AWS::EC2::SecurityGroup": 7,
+        "AWS::ECS::Service": 3,
+        "AWS::IAM::Role": 8,
+        "AWS::ElasticLoadBalancingV2::LoadBalancer": 1,
+        "AWS::S3::Bucket": 1,
+        "AWS::S3::BucketPolicy": 1,
+        "AWS::AutoScaling::AutoScalingGroup": 1,
+        "AWS::ApplicationAutoScaling::ScalingPolicy": 2,
+        "AWS::ElasticLoadBalancingV2::ListenerRule": 2,
+        "AWS::ApplicationAutoScaling::ScalableTarget": 2,
+        "AWS::ElasticLoadBalancingV2::TargetGroup": 4,
+        "AWS::ECS::CapacityProvider": 1,
+        "AWS::CertificateManager::Certificate": 1,
+        "AWS::ECS::Cluster": 1,
+        "AWS::ECS::ClusterCapacityProviderAssociations": 1,
+        "AWS::SSM::Association": 3,
+        "AWS::EC2::Instance": 2,
+        "AWS::IAM::InstanceProfile": 2,
+        "AWS::EC2::SecurityGroupIngress": 1,
+        "AWS::Route53::RecordSet": 1,
+        "AWS::ElasticLoadBalancingV2::Listener": 2,
+        "AWS::EC2::InternetGateway": 1,
+        "AWS::EC2::VPCGatewayAttachment": 1,
+        "AWS::EC2::LaunchTemplate": 1,
+        "AWS::EC2::EIP": 1,
+        "AWS::EC2::NatGateway": 1,
+        "AWS::EC2::Route": 2,
+        "AWS::ServiceDiscovery::PrivateDnsNamespace": 1,
+        "AWS::EC2::RouteTable": 2,
+        "AWS::EC2::Subnet": 4,
+        "AWS::EC2::SubnetRouteTableAssociation": 4,
+        "AWS::EC2::VPCEndpoint": 1,
+        "AWS::IAM::ManagedPolicy": 1,
+        "AWS::EC2::VPC": 1
+      },
+      "resources": [
+        {
+          "LogicalResourceId": "AiBaseUrlParameter",
+          "PhysicalResourceId": "/dameokja-v2-stage/AI_BASE_URL",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "AiDiscoveryService",
+          "PhysicalResourceId": "srv-dnkf7mxicnbygqs6",
+          "ResourceType": "AWS::ServiceDiscovery::Service"
+        },
+        {
+          "LogicalResourceId": "AiLogGroup",
+          "PhysicalResourceId": "/dameokja/stage/ai",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "AiSecurityGroup",
+          "PhysicalResourceId": "sg-009fa554b71b7db1b",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AiService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-stage/dameokja-stage-ai",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "AiTaskRole",
+          "PhysicalResourceId": "dameokja-stage-ai-task",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "Alb",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:loadbalancer/app/dameokja-stage-alb/4b33865b35bf5490",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        {
+          "LogicalResourceId": "AlbLogBucket",
+          "PhysicalResourceId": "dameokja-stage-alb-logs-906462447513",
+          "ResourceType": "AWS::S3::Bucket"
+        },
+        {
+          "LogicalResourceId": "AlbLogBucketPolicy",
+          "PhysicalResourceId": "dameokja-stage-alb-logs-906462447513",
+          "ResourceType": "AWS::S3::BucketPolicy"
+        },
+        {
+          "LogicalResourceId": "AlbSecurityGroup",
+          "PhysicalResourceId": "sg-09fbd1cf0c1508940",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AppSecurityGroup",
+          "PhysicalResourceId": "sg-071032837aef1cd08",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AutoScalingGroup",
+          "PhysicalResourceId": "dameokja-stage",
+          "ResourceType": "AWS::AutoScaling::AutoScalingGroup"
+        },
+        {
+          "LogicalResourceId": "BackendCpuScalingPolicy",
+          "PhysicalResourceId": "arn:aws:autoscaling:ap-northeast-2:906462447513:scalingPolicy:fbb58057-2346-4746-a1fe-7955c566205a:resource/ecs/service/dameokja-stage/dameokja-stage-backend:policyName/dameokja-stage-backend-cpu",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalingPolicy"
+        },
+        {
+          "LogicalResourceId": "BackendListenerRule",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener-rule/app/dameokja-stage-alb/4b33865b35bf5490/a97242aa49dfab44/14d9d7a1772f68bf",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        {
+          "LogicalResourceId": "BackendLogGroup",
+          "PhysicalResourceId": "/dameokja/stage/backend",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "BackendScalableTarget",
+          "PhysicalResourceId": "service/dameokja-stage/dameokja-stage-backend|ecs:service:DesiredCount|ecs",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalableTarget"
+        },
+        {
+          "LogicalResourceId": "BackendService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-stage/dameokja-stage-backend",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "BackendTargetGroupBlue",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-stage-be-blue/9e4056679ca59ddc",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "BackendTargetGroupGreen",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-stage-be-green/8e450e1e5d7ff514",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "BackendTaskRole",
+          "PhysicalResourceId": "dameokja-stage-backend-task",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "CapacityProvider",
+          "PhysicalResourceId": "dameokja-stage-CapacityProvider-yHmqy9bwi3JY",
+          "ResourceType": "AWS::ECS::CapacityProvider"
+        },
+        {
+          "LogicalResourceId": "Certificate",
+          "PhysicalResourceId": "arn:aws:acm:ap-northeast-2:906462447513:certificate/928528ee-3edc-4ba0-be4d-2dcf95ed42ab",
+          "ResourceType": "AWS::CertificateManager::Certificate"
+        },
+        {
+          "LogicalResourceId": "Cluster",
+          "PhysicalResourceId": "dameokja-stage",
+          "ResourceType": "AWS::ECS::Cluster"
+        },
+        {
+          "LogicalResourceId": "ClusterCapacityProviders",
+          "PhysicalResourceId": "dameokja-stage",
+          "ResourceType": "AWS::ECS::ClusterCapacityProviderAssociations"
+        },
+        {
+          "LogicalResourceId": "DbConfigAssociation",
+          "PhysicalResourceId": "cd2c6619-8133-488a-b9cd-cafe879b5249",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "DbInstance",
+          "PhysicalResourceId": "i-0daa6ac3cc3176c79",
+          "ResourceType": "AWS::EC2::Instance"
+        },
+        {
+          "LogicalResourceId": "DbInstanceProfile",
+          "PhysicalResourceId": "dameokja-stage-DbInstanceProfile-nccxlLaDWHLC",
+          "ResourceType": "AWS::IAM::InstanceProfile"
+        },
+        {
+          "LogicalResourceId": "DbPostgresAssociation",
+          "PhysicalResourceId": "6a6076e1-cfb1-4ed1-9f7f-78cc36e69844",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "DbPostgresFromAiIngress",
+          "PhysicalResourceId": "sgr-0b8fbf0ec8738648e",
+          "ResourceType": "AWS::EC2::SecurityGroupIngress"
+        },
+        {
+          "LogicalResourceId": "DbRole",
+          "PhysicalResourceId": "dameokja-stage-DbRole-Qx05dc5bREuW",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "DbSecurityGroup",
+          "PhysicalResourceId": "sg-0ac4264f3d57230f0",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "DnsRecord",
+          "PhysicalResourceId": "stage.dameokja.com",
+          "ResourceType": "AWS::Route53::RecordSet"
+        },
+        {
+          "LogicalResourceId": "EcsInfrastructureRole",
+          "PhysicalResourceId": "dameokja-stage-ecs-infrastructure",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "FrontendCpuScalingPolicy",
+          "PhysicalResourceId": "arn:aws:autoscaling:ap-northeast-2:906462447513:scalingPolicy:d8f56849-5989-49da-b767-d2f087c83a16:resource/ecs/service/dameokja-stage/dameokja-stage-frontend:policyName/dameokja-stage-frontend-cpu",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalingPolicy"
+        },
+        {
+          "LogicalResourceId": "FrontendListenerRule",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener-rule/app/dameokja-stage-alb/4b33865b35bf5490/a97242aa49dfab44/7d34eaef5c42b677",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        {
+          "LogicalResourceId": "FrontendLogGroup",
+          "PhysicalResourceId": "/dameokja/stage/frontend",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "FrontendScalableTarget",
+          "PhysicalResourceId": "service/dameokja-stage/dameokja-stage-frontend|ecs:service:DesiredCount|ecs",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalableTarget"
+        },
+        {
+          "LogicalResourceId": "FrontendSecurityGroup",
+          "PhysicalResourceId": "sg-02b21524fdeb3410a",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "FrontendService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-stage/dameokja-stage-frontend",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "FrontendTargetGroupBlue",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-stage-fe-blue/4956e4444229b81a",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "FrontendTargetGroupGreen",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-stage-fe-green/3ba138c9076609b6",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "GitHubEcsDeployRole",
+          "PhysicalResourceId": "dameokja-stage-github-ecs-deploy",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "GitHubPowerRole",
+          "PhysicalResourceId": "dameokja-stage-github-power",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "HttpListener",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener/app/dameokja-stage-alb/4b33865b35bf5490/5eefb98973f12773",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        {
+          "LogicalResourceId": "HttpsListener",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener/app/dameokja-stage-alb/4b33865b35bf5490/a97242aa49dfab44",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        {
+          "LogicalResourceId": "InstanceProfile",
+          "PhysicalResourceId": "dameokja-stage-InstanceProfile-mRaChoaoxfPu",
+          "ResourceType": "AWS::IAM::InstanceProfile"
+        },
+        {
+          "LogicalResourceId": "InstanceRole",
+          "PhysicalResourceId": "dameokja-stage-InstanceRole-d3B9Xwwzd2Qk",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "InstanceSecurityGroup",
+          "PhysicalResourceId": "sg-0b42f376f7530eb28",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "InternetGateway",
+          "PhysicalResourceId": "igw-0ec78514635ec614d",
+          "ResourceType": "AWS::EC2::InternetGateway"
+        },
+        {
+          "LogicalResourceId": "InternetGatewayAttachment",
+          "PhysicalResourceId": "IGW|vpc-0145516a3a1360f36",
+          "ResourceType": "AWS::EC2::VPCGatewayAttachment"
+        },
+        {
+          "LogicalResourceId": "LaunchTemplate",
+          "PhysicalResourceId": "lt-0c74b24a4556d0629",
+          "ResourceType": "AWS::EC2::LaunchTemplate"
+        },
+        {
+          "LogicalResourceId": "NatEip",
+          "PhysicalResourceId": "54.116.215.144",
+          "ResourceType": "AWS::EC2::EIP"
+        },
+        {
+          "LogicalResourceId": "NatGateway",
+          "PhysicalResourceId": "nat-05e3f5545bf568403",
+          "ResourceType": "AWS::EC2::NatGateway"
+        },
+        {
+          "LogicalResourceId": "PrivateDefaultRoute",
+          "PhysicalResourceId": "rtb-0fa4bba9df42c84f1|0.0.0.0/0",
+          "ResourceType": "AWS::EC2::Route"
+        },
+        {
+          "LogicalResourceId": "PrivateNamespace",
+          "PhysicalResourceId": "ns-7ipeoli4u4usdegu",
+          "ResourceType": "AWS::ServiceDiscovery::PrivateDnsNamespace"
+        },
+        {
+          "LogicalResourceId": "PrivateRouteTable",
+          "PhysicalResourceId": "rtb-0fa4bba9df42c84f1",
+          "ResourceType": "AWS::EC2::RouteTable"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetA",
+          "PhysicalResourceId": "subnet-0ba17d72716e485f8",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetARouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-06f8c5582b2ec1ca9",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetB",
+          "PhysicalResourceId": "subnet-06b351c8b0665d5ae",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetBRouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-0a5122b3d60a4a7d9",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "PublicDefaultRoute",
+          "PhysicalResourceId": "rtb-0cb55bcdae6bf3da0|0.0.0.0/0",
+          "ResourceType": "AWS::EC2::Route"
+        },
+        {
+          "LogicalResourceId": "PublicRouteTable",
+          "PhysicalResourceId": "rtb-0cb55bcdae6bf3da0",
+          "ResourceType": "AWS::EC2::RouteTable"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetA",
+          "PhysicalResourceId": "subnet-00fc3dfe25c46c89d",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetARouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-06b6b30389c0de771",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetB",
+          "PhysicalResourceId": "subnet-0a454573a0608b1a1",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetBRouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-0e384f2ca5754a82e",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "RedisDockerAssociation",
+          "PhysicalResourceId": "07832a6d-cc3e-4337-9334-a45daebf3fd3",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "RedisHostParameter",
+          "PhysicalResourceId": "/dameokja-v2-stage/SPRING_DATA_REDIS_HOST",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "RedisInstance",
+          "PhysicalResourceId": "i-04eaa46357865915a",
+          "ResourceType": "AWS::EC2::Instance"
+        },
+        {
+          "LogicalResourceId": "RedisPortParameter",
+          "PhysicalResourceId": "/dameokja-v2-stage/SPRING_DATA_REDIS_PORT",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "RedisSecurityGroup",
+          "PhysicalResourceId": "sg-09e540d35f2113be4",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "S3GatewayEndpoint",
+          "PhysicalResourceId": "vpce-02b6db639051659ee",
+          "ResourceType": "AWS::EC2::VPCEndpoint"
+        },
+        {
+          "LogicalResourceId": "TaskExecutionRole",
+          "PhysicalResourceId": "dameokja-stage-ecs-task-execution",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "TeamSsmAccessPolicy",
+          "PhysicalResourceId": "arn:aws:iam::906462447513:policy/dameokja-v2-stage-ssm-team",
+          "ResourceType": "AWS::IAM::ManagedPolicy"
+        },
+        {
+          "LogicalResourceId": "Vpc",
+          "PhysicalResourceId": "vpc-0145516a3a1360f36",
+          "ResourceType": "AWS::EC2::VPC"
+        }
+      ],
+      "services": [
+        {
+          "name": "dameokja-stage-frontend",
+          "desired": 0,
+          "running": 0,
+          "strategy": "BLUE_GREEN",
+          "taskDefinition": "dameokja-stage-frontend:1",
+          "subnets": [
+            "subnet-0ba17d72716e485f8"
+          ],
+          "placementStrategy": [],
+          "targetGroups": [
+            "dameokja-stage-fe-blue"
+          ],
+          "containers": [
+            {
+              "name": "frontend",
+              "cpu": 0,
+              "memory": 768,
+              "memoryReservation": null,
+              "ports": [
+                3000
+              ]
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": null
+        },
+        {
+          "name": "dameokja-stage-ai",
+          "desired": 0,
+          "running": 0,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-stage-ai:45",
+          "subnets": [
+            "subnet-0ba17d72716e485f8"
+          ],
+          "placementStrategy": [],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "ai",
+              "cpu": 0,
+              "memory": 1536,
+              "memoryReservation": null,
+              "ports": [
+                8000
+              ]
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": null
+        },
+        {
+          "name": "dameokja-stage-backend",
+          "desired": 0,
+          "running": 0,
+          "strategy": "BLUE_GREEN",
+          "taskDefinition": "dameokja-stage-backend:2",
+          "subnets": [
+            "subnet-0ba17d72716e485f8"
+          ],
+          "placementStrategy": [],
+          "targetGroups": [
+            "dameokja-stage-be-blue"
+          ],
+          "containers": [
+            {
+              "name": "backend",
+              "cpu": 0,
+              "memory": 2560,
+              "memoryReservation": null,
+              "ports": [
+                8080
+              ]
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": null
+        }
+      ],
+      "asg": [
+        {
+          "name": "dameokja-stage",
+          "min": 0,
+          "desired": 0,
+          "max": 4,
+          "azs": [
+            "ap-northeast-2b"
+          ],
+          "instances": []
+        }
+      ],
+      "instances": [
+        {
+          "id": "i-04eaa46357865915a",
+          "name": "dameokja-stage-redis",
+          "type": "t3.small",
+          "az": "ap-northeast-2b",
+          "state": "stopped",
+          "privateIp": "10.10.40.126"
+        },
+        {
+          "id": "i-0daa6ac3cc3176c79",
+          "name": "dameokja-stage-db",
+          "type": "m7i.large",
+          "az": "ap-northeast-2b",
+          "state": "stopped",
+          "privateIp": "10.10.41.4"
+        }
+      ]
+    },
+    "prod": {
+      "stackStatus": "UPDATE_COMPLETE",
+      "parameters": {
+        "PrivateSubnetACidr": "10.20.32.0/20",
+        "PublicSubnetBCidr": "10.20.16.0/20",
+        "DomainName": "dameokja.com",
+        "HostedZoneId": "Z08470472LJSW357027J9",
+        "AzB": "ap-northeast-2c",
+        "DbInstanceType": "t3.medium",
+        "AzA": "ap-northeast-2b",
+        "PublicSubnetACidr": "10.20.0.0/20",
+        "MaxSize": "4",
+        "MinSize": "2",
+        "PrivateSubnetBCidr": "10.20.48.0/20",
+        "DbAmiId": "ami-05f7192721061f4e2",
+        "VpcCidr": "10.20.0.0/16",
+        "RedisInstanceType": "t3.small",
+        "S3BucketName": "dameokja-906462447513-ap-northeast-2-an",
+        "InstanceType": "m7i.large",
+        "S3UploadPrefix": "image/prod/",
+        "AmiId": "ami-08afa937d0ef1a748"
+      },
+      "resourceTypeCounts": {
+        "AWS::SSM::Parameter": 7,
+        "AWS::ServiceDiscovery::Service": 1,
+        "AWS::Logs::LogGroup": 4,
+        "AWS::EC2::SecurityGroup": 7,
+        "AWS::ECS::Service": 3,
+        "AWS::IAM::Role": 8,
+        "AWS::ElasticLoadBalancingV2::LoadBalancer": 1,
+        "AWS::S3::Bucket": 1,
+        "AWS::S3::BucketPolicy": 1,
+        "AWS::AutoScaling::AutoScalingGroup": 1,
+        "AWS::ApplicationAutoScaling::ScalingPolicy": 2,
+        "AWS::ElasticLoadBalancingV2::ListenerRule": 2,
+        "AWS::ApplicationAutoScaling::ScalableTarget": 2,
+        "AWS::ElasticLoadBalancingV2::TargetGroup": 4,
+        "AWS::ECS::CapacityProvider": 1,
+        "AWS::CertificateManager::Certificate": 1,
+        "AWS::ECS::Cluster": 1,
+        "AWS::ECS::ClusterCapacityProviderAssociations": 1,
+        "AWS::SSM::Association": 5,
+        "AWS::Route53::RecordSet": 1,
+        "AWS::Route53::HostedZone": 1,
+        "AWS::EC2::Instance": 2,
+        "AWS::IAM::InstanceProfile": 2,
+        "AWS::EC2::SecurityGroupIngress": 2,
+        "AWS::ElasticLoadBalancingV2::Listener": 2,
+        "AWS::EC2::InternetGateway": 1,
+        "AWS::EC2::VPCGatewayAttachment": 1,
+        "AWS::EC2::LaunchTemplate": 1,
+        "AWS::EC2::EIP": 1,
+        "AWS::EC2::NatGateway": 1,
+        "AWS::EC2::Route": 2,
+        "AWS::ServiceDiscovery::PrivateDnsNamespace": 1,
+        "AWS::EC2::RouteTable": 2,
+        "AWS::EC2::Subnet": 4,
+        "AWS::EC2::SubnetRouteTableAssociation": 4,
+        "AWS::SecretsManager::Secret": 1,
+        "AWS::EC2::VPCEndpoint": 1,
+        "AWS::IAM::ManagedPolicy": 2,
+        "AWS::EC2::VPC": 1
+      },
+      "resources": [
+        {
+          "LogicalResourceId": "AiBaseUrlParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod/AI_BASE_URL",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "AiCloudWatchAgentConfigParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod-ai/cloudwatch-agent/config",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "AiDiscoveryService",
+          "PhysicalResourceId": "srv-qrnudrtrk6aqjnbn",
+          "ResourceType": "AWS::ServiceDiscovery::Service"
+        },
+        {
+          "LogicalResourceId": "AiLogGroup",
+          "PhysicalResourceId": "/dameokja/v2-prod/ai",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "AiPrometheusScrapeConfigParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod-ai/cloudwatch-agent/prometheus",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "AiSecurityGroup",
+          "PhysicalResourceId": "sg-027e45b5b404e8d50",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AiService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-prod/dameokja-prod-ai",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "AiTaskRole",
+          "PhysicalResourceId": "dameokja-prod-ai-task",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "Alb",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:loadbalancer/app/dameokja-prod-alb/91a766242f6e5957",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        {
+          "LogicalResourceId": "AlbLogBucket",
+          "PhysicalResourceId": "dameokja-prod-alb-logs-906462447513",
+          "ResourceType": "AWS::S3::Bucket"
+        },
+        {
+          "LogicalResourceId": "AlbLogBucketPolicy",
+          "PhysicalResourceId": "dameokja-prod-alb-logs-906462447513",
+          "ResourceType": "AWS::S3::BucketPolicy"
+        },
+        {
+          "LogicalResourceId": "AlbSecurityGroup",
+          "PhysicalResourceId": "sg-04b9f996e44d6e9d9",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AppSecurityGroup",
+          "PhysicalResourceId": "sg-0fb9a1ae0d78b3a63",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "AutoScalingGroup",
+          "PhysicalResourceId": "dameokja-prod",
+          "ResourceType": "AWS::AutoScaling::AutoScalingGroup"
+        },
+        {
+          "LogicalResourceId": "BackendCpuScalingPolicy",
+          "PhysicalResourceId": "arn:aws:autoscaling:ap-northeast-2:906462447513:scalingPolicy:6de314d6-b491-4e05-b09a-85f55fa7f875:resource/ecs/service/dameokja-prod/dameokja-prod-backend:policyName/dameokja-prod-backend-cpu",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalingPolicy"
+        },
+        {
+          "LogicalResourceId": "BackendListenerRule",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener-rule/app/dameokja-prod-alb/91a766242f6e5957/905d8bf872570793/293538592bf753ff",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        {
+          "LogicalResourceId": "BackendLogGroup",
+          "PhysicalResourceId": "/dameokja/v2-prod/backend",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "BackendScalableTarget",
+          "PhysicalResourceId": "service/dameokja-prod/dameokja-prod-backend|ecs:service:DesiredCount|ecs",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalableTarget"
+        },
+        {
+          "LogicalResourceId": "BackendService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-prod/dameokja-prod-backend",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "BackendTargetGroupBlue",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-prod-be-blue/14acd208a866c03a",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "BackendTargetGroupGreen",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-prod-be-green/dbb5464784e95868",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "BackendTaskRole",
+          "PhysicalResourceId": "dameokja-prod-backend-task",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "CapacityProvider",
+          "PhysicalResourceId": "dameokja-prod-CapacityProvider-Gd6SCBVVokBa",
+          "ResourceType": "AWS::ECS::CapacityProvider"
+        },
+        {
+          "LogicalResourceId": "Certificate",
+          "PhysicalResourceId": "arn:aws:acm:ap-northeast-2:906462447513:certificate/e88b9369-fb53-4dd0-8a06-f172841996ce",
+          "ResourceType": "AWS::CertificateManager::Certificate"
+        },
+        {
+          "LogicalResourceId": "CloudWatchAgentConfigParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod/cloudwatch-agent/config",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "Cluster",
+          "PhysicalResourceId": "dameokja-prod",
+          "ResourceType": "AWS::ECS::Cluster"
+        },
+        {
+          "LogicalResourceId": "ClusterCapacityProviders",
+          "PhysicalResourceId": "dameokja-prod",
+          "ResourceType": "AWS::ECS::ClusterCapacityProviderAssociations"
+        },
+        {
+          "LogicalResourceId": "DbAppUserAssociation",
+          "PhysicalResourceId": "7a98b740-38e8-4af5-ba9e-64721fbae593",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "DbConfigAssociation",
+          "PhysicalResourceId": "367b5f78-4ee3-4408-bd9e-6e8187a78f36",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "DbDnsRecord",
+          "PhysicalResourceId": "db.prod.dameokja.internal",
+          "ResourceType": "AWS::Route53::RecordSet"
+        },
+        {
+          "LogicalResourceId": "DbHostedZone",
+          "PhysicalResourceId": "Z0250116J914X2AL86C8",
+          "ResourceType": "AWS::Route53::HostedZone"
+        },
+        {
+          "LogicalResourceId": "DbInstance",
+          "PhysicalResourceId": "i-0f1cc72a461d3e808",
+          "ResourceType": "AWS::EC2::Instance"
+        },
+        {
+          "LogicalResourceId": "DbInstanceProfile",
+          "PhysicalResourceId": "dameokja-prod-DbInstanceProfile-Pqcoh0lnU9bn",
+          "ResourceType": "AWS::IAM::InstanceProfile"
+        },
+        {
+          "LogicalResourceId": "DbPostgresAssociation",
+          "PhysicalResourceId": "d06fd1a0-f7ff-4d57-a03d-c5e068d3b9d3",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "DbPostgresFromAiIngress",
+          "PhysicalResourceId": "sgr-09bb36f9dd5e80b95",
+          "ResourceType": "AWS::EC2::SecurityGroupIngress"
+        },
+        {
+          "LogicalResourceId": "DbReplicationIngress",
+          "PhysicalResourceId": "sgr-06c5f88b2e358b113",
+          "ResourceType": "AWS::EC2::SecurityGroupIngress"
+        },
+        {
+          "LogicalResourceId": "DbReplicationSourceAssociation",
+          "PhysicalResourceId": "e219df54-56a1-4515-b794-4743091ab751",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "DbRole",
+          "PhysicalResourceId": "dameokja-prod-DbRole-5kjzHoNvA9jS",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "DbSecurityGroup",
+          "PhysicalResourceId": "sg-058cf8b2c520e1ebd",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "EcsInfrastructureRole",
+          "PhysicalResourceId": "dameokja-prod-ecs-infrastructure",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "FrontendCpuScalingPolicy",
+          "PhysicalResourceId": "arn:aws:autoscaling:ap-northeast-2:906462447513:scalingPolicy:6a3fe2cb-7ab9-46a8-9d12-a6517f9ecec9:resource/ecs/service/dameokja-prod/dameokja-prod-frontend:policyName/dameokja-prod-frontend-cpu",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalingPolicy"
+        },
+        {
+          "LogicalResourceId": "FrontendListenerRule",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener-rule/app/dameokja-prod-alb/91a766242f6e5957/905d8bf872570793/9fee8bd6f063ed3e",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        {
+          "LogicalResourceId": "FrontendLogGroup",
+          "PhysicalResourceId": "/dameokja/v2-prod/frontend",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "FrontendScalableTarget",
+          "PhysicalResourceId": "service/dameokja-prod/dameokja-prod-frontend|ecs:service:DesiredCount|ecs",
+          "ResourceType": "AWS::ApplicationAutoScaling::ScalableTarget"
+        },
+        {
+          "LogicalResourceId": "FrontendSecurityGroup",
+          "PhysicalResourceId": "sg-0bacf634326c306ed",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "FrontendService",
+          "PhysicalResourceId": "arn:aws:ecs:ap-northeast-2:906462447513:service/dameokja-prod/dameokja-prod-frontend",
+          "ResourceType": "AWS::ECS::Service"
+        },
+        {
+          "LogicalResourceId": "FrontendTargetGroupBlue",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-prod-fe-blue/3f3b58fa207115e1",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "FrontendTargetGroupGreen",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:targetgroup/dameokja-prod-fe-green/c0a6ff1bcbf24367",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        {
+          "LogicalResourceId": "GitHubDnsRole",
+          "PhysicalResourceId": "dameokja-prod-github-dns",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "GitHubEcsDeployRole",
+          "PhysicalResourceId": "dameokja-prod-github-ecs-deploy",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "HttpListener",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener/app/dameokja-prod-alb/91a766242f6e5957/b01db040be9830b1",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        {
+          "LogicalResourceId": "HttpsListener",
+          "PhysicalResourceId": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:listener/app/dameokja-prod-alb/91a766242f6e5957/905d8bf872570793",
+          "ResourceType": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        {
+          "LogicalResourceId": "InstanceProfile",
+          "PhysicalResourceId": "dameokja-prod-InstanceProfile-WmmWOqQPjdxy",
+          "ResourceType": "AWS::IAM::InstanceProfile"
+        },
+        {
+          "LogicalResourceId": "InstanceRole",
+          "PhysicalResourceId": "dameokja-prod-InstanceRole-O99VzB1eOiti",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "InstanceSecurityGroup",
+          "PhysicalResourceId": "sg-0ebc02c3a4f34553d",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "InternetGateway",
+          "PhysicalResourceId": "igw-064b3baead4065189",
+          "ResourceType": "AWS::EC2::InternetGateway"
+        },
+        {
+          "LogicalResourceId": "InternetGatewayAttachment",
+          "PhysicalResourceId": "IGW|vpc-04fc5393afa0ce9fd",
+          "ResourceType": "AWS::EC2::VPCGatewayAttachment"
+        },
+        {
+          "LogicalResourceId": "LaunchTemplate",
+          "PhysicalResourceId": "lt-0dbea6c35453ba50a",
+          "ResourceType": "AWS::EC2::LaunchTemplate"
+        },
+        {
+          "LogicalResourceId": "NatEip",
+          "PhysicalResourceId": "13.124.173.202",
+          "ResourceType": "AWS::EC2::EIP"
+        },
+        {
+          "LogicalResourceId": "NatGateway",
+          "PhysicalResourceId": "nat-0d2622e4d400a2265",
+          "ResourceType": "AWS::EC2::NatGateway"
+        },
+        {
+          "LogicalResourceId": "PrivateDefaultRoute",
+          "PhysicalResourceId": "rtb-01db294fbb6aa721a|0.0.0.0/0",
+          "ResourceType": "AWS::EC2::Route"
+        },
+        {
+          "LogicalResourceId": "PrivateNamespace",
+          "PhysicalResourceId": "ns-2clmgweghse5ikkq",
+          "ResourceType": "AWS::ServiceDiscovery::PrivateDnsNamespace"
+        },
+        {
+          "LogicalResourceId": "PrivateRouteTable",
+          "PhysicalResourceId": "rtb-01db294fbb6aa721a",
+          "ResourceType": "AWS::EC2::RouteTable"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetA",
+          "PhysicalResourceId": "subnet-0778204ce3b43756e",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetARouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-0525d48f6e7ec737e",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetB",
+          "PhysicalResourceId": "subnet-0f86136fb72318e11",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PrivateSubnetBRouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-050a3be3d7d826304",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "PrometheusLogGroup",
+          "PhysicalResourceId": "/dameokja/v2-prod/prometheus",
+          "ResourceType": "AWS::Logs::LogGroup"
+        },
+        {
+          "LogicalResourceId": "PrometheusScrapeConfigParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod/cloudwatch-agent/prometheus",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "PublicDefaultRoute",
+          "PhysicalResourceId": "rtb-02de26909b7f43412|0.0.0.0/0",
+          "ResourceType": "AWS::EC2::Route"
+        },
+        {
+          "LogicalResourceId": "PublicRouteTable",
+          "PhysicalResourceId": "rtb-02de26909b7f43412",
+          "ResourceType": "AWS::EC2::RouteTable"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetA",
+          "PhysicalResourceId": "subnet-04ba6eac801038452",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetARouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-059be083deebbb54c",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetB",
+          "PhysicalResourceId": "subnet-0c5b797aea024a561",
+          "ResourceType": "AWS::EC2::Subnet"
+        },
+        {
+          "LogicalResourceId": "PublicSubnetBRouteTableAssociation",
+          "PhysicalResourceId": "rtbassoc-0907573f2545b9a27",
+          "ResourceType": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        {
+          "LogicalResourceId": "RedisDockerAssociation",
+          "PhysicalResourceId": "89050987-7843-43bd-92cb-49b557563445",
+          "ResourceType": "AWS::SSM::Association"
+        },
+        {
+          "LogicalResourceId": "RedisHostParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod/SPRING_DATA_REDIS_HOST",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "RedisInstance",
+          "PhysicalResourceId": "i-0fc62ff5cd7a70722",
+          "ResourceType": "AWS::EC2::Instance"
+        },
+        {
+          "LogicalResourceId": "RedisPortParameter",
+          "PhysicalResourceId": "/dameokja-v2-prod/SPRING_DATA_REDIS_PORT",
+          "ResourceType": "AWS::SSM::Parameter"
+        },
+        {
+          "LogicalResourceId": "RedisSecurityGroup",
+          "PhysicalResourceId": "sg-02835a7b854ac8dc0",
+          "ResourceType": "AWS::EC2::SecurityGroup"
+        },
+        {
+          "LogicalResourceId": "ReplicationSecret",
+          "PhysicalResourceId": "arn:aws:secretsmanager:ap-northeast-2:906462447513:secret:dameokja-v2-prod/db-replication-vljx5v",
+          "ResourceType": "AWS::SecretsManager::Secret"
+        },
+        {
+          "LogicalResourceId": "S3GatewayEndpoint",
+          "PhysicalResourceId": "vpce-03b81c7b216e6435d",
+          "ResourceType": "AWS::EC2::VPCEndpoint"
+        },
+        {
+          "LogicalResourceId": "TaskExecutionRole",
+          "PhysicalResourceId": "dameokja-prod-ecs-task-execution",
+          "ResourceType": "AWS::IAM::Role"
+        },
+        {
+          "LogicalResourceId": "TeamLogsInsightsAccessPolicy",
+          "PhysicalResourceId": "arn:aws:iam::906462447513:policy/dameokja-team-logs-insights",
+          "ResourceType": "AWS::IAM::ManagedPolicy"
+        },
+        {
+          "LogicalResourceId": "TeamSsmAccessPolicy",
+          "PhysicalResourceId": "arn:aws:iam::906462447513:policy/dameokja-v2-prod-ssm-team",
+          "ResourceType": "AWS::IAM::ManagedPolicy"
+        },
+        {
+          "LogicalResourceId": "Vpc",
+          "PhysicalResourceId": "vpc-04fc5393afa0ce9fd",
+          "ResourceType": "AWS::EC2::VPC"
+        }
+      ],
+      "services": [
+        {
+          "name": "dameokja-prod-backend",
+          "desired": 2,
+          "running": 2,
+          "strategy": "BLUE_GREEN",
+          "taskDefinition": "dameokja-prod-backend:7",
+          "subnets": [
+            "subnet-0778204ce3b43756e"
+          ],
+          "placementStrategy": [
+            {
+              "type": "binpack",
+              "field": "MEMORY"
+            }
+          ],
+          "targetGroups": [
+            "dameokja-prod-be-blue"
+          ],
+          "containers": [
+            {
+              "name": "backend",
+              "cpu": 1024,
+              "memory": 2560,
+              "memoryReservation": null,
+              "ports": [
+                8080
+              ]
+            },
+            {
+              "name": "cloudwatch-agent",
+              "cpu": 0,
+              "memory": 128,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": null
+        },
+        {
+          "name": "dameokja-prod-ai",
+          "desired": 1,
+          "running": 1,
+          "strategy": "ROLLING",
+          "taskDefinition": "dameokja-prod-ai:30",
+          "subnets": [
+            "subnet-0778204ce3b43756e"
+          ],
+          "placementStrategy": [
+            {
+              "type": "binpack",
+              "field": "MEMORY"
+            }
+          ],
+          "targetGroups": [],
+          "containers": [
+            {
+              "name": "ai",
+              "cpu": 0,
+              "memory": 1536,
+              "memoryReservation": null,
+              "ports": [
+                8000
+              ]
+            },
+            {
+              "name": "cloudwatch-agent",
+              "cpu": 0,
+              "memory": 128,
+              "memoryReservation": null,
+              "ports": []
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": null
+        },
+        {
+          "name": "dameokja-prod-frontend",
+          "desired": 2,
+          "running": 2,
+          "strategy": "BLUE_GREEN",
+          "taskDefinition": "dameokja-prod-frontend:1",
+          "subnets": [
+            "subnet-0778204ce3b43756e"
+          ],
+          "placementStrategy": [
+            {
+              "type": "binpack",
+              "field": "MEMORY"
+            }
+          ],
+          "targetGroups": [
+            "dameokja-prod-fe-blue"
+          ],
+          "containers": [
+            {
+              "name": "frontend",
+              "cpu": 0,
+              "memory": 768,
+              "memoryReservation": null,
+              "ports": [
+                3000
+              ]
+            }
+          ],
+          "taskCpu": null,
+          "taskMemory": null
+        }
+      ],
+      "asg": [
+        {
+          "name": "dameokja-prod",
+          "min": 2,
+          "desired": 2,
+          "max": 4,
+          "azs": [
+            "ap-northeast-2b"
+          ],
+          "instances": [
+            "i-00cf225e503ebb2f9",
+            "i-050cc85bf24aeb9a0"
+          ]
+        }
+      ],
+      "instances": [
+        {
+          "id": "i-0f1cc72a461d3e808",
+          "name": "dameokja-prod-db",
+          "type": "t3.medium",
+          "az": "ap-northeast-2b",
+          "state": "running",
+          "privateIp": "10.20.33.212"
+        },
+        {
+          "id": "i-0fc62ff5cd7a70722",
+          "name": "dameokja-prod-redis",
+          "type": "t3.small",
+          "az": "ap-northeast-2b",
+          "state": "running",
+          "privateIp": "10.20.35.176"
+        },
+        {
+          "id": "i-00cf225e503ebb2f9",
+          "name": "dameokja-prod",
+          "type": "m7i.large",
+          "az": "ap-northeast-2b",
+          "state": "running",
+          "privateIp": "10.20.36.167"
+        },
+        {
+          "id": "i-050cc85bf24aeb9a0",
+          "name": "dameokja-prod",
+          "type": "m7i.large",
+          "az": "ap-northeast-2b",
+          "state": "running",
+          "privateIp": "10.20.33.42"
+        }
+      ]
+    }
+  },
+  "subnets": [
+    {
+      "id": "subnet-06b351c8b0665d5ae",
+      "name": "dameokja-stage-private-b",
+      "cidr": "10.10.48.0/20",
+      "az": "ap-northeast-2c"
+    },
+    {
+      "id": "subnet-0f86136fb72318e11",
+      "name": "dameokja-prod-private-b",
+      "cidr": "10.20.48.0/20",
+      "az": "ap-northeast-2c"
+    },
+    {
+      "id": "subnet-0778204ce3b43756e",
+      "name": "dameokja-prod-private-a",
+      "cidr": "10.20.32.0/20",
+      "az": "ap-northeast-2b"
+    },
+    {
+      "id": "subnet-04ba6eac801038452",
+      "name": "dameokja-prod-public-a",
+      "cidr": "10.20.0.0/20",
+      "az": "ap-northeast-2b"
+    },
+    {
+      "id": "subnet-0a454573a0608b1a1",
+      "name": "dameokja-stage-public-b",
+      "cidr": "10.10.16.0/20",
+      "az": "ap-northeast-2c"
+    },
+    {
+      "id": "subnet-0ba17d72716e485f8",
+      "name": "dameokja-stage-private-a",
+      "cidr": "10.10.32.0/20",
+      "az": "ap-northeast-2b"
+    },
+    {
+      "id": "subnet-00fc3dfe25c46c89d",
+      "name": "dameokja-stage-public-a",
+      "cidr": "10.10.0.0/20",
+      "az": "ap-northeast-2b"
+    },
+    {
+      "id": "subnet-0c5b797aea024a561",
+      "name": "dameokja-prod-public-b",
+      "cidr": "10.20.16.0/20",
+      "az": "ap-northeast-2c"
+    }
+  ]
+}

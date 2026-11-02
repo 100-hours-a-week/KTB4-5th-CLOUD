@@ -1,7 +1,7 @@
 # 다먹자 모니터링·알림 설계 (CloudWatch)
 
 작성일: 2026-10-02  
-적용 범위: v1 (dev·prod)  
+적용 범위: v1 (dev·prod). v2 stage·prod의 실제 구성은 [9. 설계와 달라진 점](#9-설계와-달라진-점-v2)  
 선행 문서: [SLI-SLO-design.md](SLI-SLO-design.md) — 이 문서는 그 5장에서 "별도 알림 설계"로 미뤄둔 운영자 알림의 발생 조건·심각도·수신자·대응·복구 조건을 정합니다.  
 구현: `infra/monitoring` ([README](../../infra/monitoring/README.md))
 
@@ -191,3 +191,18 @@ SLO 문서 4.3대로 측정값은 Sentry(`http.client`, prod 10% 샘플링)에 �
 - AWS: [Amazon CloudWatch Pricing](https://aws.amazon.com/cloudwatch/pricing/) — 지표·알람·복합 알람·로그·Application Signals 단가
 - AWS: [CloudWatch Agent 설정 파일](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-Configuration-File-Details.html) — 로그 파일 수집, `append_dimensions`
 - AWS: [Filter pattern syntax](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html) — JSON 로그 지표 필터
+
+## 9. 설계와 달라진 점 (v2)
+
+> 기준: CLOUD main `638e11f`, 2026-11-02. 구현: `infra/monitoring/cloudformation/slo-monitoring.{stage,v2-prod}.template.json`.
+
+| 항목 | 이 문서의 설계(v1) | v2 stage·prod 구현 | 이유·경과 |
+|---|---|---|---|
+| SLI 수집 | nginx JSON 접근 로그 → 지표 필터(`$slo_route`) | ALB 액세스 로그(S3) → Athena 테이블·저장 쿼리(`AlbSloQuery`·지연·4xx) | stage·prod에서 nginx를 없애 nginx 로그가 없음(#147) |
+| 작업별 소진율 알람 | fast/slow burn 알람·복합 알람 | 없음. SLO는 Athena 쿼리로 조회 | 지표 필터로 실시간 계산하던 근거(nginx 로그)가 사라짐 |
+| 운영 알림 | 5xx·메모리·디스크·소진율 | 5xx(ALB `HTTPCode_Target_5XX`·`HTTPCode_ELB_5XX`), 메모리(ECS 서비스 `MemoryUtilization` ≥ 90%) → Discord | ECS·ALB 지표로 교체(#147). stage는 꺼져 있을 때 오탐이 없도록 정상 타깃이 있을 때만 판정(#165) |
+| 서버·앱 지표 | 호스트 CloudWatch Agent | Container Insights(#142), backend 사이드카 Agent의 HikariCP 지표(#121), AI 사이드카 Agent의 AI 지표(#137) | ECS Task 단위로 수집 |
+| 로그 | 호스트 파일 → Agent | `awslogs` → `/dameokja/v2-prod/{frontend,backend,ai}`(보관 14일), BE 오류 지표 필터 1개 | #175 |
+| 배포 | 콘솔·CLI로 스택 적용 | PR change set 미리보기 → main 머지 → GitHub Environments 승인 후 적용 | #73 |
+
+dev는 v2 dev(ECS 한 대) 호스트 Agent가 v1과 같은 방식으로 nginx·BE 로그를 모으고, dev 모니터링 스택은 2026-10-16 제거했다(#71).

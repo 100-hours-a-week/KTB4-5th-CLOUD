@@ -10,6 +10,7 @@
 2. [Docker 컨테이너 구성 설계](#2-docker-컨테이너-구성-설계)
 3. [Docker Compose 기반 배포 구조 설계](#3-docker-compose-기반-배포-구조-설계)
 4. [현재 구조의 한계 정의](#4-현재-구조의-한계-정의)
+5. [설계와 달라진 점](#5-설계와-달라진-점)
 
 ---
 
@@ -323,3 +324,14 @@ DB는 private subnet에 배치하되 CloudWatch 등으로 나가는 NAT 또는 V
 8. **결합도**: 알림 배치와 API가 BE 자원을 공유하므로 부하 증가 시 분리가 필요합니다.
 
 초기 설계는 빠른 구축을 우선한 가정입니다. 변경된 환경 구성은 v1 설정을, 서비스 품질 목표는 SLI·SLO 문서를 기준으로 관리합니다.
+
+## 5. 설계와 달라진 점
+
+> 기준: 2026-11-02. v1은 2026-10-19 v2 prod로 전환한 뒤 운영하지 않는다.
+
+| 항목 | 설계 | 실제 | 이유·경과 |
+|---|---|---|---|
+| 운영 상태 | EC2 + Docker Compose로 dev·prod 운영 | dev는 2026-10-09~11 v2 dev(ECS 한 대)로, prod는 2026-10-19 v2 prod로 전환. v1 앱·DB EC2는 종료하고 스냅샷만 보관 | v2 전환([v2 위키](ktb4-cloud-wiki-v2.md), `docs/implementation/v2 prod 전환 결과.md`) |
+| Dev 환경 구성 | nginx·FE·BE·DB를 한 EC2에 | v1 dev Compose·DNS 레코드는 v2 dev 전환 때 삭제. 저장소에는 `v1/prod`만 남음 | v2 dev가 대신함 |
+| 배포 전략 | Rolling Update | 대상 서비스 컨테이너를 교체하고 헬스체크 실패 시 이전 이미지·설정으로 복구(`v1/scripts/deploy-v1.sh`). 단일 복제본이라 짧은 중단이 있음 | 복제본이 하나라 롤링이 성립하지 않음 |
+| Image Registry 인증 | GHCR Public이라 pull 인증 불필요 | 배포 스크립트가 GitHub Actions 토큰으로 GHCR에 로그인한 뒤 받고, 임시 인증 정보를 지움 | GHCR 패키지를 의도적으로 비공개로 둠(익명 pull 403, 2026-11-02 확인). 앱 저장소는 Public |
