@@ -84,7 +84,32 @@ Resources:
         Statement:
           - Effect: Allow
             Action: secretsmanager:GetSecretValue
-            Resource: !Ref OrchestratorDbSecret
+            Resource: [!Ref OrchestratorDbSecret, !Ref HaProbeDbSecret]
+
+  # --- 장애 주입 테스트(T2)용 쓰기 프로브 계정. hatest 스키마에만 INSERT·SELECT (#193)
+  # 프로브는 Orchestrator 서버에서 tests/DB HA/probe.sh로 돌림(VPC 안이라 failover 때 터널이 끊기지 않음)
+  HaProbeDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: dameokja-v2-prod/db-haprobe
+      GenerateSecretString:
+        PasswordLength: 32
+        RequireEachIncludedType: true
+        ExcludeCharacters: "'\"`$\\/@%&;|<>(){}[]!*?#~^ "
+
+  DbHaProbeUserAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: DbRoleReadOrchestratorSecret
+    Properties:
+      AssociationName: dameokja-prod-db-haprobe-user
+      Name: AWS-RunShellScript
+      Targets:
+        - { Key: InstanceIds, Values: [!Ref PrimaryInstanceId] }
+      Parameters:
+        commands:
+          - set -e
+          - !Sub PW=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id ${HaProbeDbSecret} --query SecretString --output text)
+          - mysql -uroot -e "CREATE DATABASE IF NOT EXISTS hatest; CREATE TABLE IF NOT EXISTS hatest.probe (seq BIGINT PRIMARY KEY, at DATETIME(3) NOT NULL); CREATE USER IF NOT EXISTS 'haprobe'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; ALTER USER 'haprobe'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; GRANT INSERT, SELECT ON hatest.* TO 'haprobe'@'10.20.32.0/255.255.224.0';"
 
   # Primary에 orchestrator 계정을 만듦. 복제로 Standby에도 생김. 비밀번호는 서버 안에서 읽음
   # SUPER: read_only 변경·복제 제어, PROCESS: 복제본 발견(processlist)
@@ -121,7 +146,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !Ref OrchestratorDbSecret
+                Resource: [!Ref OrchestratorDbSecret, !Ref HaProbeDbSecret]
               # 승격 훅: DB 고정 이름을 새 Primary IP로
               - Effect: Allow
                 Action: route53:ChangeResourceRecordSets
