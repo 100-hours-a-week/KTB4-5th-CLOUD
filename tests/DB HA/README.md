@@ -49,13 +49,15 @@ DB 장애에 대한 자동 대응이 없으므로 **스트레스 테스트는 #1
 
 | ID | 장애 | 주입 방법 | 기대 |
 | --- | --- | --- | --- |
-| F1 | mysqld 프로세스 죽음 | `kill -9 mysqld` | 재시작 또는 승격, 1분 이내 |
-| F2 | Primary 인스턴스 중단(AZ 장애 가정) | EC2 stop | Standby 자동 승격, 1분 이내 |
-| F3 | Primary 네트워크만 단절 | Primary에서 iptables로 3306 차단 후 해제 | 승격 후 기존 Primary는 fencing으로 쓰기 거부(split-brain 없음) |
-| F4 | 계획된 Primary 교체 | Orchestrator graceful takeover | 수 초(10/19 약 5분과 비교) |
-| F5 | Orchestrator 인스턴스 죽음 | EC2 terminate | 서비스 영향 0, ASG가 복구 |
+| F1 | 계획된 Primary 교체 | Orchestrator graceful takeover | 수 초(10/19 약 5분과 비교) |
+| F2 | Orchestrator 인스턴스 죽음 | EC2 terminate | 서비스 영향 0, ASG가 복구 |
+| F3 | mysqld 프로세스 죽음 | `kill -9 mysqld` | 재시작 또는 승격, 1분 이내 |
+| F4 | Primary 네트워크만 단절 | Primary에서 iptables로 3306 차단 후 해제 | 승격 후 기존 Primary는 fencing으로 쓰기 거부(split-brain 없음) |
+| F5 | Primary 인스턴스 중단(AZ 장애 가정) | EC2 stop | Standby 자동 승격, 1분 이내 |
 
-스파이크 유지 1분 뒤 장애를 주입하고, 복구 뒤 3분 관찰한다. 순서는 영향이 작은 것부터 F4 → F5 → F1 → F3 → F2, 앞 단계가 기준을 못 넘으면 멈춘다.
+부하를 건 지 1분 뒤 장애를 주입하고, 복구 뒤 3분 관찰한다. 실제 측정(11/02)은 스파이크 대신 설계 피크 95 RPS 고정 10분으로 했다. 1.5배 스파이크는 장애가 없어도 DB가 포화돼 장애조치 영향과 구분되지 않기 때문. 영향이 작은 것부터 번호 순서(F1 → F5)로 진행하고, 앞 단계가 기준을 못 넘으면 멈춘다.
+
+번호는 2026-11-02에 실행 순서대로 다시 매겼다(#201). 그 전의 PR·이슈(#184~#200)에 적힌 번호는 이전 번호다: 이전 F4 = 지금 F1, F5 = F2, F1 = F3, F3 = F4, F2 = F5.
 
 ## 4. 측정 도구
 
@@ -70,7 +72,7 @@ DB 장애에 대한 자동 대응이 없으므로 **스트레스 테스트는 #1
 | 테스트 | 위치 | 이유 |
 | --- | --- | --- |
 | T1·T1' | 사용자 PC(WSL)의 k6 | 비용 0. 수백 RPS는 PC 한 대로 충분. 집~서울 리전 왕복 지연이 섞이므로 서버 응답 시간은 ALB `TargetResponseTime`으로 판단. 목표 RPS를 못 내면 k6 `dropped_iterations`에 나타남 |
-| T2 | prod VPC 안 임시 EC2(t3.small, IaC로 생성하고 테스트 후 삭제) | 프로브가 사설 서브넷 DB에 직접 붙어야 함. PC에서 SSM 포트 포워딩을 쓰면 failover 때 터널이 같이 끊겨 RTO가 오염됨 |
+| T2 | 프로브는 Orchestrator 서버(prod VPC 안, SSM으로 `probe.sh` 실행), k6는 사용자 PC(WSL) | 프로브가 사설 서브넷 DB에 직접 붙어야 함. PC에서 SSM 포트 포워딩을 쓰면 failover 때 터널이 같이 끊겨 RTO가 오염됨. 프로브가 가벼워 임시 EC2 대신 이미 VPC 안에 있는 Orchestrator 서버를 씀(#193) |
 
 ## 5. 지표 정의
 
@@ -78,12 +80,12 @@ DB 장애에 대한 자동 대응이 없으므로 **스트레스 테스트는 #1
 - **쓰기 실패 시간**: k6 쓰기 요청의 첫 실패 ~ 연속 성공 복구.
 - **RTO**: 프로브 마지막 성공 ~ 새 Primary 첫 성공. 감지·승격·DNS 전파·커넥션 재연결로 나눠 기록.
 - **RPO**: 커밋 확인된 프로브 번호 중 장애 후 Primary에 없는 개수.
-- **split-brain (F3)**: 기존·새 Primary에 동시에 쓰기가 들어간 기록 수.
+- **split-brain (F3·F4)**: 기존·새 Primary에 동시에 쓰기가 들어간 기록 수.
 
 ## 6. 합격 기준 (#120 적용 후)
 
 - T1' 한계 RPS가 T1보다 낮아지지 않는다.
-- F1·F2·F3 쓰기 실패 60초 이하, 사람 개입 없음. F4 10초 이하. F5 서비스 영향 0.
+- F1 쓰기 실패 10초 이하. F2 서비스 영향 0. F3·F4·F5 쓰기 실패 60초 이하, 사람 개입 없음.
 - 유실 0건이 목표. 비동기 복제라 유실이 나오면 개수를 기록하고 semi-sync 도입을 판단한다.
 - split-brain 0건.
 
