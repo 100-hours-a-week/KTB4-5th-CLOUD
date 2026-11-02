@@ -1,0 +1,63 @@
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: dev-app
+spec:
+  amiFamily: AL2023
+  amiSelectorTerms:
+    - id: {{ .Values.appAmiId | quote }}
+  role: {{ required "eks 스택의 AppNodeRoleName이 필요합니다." .Values.appNodeRoleName | quote }}
+  subnetSelectorTerms:
+    - id: {{ .Values.appSubnetId | quote }}
+  securityGroupSelectorTerms:
+    - id: {{ required "eks 스택의 WorkerSecurityGroupId가 필요합니다." .Values.workerSecurityGroupId | quote }}
+  metadataOptions:
+    httpEndpoint: enabled
+    httpTokens: required
+    httpPutResponseHopLimit: 1
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeType: gp3
+        volumeSize: 30Gi
+        encrypted: true
+        deleteOnTermination: true
+  tags:
+    Project: dameokja
+    Generation: v3
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: dev-app
+spec:
+  template:
+    metadata:
+      labels:
+        dameokja.com/node-role: app
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dev-app
+      requirements:
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: [m7i.large]
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: [ap-northeast-2b]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]
+      # 수명 만료로 인한 자동 교체는 끕니다.
+      expireAfter: Never
+  # 설계의 물리 상한이며 상시 대수가 아닙니다.
+  limits:
+    cpu: "26"
+    memory: 104Gi
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: "1"

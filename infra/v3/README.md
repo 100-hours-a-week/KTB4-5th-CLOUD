@@ -1,6 +1,6 @@
 # v3 EKS 기반과 수동 배포
 
-기존 prod VPC·Private Subnet·NAT를 재사용하는 EKS 기반입니다. 클러스터·IAM·SG·시스템 EC2·CNI·kube-proxy·CoreDNS와 Controller IAM·EBS CSI·Metrics Server를 포함합니다. Helm으로 설치하는 관리 도구·앱 Node 공급·DB·Redis·Kafka·앱 배포는 후속 변경입니다.
+기존 prod VPC·Private Subnet·NAT를 재사용하는 EKS 기반입니다. 클러스터·IAM·SG·시스템 EC2·CNI·kube-proxy·CoreDNS와 Controller IAM·EBS CSI·Metrics Server를 포함합니다. 관리 도구와 앱 NodePool은 아래 "관리 도구 설치"의 Helm으로 설치합니다. DB·Redis·Kafka·앱 배포는 후속 변경입니다.
 
 PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 plan으로 실행해 변경 내용을 확인한 뒤, 같은 스택을 apply로 실행할 때 생성됩니다.
 
@@ -47,6 +47,35 @@ Service CIDR 192.168.0.0/16이 VPC·VPN·관리자 경로와 겹치지 않는지
 Repository Variables의 `AWS_CFN_DEPLOY_ROLE_ARN`(dameokja-github-cfn-deploy), `AWS_CFN_EXEC_ROLE_ARN`(dameokja-cfn-execution)을 v2와 같이 사용합니다. 기존 배포 역할의 main OIDC 신뢰를 재사용하며 GitHub Environment 승인은 두지 않습니다.
 
 Actions의 "v3 EKS 기반 CloudFormation"을 main에서 실행합니다. 스택을 고르고 plan으로 실행해 Summary의 변경 내용(특히 Replacement)을 확인한 뒤, 같은 스택을 apply로 실행합니다. apply는 새 change set을 만들지 않고 가장 최근 plan의 change set을 그대로 실행합니다. 다음 스택은 앞 스택이 끝난 뒤 실행합니다. Export를 다른 스택이 쓰고 있으면 EKS 스택의 해당 Output을 바꾸거나 지울 수 없습니다.
+
+## 관리 도구 설치
+
+CloudFormation 6개 스택 뒤에 관리자 PC에서 포트 포워딩을 연 상태로 실행합니다. 모두 tool Namespace, 시스템 Node(라벨·toleration)에 1 Replica로 둡니다. values는 `v3/platform/values/`, 앱 NodePool·StorageClass는 `v3/charts/platform/`에 있습니다. 이후 Argo CD로 인계하며 Helm과 이중 운영하지 않습니다.
+
+| 도구 | Chart | 버전 |
+|---|---|---|
+| Karpenter(CRD 포함) | oci://public.ecr.aws/karpenter/karpenter-crd, karpenter | 1.15.1 |
+| Strimzi(dev 감시) | oci://quay.io/strimzi-helm/strimzi-kafka-operator | 1.3.0 |
+| Sealed Secrets | https://bitnami-labs.github.io/sealed-secrets sealed-secrets | 2.22.0 |
+| Argo CD | https://argoproj.github.io/argo-helm argo-cd | 10.11.6 |
+
+```bash
+K="--kubeconfig infra/v3/private/kubeconfig --kube-context dameokja-v3"
+out() { aws cloudformation describe-stacks --stack-name "$1" --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text; }
+kubectl $K apply -f v3/platform/namespaces.yaml
+helm $K upgrade --install karpenter-crd oci://public.ecr.aws/karpenter/karpenter-crd --version 1.15.1 -n tool --wait
+helm $K upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version 1.15.1 -n tool --skip-crds --wait \
+  -f v3/platform/values/karpenter.yaml \
+  --set serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(out dameokja-v3-controller-iam KarpenterControllerRoleArn)
+helm $K upgrade --install strimzi oci://quay.io/strimzi-helm/strimzi-kafka-operator --version 1.3.0 -n tool --wait -f v3/platform/values/strimzi.yaml
+helm $K upgrade --install sealed-secrets sealed-secrets --repo https://bitnami-labs.github.io/sealed-secrets --version 2.22.0 -n tool --wait -f v3/platform/values/sealed-secrets.yaml
+helm $K upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --version 10.11.6 -n tool --wait -f v3/platform/values/argo-cd.yaml
+helm $K upgrade --install platform v3/charts/platform -n tool --wait \
+  --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
+  --set workerSecurityGroupId=$(out dameokja-v3-eks WorkerSecurityGroupId)
+```
+
+NodePool은 Pending Pod가 있을 때만 앱 Node(m7i.large·2b·On-Demand)를 만들고, 빈 Node는 5분 뒤 정리합니다. redis-gp3·kafka-gp3는 Retain이라 PVC를 지워도 EBS가 남습니다. LBC·Gateway API는 5단계, Pod SG·NetworkPolicy는 3단계에서 추가합니다.
 
 ## 검증과 한계
 

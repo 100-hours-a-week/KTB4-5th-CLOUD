@@ -1,0 +1,28 @@
+# 관리 도구 설치 전에 적용합니다. stage·prod는 Namespace만 준비합니다.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    dameokja.com/environment: dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stage
+  labels:
+    dameokja.com/environment: stage
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+  labels:
+    dameokja.com/environment: prod
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tool
+  labels:
+    dameokja.com/environment: tool

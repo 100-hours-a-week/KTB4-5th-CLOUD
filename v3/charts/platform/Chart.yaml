@@ -1,0 +1,5 @@
+apiVersion: v2
+name: dameokja-platform
+description: v3 dev StorageClass와 앱 NodePool
+type: application
+version: 0.1.0

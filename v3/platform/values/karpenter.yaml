@@ -1,0 +1,26 @@
+# 역할 ARN은 설치 때 controller-iam 스택 Output으로 넣습니다.
+# 중단 이벤트 Queue는 쓰지 않습니다(On-Demand만 사용).
+replicas: 1
+serviceAccount:
+  name: karpenter
+nodeSelector:
+  dameokja.com/node-role: system
+tolerations:
+- key: dameokja.com/system
+  operator: Equal
+  value: 'true'
+  effect: NoSchedule
+affinity: {}
+topologySpreadConstraints: []
+controller:
+  env:
+  - name: AWS_REGION
+    value: ap-northeast-2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+settings:
+  clusterName: dameokja-v3
