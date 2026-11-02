@@ -263,10 +263,14 @@ Resources:
               timeout 5 mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=3 -e "SET PERSIST super_read_only=ON;" && log "기존 Primary super_read_only" || log "기존 Primary에 닿지 않음(격리 보안 그룹만 적용)"
             fi
             # 기존 Primary에 남은 앱(dameokja) 연결을 끊음. 읽기 전용 오류로는 BE 커넥션 풀이 연결을 버리지 않아 교체 뒤에도 옛 서버에 계속 씀 (#195)
-            # BE의 DNS 캐시(5초) 동안 옛 IP로 다시 붙을 수 있어 40초 동안 2초마다 반복. 훅이 Orchestrator 복구를 붙잡지 않게 백그라운드로 돌림
+            # BE의 DNS 캐시(5초) 동안 옛 IP로 다시 붙을 수 있어 2분 동안 2초마다 반복. 훅이 Orchestrator 복구를 붙잡지 않게 백그라운드로 돌림
+            # 장애 승격이면 같은 반복에서 super_read_only도 다시 걺. mysqld가 systemd로 재시작되면 쓰기 가능 상태로 떠서, 위의 1회 시도로는 놓침 (#199)
             (
               k=0
-              for i in $(seq 1 20); do
+              for i in $(seq 1 60); do
+                if [ "$cmd" != graceful-master-takeover ]; then
+                  mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=2 -e "SET PERSIST super_read_only=ON" 2>/dev/null && [ "$ro" != 1 ] && { ro=1; log "기존 Primary super_read_only (재시도 $i회째)"; }
+                fi
                 q=$(mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=2 -N -e "SELECT CONCAT('KILL ', id, ';') FROM information_schema.processlist WHERE user='dameokja'" 2>/dev/null)
                 if [ -n "$q" ]; then echo "$q" | mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=2 2>/dev/null; k=$((k + $(echo "$q" | wc -l))); fi
                 sleep 2
