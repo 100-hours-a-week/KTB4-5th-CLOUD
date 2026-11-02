@@ -396,3 +396,10 @@ POST /api/v1/image-analyses → GET /api/v1/image-analyses/{analysisId} → POST
 - Google SRE: [Alerting on SLOs](https://sre.google/workbook/alerting-on-slos/) — 오류 예산 기반 알림
 - Google SRE: [Data Processing Pipelines](https://sre.google/workbook/data-processing/) — 처리 파이프라인의 정확성 목표(v2·v3)
 - Google Cloud: [Evaluate performance](https://docs.cloud.google.com/document-ai/docs/evaluate) — 정밀도·재현율 평가(v2·v3)
+
+## 8. 설계와 달라진 점 (v2 측정 방식)
+
+> 기준: 2026-11-02. SLI·SLO 정의(대상 작업, 성공·실패 판정, 목표치)는 v2에서도 그대로 쓴다. 바뀐 것은 측정 위치다.
+
+- v1은 nginx 접근 로그로 판정했지만, v2 stage·prod는 nginx가 없어(#147) ALB 액세스 로그를 Athena로 집계한다. 판정 기준은 ALB가 본 응답 코드와 처리 시간이며, BE가 응답하지 못한 502·504도 실패로 잡는 성질은 같다.
+- v1의 작업별 소진율 알람은 v2에 옮기지 않았다. v2 알림은 전체 5xx·메모리 알람이며, SLO는 대시보드와 Athena 저장 쿼리로 확인한다. 구성은 [모니터링·알림 설계 9장](monitoring-alerting-design.md#9-설계와-달라진-점-v2) 참고.
