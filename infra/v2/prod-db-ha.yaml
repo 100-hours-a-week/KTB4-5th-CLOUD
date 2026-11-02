@@ -257,6 +257,17 @@ Resources:
             if [ "$cmd" != graceful-master-takeover ]; then
               timeout 5 mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=3 -e "SET PERSIST super_read_only=ON;" && log "기존 Primary super_read_only" || log "기존 Primary에 닿지 않음(격리 보안 그룹만 적용)"
             fi
+            # 기존 Primary에 남은 앱(dameokja) 연결을 끊음. 읽기 전용 오류로는 BE 커넥션 풀이 연결을 버리지 않아 교체 뒤에도 옛 서버에 계속 씀 (#195)
+            # BE의 DNS 캐시(5초) 동안 옛 IP로 다시 붙을 수 있어 40초 동안 2초마다 반복. 훅이 Orchestrator 복구를 붙잡지 않게 백그라운드로 돌림
+            (
+              k=0
+              for i in $(seq 1 20); do
+                q=$(mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=2 -N -e "SELECT CONCAT('KILL ', id, ';') FROM information_schema.processlist WHERE user='dameokja'" 2>/dev/null)
+                if [ -n "$q" ]; then echo "$q" | mysql --defaults-extra-file=/etc/orchestrator-topology.cnf -h "$failed" --connect-timeout=2 2>/dev/null; k=$((k + $(echo "$q" | wc -l))); fi
+                sleep 2
+              done
+              log "기존 Primary 앱 연결 끊기 끝: $k개"
+            ) &
             log "끝"
             EOF
             sed -i -e 's/REGION/${AWS::Region}/g' -e 's/FENCED_SG/${DbFencedSecurityGroup}/g' -e 's/ZONE_ID/${DbHostedZoneId}/g' /usr/local/bin/dameokja-db-failover.sh
