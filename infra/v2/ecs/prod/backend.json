@@ -41,7 +41,7 @@
         },
         {
           "name": "SPRING_DATASOURCE_URL",
-          "value": "jdbc:mysql://db.prod.dameokja.internal:3306/app?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+          "value": "jdbc:mysql://db.prod.dameokja.internal:3306/app?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&connectTimeout=3000&socketTimeout=10000"
         }
       ],
       "secrets": [
