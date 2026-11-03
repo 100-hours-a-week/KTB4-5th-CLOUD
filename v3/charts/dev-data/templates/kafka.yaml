@@ -1,0 +1,81 @@
+# broker·controller 겸용 1 Pod(KRaft). PVC는 Kafka를 지워도 남습니다.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: dev
+  labels:
+    strimzi.io/cluster: {{ .Values.kafka.name }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  replicas: 1
+  roles: [broker, controller]
+  resources:
+    requests: {cpu: 500m, memory: 2Gi}
+    limits: {cpu: "2", memory: 2Gi}
+  jvmOptions:
+    -Xms: 512m
+    -Xmx: 1g
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        class: kafka-gp3
+        size: 10Gi
+        kraftMetadata: shared
+        deleteClaim: false
+  template:
+    pod:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: dameokja.com/node-role, operator: In, values: [app]}
+      terminationGracePeriodSeconds: 120
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: {{ .Values.kafka.name }}
+  namespace: dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  kafka:
+    version: {{ .Values.kafka.version | quote }}
+    image: {{ .Values.kafka.image | quote }}
+    # 내부 PLAINTEXT만 엽니다. 외부 listener는 없습니다.
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      auto.create.topics.enable: false
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+  entityOperator:
+    topicOperator:
+      watchedNamespace: dev
+      resources:
+        requests: {cpu: 50m, memory: 128Mi}
+        limits: {cpu: 250m, memory: 256Mi}
+      jvmOptions:
+        -Xms: 64m
+        -Xmx: 128m
+    template:
+      pod:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - {key: dameokja.com/node-role, operator: In, values: [system]}
+        tolerations:
+          - {key: dameokja.com/system, operator: Equal, value: "true", effect: NoSchedule}

@@ -1,0 +1,20 @@
+{{- range $service, $group := .Values.podSecurityGroups }}
+{{- if $group }}
+---
+apiVersion: vpcresources.k8s.aws/v1beta1
+kind: SecurityGroupPolicy
+metadata:
+  name: {{ $service }}
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels:
+      {{- if eq $service "kafka" }}
+      strimzi.io/name: dev-kafka-kafka
+      {{- else }}
+      app.kubernetes.io/name: {{ $service }}
+      {{- end }}
+  securityGroups:
+    groupIds: [{{ $group | quote }}]
+{{- end }}
+{{- end }}

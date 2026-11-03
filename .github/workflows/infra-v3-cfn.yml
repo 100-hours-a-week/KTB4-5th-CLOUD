@@ -10,7 +10,7 @@ on:
     inputs:
       stack:
         type: choice
-        options: [eks, network-addons, system-node, dns-addon, controller-iam, storage-addon]
+        options: [eks, network-addons, system-node, dns-addon, controller-iam, storage-addon, dev-pod-sg, dev-data-access]
       mode:
         description: plan은 change set만 만들고, apply는 가장 최근 plan의 change set을 실행합니다.
         type: choice

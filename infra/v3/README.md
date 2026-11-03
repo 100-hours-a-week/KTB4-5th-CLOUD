@@ -14,6 +14,8 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 4 | dameokja-v3-dns-addon | cloudformation/dns-addon.yaml | CoreDNS 1 Replica Ready·DNS |
 | 5 | dameokja-v3-controller-iam | cloudformation/controller-iam.yaml | Karpenter·EBS CSI IRSA 역할 |
 | 6 | dameokja-v3-storage-addon | cloudformation/storage-addon.yaml | EBS CSI·Metrics Server 1 Replica Ready |
+| 7 | dameokja-v3-dev-pod-sg | cloudformation/dev-pod-sg.yaml | dev FE·BE·AI·Redis·Kafka Pod SG |
+| 8 | dameokja-v3-dev-data-access | cloudformation/dev-data-access.yaml | 기본 VPC Peering·경로, dev DB SG의 BE→3306 |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -72,10 +74,35 @@ helm $K upgrade --install sealed-secrets sealed-secrets --repo https://bitnami.g
 helm $K upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --version 10.11.6 -n tool --wait -f v3/platform/values/argo-cd.yaml
 helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
-  --set workerSecurityGroupId=$(out dameokja-v3-eks WorkerSecurityGroupId)
+  --set workerSecurityGroupId=$(out dameokja-v3-eks WorkerSecurityGroupId) \
+  --set podSecurityGroups.fe=$(out dameokja-v3-dev-pod-sg FePodSecurityGroupId) \
+  --set podSecurityGroups.be=$(out dameokja-v3-dev-pod-sg BePodSecurityGroupId) \
+  --set podSecurityGroups.ai-api=$(out dameokja-v3-dev-pod-sg AiPodSecurityGroupId) \
+  --set podSecurityGroups.redis=$(out dameokja-v3-dev-pod-sg RedisPodSecurityGroupId) \
+  --set podSecurityGroups.kafka=$(out dameokja-v3-dev-pod-sg KafkaPodSecurityGroupId)
 ```
 
-NodePool은 Pending Pod가 있을 때만 앱 Node(m7i.large·2b·On-Demand)를 만들고, 빈 Node는 5분 뒤 정리합니다. redis-gp3·kafka-gp3는 Retain이라 PVC를 지워도 EBS가 남습니다. LBC·Gateway API는 5단계, Pod SG·NetworkPolicy는 3단계에서 추가합니다.
+NodePool은 Pending Pod가 있을 때만 앱 Node(m7i.large·2b·On-Demand)를 만들고, 빈 Node는 5분 뒤 정리합니다. redis-gp3·kafka-gp3는 Retain이라 PVC를 지워도 EBS가 남습니다. platform 차트는 dev Pod에 Pod SG를 붙이고 dev를 기본 차단한 뒤 DNS·Redis·Kafka·DB만 허용합니다. LBC·Gateway API는 5단계에서 추가합니다.
+
+## dev 데이터 계층
+
+dev-pod-sg·dev-data-access 스택과 platform 차트 뒤에 설치합니다. dev-data-access는 CNI의 DB 호스트 SNAT 예외(network-addons)가 먼저 적용되어 있어야 BE Pod SG로 DB 접근을 제한할 수 있습니다. Redis 비밀번호는 4단계에서 SealedSecret으로 바꾸기 전까지 Git 밖에서 만듭니다.
+
+```bash
+kubectl $K -n dev create secret generic cloud-secrets --from-literal=REDIS_PASSWORD="$(openssl rand -hex 24)"
+helm $K upgrade --install dev-data v3/charts/dev-data -n dev --wait --timeout 10m
+kubectl $K -n dev wait kafka/dev-kafka --for=condition=Ready --timeout=600s
+helm $K upgrade dev-data v3/charts/dev-data -n dev --set topics.enabled=true --wait
+kubectl $K -n dev wait kafkatopic --all --for=condition=Ready --timeout=300s
+```
+
+| 대상 | 구성 | 주소 |
+|---|---|---|
+| Redis | StatefulSet 1, AOF everysec, maxmemory 512mb, redis-gp3 10Gi | redis.dev.svc.cluster.local:6379 |
+| Kafka | Strimzi Kafka 4.2.2 broker·controller 1 Pod, kafka-gp3 10Gi, 내부 PLAINTEXT | dev-kafka-kafka-bootstrap.dev.svc.cluster.local:9092 |
+| 토픽 | dev.dameokja.* 7개, partitions·replicas 1, 30일 보존 | |
+
+Redis·Kafka는 앱 Node, Topic Operator는 시스템 Node에 둡니다. PVC는 Retain이고 Kafka·Topic CR은 Argo가 지우지 않습니다. `helm uninstall dev-data`는 업무 토픽을 지우므로 정리 수단으로 쓰지 않습니다. 단일 Pod라 재시작·EBS 재연결 동안 중단됩니다.
 
 ## 검증과 한계
 
