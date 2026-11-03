@@ -199,6 +199,8 @@ Outputs:
     Value: !Ref ServiceIpv4Cidr
   ControlPlaneSecurityGroupId:
     Value: !Ref ControlPlaneSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-ControlPlaneSecurityGroupId
   WorkerSecurityGroupId:
     Value: !Ref WorkerSecurityGroup
     Export:

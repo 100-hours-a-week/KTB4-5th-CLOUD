@@ -74,6 +74,12 @@ Resources:
     Type: AWS::EC2::SecurityGroupIngress
     Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 8443, ToPort: 8443}
 
+  # Kafka 브로커는 시작할 때 Kubernetes API에서 자기 설정 Secret을 읽습니다.
+  # Pod SG로 나가므로 API ENI의 SG(ControlPlane)가 Worker SG 대신 Kafka Pod SG를 허용해야 합니다.
+  KafkaToApi:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-ControlPlaneSecurityGroupId'}, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 443, ToPort: 443}
+
   # kubelet HTTP Probe (Redis·Kafka는 exec Probe라 필요 없음)
   FeProbe:
     Type: AWS::EC2::SecurityGroupIngress
