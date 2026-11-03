@@ -44,6 +44,7 @@ spec:
         - {protocol: TCP, port: 6379}
 ---
 # Kafka: BE·AI는 9092, 브로커끼리 9090·9091, tool의 Strimzi Operator·Entity Operator는 9091·8443
+# 브로커는 시작할 때 Kubernetes API(443)에서 자기 설정 Secret을 읽습니다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -82,6 +83,13 @@ spec:
       ports:
         - {protocol: TCP, port: 9090}
         - {protocol: TCP, port: 9091}
+    - to:
+        {{- range .Values.network.privateSubnetCidrs }}
+        - ipBlock: {cidr: {{ . }}}
+        {{- end }}
+        - ipBlock: {cidr: 192.168.0.1/32}
+      ports:
+        - {protocol: TCP, port: 443}
 ---
 # Topic Operator → Kafka 9091, Kubernetes API 443
 apiVersion: networking.k8s.io/v1
