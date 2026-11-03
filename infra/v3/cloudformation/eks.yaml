@@ -209,6 +209,14 @@ Resources:
       Url: !GetAtt Cluster.OpenIdConnectIssuerUrl
       ClientIdList: [sts.amazonaws.com]
 
+  # CA는 1024자를 넘어 Export할 수 없으므로 SSM Parameter로 넘깁니다.
+  ClusterCertificateAuthorityParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${AWS::StackName}/cluster-ca
+      Type: String
+      Value: !GetAtt Cluster.CertificateAuthorityData
+
 Outputs:
   VpcId:
     Value: !Ref VpcId
@@ -218,10 +226,8 @@ Outputs:
     Value: !GetAtt Cluster.Endpoint
     Export:
       Name: !Sub ${AWS::StackName}-ClusterEndpoint
-  ClusterCertificateAuthority:
-    Value: !GetAtt Cluster.CertificateAuthorityData
-    Export:
-      Name: !Sub ${AWS::StackName}-ClusterCertificateAuthority
+  ClusterCertificateAuthorityParameter:
+    Value: !Ref ClusterCertificateAuthorityParameter
   ServiceIpv4Cidr:
     Value: !Ref ServiceIpv4Cidr
   ControlPlaneSecurityGroupId:

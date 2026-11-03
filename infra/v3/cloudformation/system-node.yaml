@@ -72,7 +72,7 @@ Resources:
                   - --register-with-taints=dameokja.com/system=true:NoSchedule
             --DAMEOKJA_NODE--
           - ClusterEndpoint: {'Fn::ImportValue': !Sub '${EksStackName}-ClusterEndpoint'}
-            ClusterCertificateAuthority: {'Fn::ImportValue': !Sub '${EksStackName}-ClusterCertificateAuthority'}
+            ClusterCertificateAuthority: !Sub '{{resolve:ssm:/${EksStackName}/cluster-ca}}'
       Tags:
         - Key: Name
           Value: !Sub ${ClusterName}-system
