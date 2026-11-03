@@ -1,6 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: dameokja v3 dev Pod security groups
-# SecurityGroupPolicy로 dev Pod에 붙입니다. 송신은 NetworkPolicy로 제한합니다.
+# SecurityGroupPolicy로 dev Pod에 붙입니다.
+# 수신은 AWS 계층(SG)과 Kubernetes 계층(NetworkPolicy)에 같은 규칙을 둡니다. 한쪽을 바꾸면 다른 쪽도 맞춥니다.
+# 송신은 SG에서 모두 열고 NetworkPolicy로 제한합니다(DB SG가 Pod SG를 식별해야 해서 SG 송신까지 나누지 않음).
 
 Parameters:
   VpcId:
@@ -62,11 +64,9 @@ Resources:
   AiToKafka:
     Type: AWS::EC2::SecurityGroupIngress
     Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !Ref AiPodSecurityGroup, IpProtocol: tcp, FromPort: 9092, ToPort: 9092}
-  KafkaInternal:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 9090, ToPort: 9091}
 
-  # 시스템 Node의 Strimzi Operator·Entity Operator → Kafka (복제 리스너, Kafka Agent)
+  # Strimzi Cluster Operator·Topic Operator → Kafka 9091(복제 리스너)·8443(Kafka Agent).
+  # 두 Operator는 Pod SG 없이 Node SG(Worker)로 나가므로 출처가 Worker SG입니다. 앱 Node도 이 SG를 쓰므로 Pod 단위 제한은 NetworkPolicy가 맡습니다.
   KafkaFromOperator:
     Type: AWS::EC2::SecurityGroupIngress
     Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 9091, ToPort: 9091}

@@ -23,8 +23,6 @@ Resources:
           "replicaCount": 1,
           "nodeSelector": {"dameokja.com/node-role": "system"},
           "tolerations": [
-            {"key": "CriticalAddonsOnly", "operator": "Exists"},
-            {"key": "node-role.kubernetes.io/control-plane", "operator": "Exists", "effect": "NoSchedule"},
             {"key": "dameokja.com/system", "operator": "Equal", "value": "true", "effect": "NoSchedule"}
           ],
           "resources": {

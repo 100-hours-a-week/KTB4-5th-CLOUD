@@ -4,7 +4,5 @@
   {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"},
   {"ParameterKey": "PrivateSubnetIds", "ParameterValue": "subnet-0778204ce3b43756e,subnet-0f86136fb72318e11"},
   {"ParameterKey": "ServiceIpv4Cidr", "ParameterValue": "192.168.0.0/16"},
-  {"ParameterKey": "AdministratorPrincipalArn", "ParameterValue": "arn:aws:iam::906462447513:user/dameokja-aws-cli"},
-  {"ParameterKey": "EnablePublicEndpoint", "ParameterValue": "false"},
-  {"ParameterKey": "AdministratorPublicCidr", "ParameterValue": "192.0.2.1/32"}
+  {"ParameterKey": "AdministratorPrincipalArn", "ParameterValue": "arn:aws:iam::906462447513:user/dameokja-aws-cli"}
 ]
