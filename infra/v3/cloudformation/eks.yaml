@@ -244,6 +244,8 @@ Outputs:
     Value: !Ref AppNodeRole
   AppNodeRoleArn:
     Value: !GetAtt AppNodeRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-AppNodeRoleArn
   OidcProviderArn:
     Value: !Ref OidcProvider
     Export:

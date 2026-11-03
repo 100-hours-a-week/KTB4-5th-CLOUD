@@ -1,0 +1,704 @@
+# 공식 고정 버전 정책을 기존 EKS 역할에 연결하도록 구성했습니다.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 controller IAM and interruption resources
+Parameters:
+  ClusterName:
+    Type: String
+    Default: dameokja-v3
+  EksStackName:
+    Type: String
+    Default: dameokja-v3-eks
+Resources:
+  NodeLifecyclePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowScopedEC2InstanceAccessActions",
+                "Effect": "Allow",
+                "Resource": [
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}::image/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}::snapshot/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:security-group/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:subnet/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:capacity-reservation/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:placement-group/*"
+                ],
+                "Action": [
+                  "ec2:RunInstances",
+                  "ec2:CreateFleet"
+                ]
+              },
+              {
+                "Sid": "AllowScopedEC2LaunchTemplateAccessActions",
+                "Effect": "Allow",
+                "Resource": "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*",
+                "Action": [
+                  "ec2:RunInstances",
+                  "ec2:CreateFleet"
+                ],
+                "Condition": {
+                  "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/${ClusterName}": "owned"
+                  },
+                  "StringLike": {
+                    "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                  }
+                }
+              },
+              {
+                "Sid": "AllowScopedEC2InstanceActionsWithTags",
+                "Effect": "Allow",
+                "Resource": [
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:fleet/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:instance/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:volume/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:network-interface/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:spot-instances-request/*"
+                ],
+                "Action": [
+                  "ec2:RunInstances",
+                  "ec2:CreateFleet",
+                  "ec2:CreateLaunchTemplate"
+                ],
+                "Condition": {
+                  "StringEquals": {
+                    "aws:RequestTag/kubernetes.io/cluster/${ClusterName}": "owned",
+                    "aws:RequestTag/eks:eks-cluster-name": "${ClusterName}"
+                  },
+                  "StringLike": {
+                    "aws:RequestTag/karpenter.sh/nodepool": "*"
+                  }
+                }
+              },
+              {
+                "Sid": "AllowScopedResourceCreationTagging",
+                "Effect": "Allow",
+                "Resource": [
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:fleet/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:instance/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:volume/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:network-interface/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:spot-instances-request/*"
+                ],
+                "Action": "ec2:CreateTags",
+                "Condition": {
+                  "StringEquals": {
+                    "aws:RequestTag/kubernetes.io/cluster/${ClusterName}": "owned",
+                    "aws:RequestTag/eks:eks-cluster-name": "${ClusterName}",
+                    "ec2:CreateAction": [
+                      "RunInstances",
+                      "CreateFleet",
+                      "CreateLaunchTemplate"
+                    ]
+                  },
+                  "StringLike": {
+                    "aws:RequestTag/karpenter.sh/nodepool": "*"
+                  }
+                }
+              },
+              {
+                "Sid": "AllowScopedResourceTagging",
+                "Effect": "Allow",
+                "Resource": "arn:${AWS::Partition}:ec2:${AWS::Region}:*:instance/*",
+                "Action": "ec2:CreateTags",
+                "Condition": {
+                  "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/${ClusterName}": "owned"
+                  },
+                  "StringLike": {
+                    "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                  },
+                  "StringEqualsIfExists": {
+                    "aws:RequestTag/eks:eks-cluster-name": "${ClusterName}"
+                  },
+                  "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                      "eks:eks-cluster-name",
+                      "karpenter.sh/nodeclaim",
+                      "Name"
+                    ]
+                  }
+                }
+              },
+              {
+                "Sid": "AllowScopedDeletion",
+                "Effect": "Allow",
+                "Resource": [
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:instance/*",
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*"
+                ],
+                "Action": [
+                  "ec2:TerminateInstances",
+                  "ec2:RebootInstances",
+                  "ec2:DeleteLaunchTemplate"
+                ],
+                "Condition": {
+                  "StringEquals": {
+                    "aws:ResourceTag/kubernetes.io/cluster/${ClusterName}": "owned"
+                  },
+                  "StringLike": {
+                    "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                  }
+                }
+              }
+            ]
+          }
+  IAMIntegrationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument:
+        Fn::Sub:
+        - |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AllowPassingInstanceRole",
+                  "Effect": "Allow",
+                  "Resource": "${AppNodeRoleArn}",
+                  "Action": "iam:PassRole",
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": [
+                        "ec2.amazonaws.com",
+                        "ec2.amazonaws.com.cn"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "AllowScopedInstanceProfileCreationActions",
+                  "Effect": "Allow",
+                  "Resource": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*",
+                  "Action": [
+                    "iam:CreateInstanceProfile"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestTag/kubernetes.io/cluster/${ClusterName}": "owned",
+                      "aws:RequestTag/eks:eks-cluster-name": "${ClusterName}",
+                      "aws:RequestTag/topology.kubernetes.io/region": "${AWS::Region}"
+                    },
+                    "StringLike": {
+                      "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "AllowScopedInstanceProfileTagActions",
+                  "Effect": "Allow",
+                  "Resource": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*",
+                  "Action": [
+                    "iam:TagInstanceProfile"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/kubernetes.io/cluster/${ClusterName}": "owned",
+                      "aws:ResourceTag/topology.kubernetes.io/region": "${AWS::Region}",
+                      "aws:RequestTag/kubernetes.io/cluster/${ClusterName}": "owned",
+                      "aws:RequestTag/eks:eks-cluster-name": "${ClusterName}",
+                      "aws:RequestTag/topology.kubernetes.io/region": "${AWS::Region}"
+                    },
+                    "StringLike": {
+                      "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*",
+                      "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "AllowScopedInstanceProfileActions",
+                  "Effect": "Allow",
+                  "Resource": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*",
+                  "Action": [
+                    "iam:AddRoleToInstanceProfile",
+                    "iam:RemoveRoleFromInstanceProfile",
+                    "iam:DeleteInstanceProfile"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/kubernetes.io/cluster/${ClusterName}": "owned",
+                      "aws:ResourceTag/topology.kubernetes.io/region": "${AWS::Region}"
+                    },
+                    "StringLike": {
+                      "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                    }
+                  }
+                }
+              ]
+            }
+        - AppNodeRoleArn: {'Fn::ImportValue': !Sub '${EksStackName}-AppNodeRoleArn'}
+  EKSIntegrationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowAPIServerEndpointDiscovery",
+                "Effect": "Allow",
+                "Resource": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}",
+                "Action": "eks:DescribeCluster"
+              }
+            ]
+          }
+  InterruptionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowInterruptionQueueActions",
+                "Effect": "Allow",
+                "Resource": "${KarpenterInterruptionQueue.Arn}",
+                "Action": [
+                  "sqs:DeleteMessage",
+                  "sqs:GetQueueUrl",
+                  "sqs:ReceiveMessage"
+                ]
+              }
+            ]
+          }
+  ZonalShiftPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowZonalShiftStatusReadOnly",
+                "Effect": "Allow",
+                "Resource": "*",
+                "Action": [
+                  "arc-zonal-shift:GetManagedResource"
+                ],
+                "Condition": {
+                  "StringEquals": {
+                    "arc-zonal-shift:ResourceIdentifier": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                  }
+                }
+              }
+            ]
+          }
+  ResourceDiscoveryPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowRegionalReadActions",
+                "Effect": "Allow",
+                "Resource": "*",
+                "Action": [
+                  "ec2:DescribeCapacityReservations",
+                  "ec2:DescribeImages",
+                  "ec2:DescribeInstances",
+                  "ec2:DescribeInstanceStatus",
+                  "ec2:DescribeInstanceTypeOfferings",
+                  "ec2:DescribeInstanceTypes",
+                  "ec2:DescribeLaunchTemplates",
+                  "ec2:DescribePlacementGroups",
+                  "ec2:DescribeSecurityGroups",
+                  "ec2:DescribeSpotPriceHistory",
+                  "ec2:DescribeSubnets"
+                ],
+                "Condition": {
+                  "StringEquals": {
+                    "aws:RequestedRegion": "${AWS::Region}"
+                  }
+                }
+              },
+              {
+                "Sid": "AllowSSMReadActions",
+                "Effect": "Allow",
+                "Resource": "arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/*",
+                "Action": "ssm:GetParameter"
+              },
+              {
+                "Sid": "AllowPricingReadActions",
+                "Effect": "Allow",
+                "Resource": "*",
+                "Action": "pricing:GetProducts"
+              },
+              {
+                "Sid": "AllowUnscopedInstanceProfileListAction",
+                "Effect": "Allow",
+                "Resource": "*",
+                "Action": "iam:ListInstanceProfiles"
+              },
+              {
+                "Sid": "AllowInstanceProfileReadActions",
+                "Effect": "Allow",
+                "Resource": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/*",
+                "Action": "iam:GetInstanceProfile"
+              }
+            ]
+          }
+  KarpenterInterruptionQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: ${ClusterName}
+      MessageRetentionPeriod: 300
+      SqsManagedSseEnabled: true
+  KarpenterInterruptionQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: KarpenterInterruptionQueue
+      PolicyDocument:
+        Id: EC2InterruptionPolicy
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - events.amazonaws.com
+            - sqs.amazonaws.com
+          Action: sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - KarpenterInterruptionQueue
+            - Arn
+        - Sid: DenyHTTP
+          Effect: Deny
+          Action: sqs:*
+          Resource:
+            Fn::GetAtt:
+            - KarpenterInterruptionQueue
+            - Arn
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+          Principal: '*'
+  ScheduledChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+        - aws.health
+        detail-type:
+        - AWS Health Event
+      Targets:
+      - Id: KarpenterInterruptionQueueTarget
+        Arn:
+          Fn::GetAtt:
+          - KarpenterInterruptionQueue
+          - Arn
+  SpotInterruptionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+        - aws.ec2
+        detail-type:
+        - EC2 Spot Instance Interruption Warning
+      Targets:
+      - Id: KarpenterInterruptionQueueTarget
+        Arn:
+          Fn::GetAtt:
+          - KarpenterInterruptionQueue
+          - Arn
+  RebalanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+        - aws.ec2
+        detail-type:
+        - EC2 Instance Rebalance Recommendation
+      Targets:
+      - Id: KarpenterInterruptionQueueTarget
+        Arn:
+          Fn::GetAtt:
+          - KarpenterInterruptionQueue
+          - Arn
+  InstanceStateChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+        - aws.ec2
+        detail-type:
+        - EC2 Instance State-change Notification
+      Targets:
+      - Id: KarpenterInterruptionQueueTarget
+        Arn:
+          Fn::GetAtt:
+          - KarpenterInterruptionQueue
+          - Arn
+  CapacityReservationInterruptionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+        - aws.ec2
+        detail-type:
+        - EC2 Capacity Reservation Instance Interruption Warning
+      Targets:
+      - Id: KarpenterInterruptionQueueTarget
+        Arn:
+          Fn::GetAtt:
+          - KarpenterInterruptionQueue
+          - Arn
+  KarpenterControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
+            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+            "${OidcIssuerHostPath}:sub": "system:serviceaccount:tool:karpenter"}}}]}'
+          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
+      ManagedPolicyArns:
+      - Ref: NodeLifecyclePolicy
+      - Ref: IAMIntegrationPolicy
+      - Ref: EKSIntegrationPolicy
+      - Ref: InterruptionPolicy
+      - Ref: ZonalShiftPolicy
+      - Ref: ResourceDiscoveryPolicy
+  EbsCsiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
+            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+            "${OidcIssuerHostPath}:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa"}}}]}'
+          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
+      ManagedPolicyArns:
+      - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonEBSCSIDriverPolicyV2
+  LoadBalancerControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
+            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+            "${OidcIssuerHostPath}:sub": "system:serviceaccount:tool:aws-load-balancer-controller"}}}]}'
+          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
+      Policies:
+      - PolicyName: load-balancer-controller-3-6-2
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - iam:CreateServiceLinkedRole
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: elasticloadbalancing.amazonaws.com
+          - Effect: Allow
+            Action:
+            - ec2:DescribeAccountAttributes
+            - ec2:DescribeAddresses
+            - ec2:DescribeAvailabilityZones
+            - ec2:DescribeInternetGateways
+            - ec2:DescribeVpcs
+            - ec2:DescribeVpcPeeringConnections
+            - ec2:DescribeSubnets
+            - ec2:DescribeSecurityGroups
+            - ec2:DescribeInstances
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DescribeTags
+            - ec2:GetCoipPoolUsage
+            - ec2:DescribeCoipPools
+            - ec2:GetSecurityGroupsForVpc
+            - ec2:DescribeIpamPools
+            - ec2:DescribeRouteTables
+            - elasticloadbalancing:DescribeLoadBalancers
+            - elasticloadbalancing:DescribeLoadBalancerAttributes
+            - elasticloadbalancing:DescribeListeners
+            - elasticloadbalancing:DescribeListenerCertificates
+            - elasticloadbalancing:DescribeSSLPolicies
+            - elasticloadbalancing:DescribeRules
+            - elasticloadbalancing:DescribeTargetGroups
+            - elasticloadbalancing:DescribeTargetGroupAttributes
+            - elasticloadbalancing:DescribeTargetHealth
+            - elasticloadbalancing:DescribeTags
+            - elasticloadbalancing:DescribeTrustStores
+            - elasticloadbalancing:DescribeListenerAttributes
+            - elasticloadbalancing:DescribeCapacityReservation
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - cognito-idp:DescribeUserPoolClient
+            - acm:ListCertificates
+            - acm:DescribeCertificate
+            - iam:ListServerCertificates
+            - iam:GetServerCertificate
+            - waf-regional:GetWebACL
+            - waf-regional:GetWebACLForResource
+            - waf-regional:AssociateWebACL
+            - waf-regional:DisassociateWebACL
+            - wafv2:GetWebACL
+            - wafv2:GetWebACLForResource
+            - wafv2:AssociateWebACL
+            - wafv2:DisassociateWebACL
+            - shield:GetSubscriptionState
+            - shield:DescribeProtection
+            - shield:CreateProtection
+            - shield:DeleteProtection
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - ec2:AuthorizeSecurityGroupIngress
+            - ec2:RevokeSecurityGroupIngress
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - ec2:CreateSecurityGroup
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - ec2:CreateTags
+            Resource: arn:aws:ec2:*:*:security-group/*
+            Condition:
+              StringEquals:
+                ec2:CreateAction: CreateSecurityGroup
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - ec2:CreateTags
+            - ec2:DeleteTags
+            Resource: arn:aws:ec2:*:*:security-group/*
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - ec2:AuthorizeSecurityGroupIngress
+            - ec2:RevokeSecurityGroupIngress
+            - ec2:DeleteSecurityGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:CreateLoadBalancer
+            - elasticloadbalancing:CreateTargetGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:CreateListener
+            - elasticloadbalancing:DeleteListener
+            - elasticloadbalancing:CreateRule
+            - elasticloadbalancing:DeleteRule
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:AddTags
+            - elasticloadbalancing:RemoveTags
+            Resource:
+            - arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
+            - arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*
+            - arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:AddTags
+            - elasticloadbalancing:RemoveTags
+            Resource:
+            - arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*
+            - arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*
+            - arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*
+            - arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:ModifyLoadBalancerAttributes
+            - elasticloadbalancing:SetIpAddressType
+            - elasticloadbalancing:SetSecurityGroups
+            - elasticloadbalancing:SetSubnets
+            - elasticloadbalancing:DeleteLoadBalancer
+            - elasticloadbalancing:ModifyTargetGroup
+            - elasticloadbalancing:ModifyTargetGroupAttributes
+            - elasticloadbalancing:DeleteTargetGroup
+            - elasticloadbalancing:ModifyListenerAttributes
+            - elasticloadbalancing:ModifyCapacityReservation
+            - elasticloadbalancing:ModifyIpPools
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:AddTags
+            Resource:
+            - arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
+            - arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*
+            - arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*
+            Condition:
+              StringEquals:
+                elasticloadbalancing:CreateAction:
+                - CreateTargetGroup
+                - CreateLoadBalancer
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:RegisterTargets
+            - elasticloadbalancing:DeregisterTargets
+            Resource: arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:SetWebAcl
+            - elasticloadbalancing:ModifyListener
+            - elasticloadbalancing:AddListenerCertificates
+            - elasticloadbalancing:RemoveListenerCertificates
+            - elasticloadbalancing:ModifyRule
+            - elasticloadbalancing:SetRulePriorities
+            Resource: '*'
+Outputs:
+  KarpenterControllerRoleArn:
+    Value:
+      Fn::GetAtt:
+      - KarpenterControllerRole
+      - Arn
+  EbsCsiRoleArn:
+    Value:
+      Fn::GetAtt:
+      - EbsCsiRole
+      - Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-EbsCsiRoleArn
+  LoadBalancerControllerRoleArn:
+    Value:
+      Fn::GetAtt:
+      - LoadBalancerControllerRole
+      - Arn
+  InterruptionQueueName:
+    Value:
+      Fn::GetAtt:
+      - KarpenterInterruptionQueue
+      - QueueName

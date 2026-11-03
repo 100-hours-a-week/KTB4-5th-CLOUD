@@ -1,0 +1,5 @@
+[
+  {"ParameterKey":"ClusterName","ParameterValue":"dameokja-v3"},
+  {"ParameterKey":"EbsCsiVersion","ParameterValue":"v1.67.2-eksbuild.1"},
+  {"ParameterKey":"MetricsServerVersion","ParameterValue":"v0.9.0-eksbuild.14"}
+]

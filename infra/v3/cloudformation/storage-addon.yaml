@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 EBS CSI and Metrics Server managed add-ons
+# Control Plane -> Node 10251(Metrics API)는 eks 스택의 1025-65535 규칙이 허용합니다.
+Parameters:
+  ClusterName:
+    Type: String
+    Default: dameokja-v3
+  ControllerIamStackName:
+    Type: String
+    Default: dameokja-v3-controller-iam
+  EbsCsiVersion:
+    Type: String
+    Default: v1.67.2-eksbuild.1
+  MetricsServerVersion:
+    Type: String
+    Default: v0.9.0-eksbuild.14
+Resources:
+  MetricsServer:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref ClusterName
+      AddonName: metrics-server
+      AddonVersion: !Ref MetricsServerVersion
+      PreserveOnDelete: true
+      ResolveConflicts: NONE
+      ConfigurationValues: |
+        {
+          "replicas": 1,
+          "nodeSelector": {"dameokja.com/node-role": "system"},
+          "tolerations": [{"key": "dameokja.com/system", "operator": "Equal", "value": "true", "effect": "NoSchedule"}],
+          "resources": {"requests": {"cpu": "50m", "memory": "128Mi"}, "limits": {"memory": "256Mi"}}
+        }
+  EbsCsi:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref ClusterName
+      AddonName: aws-ebs-csi-driver
+      AddonVersion: !Ref EbsCsiVersion
+      ServiceAccountRoleArn: {'Fn::ImportValue': !Sub '${ControllerIamStackName}-EbsCsiRoleArn'}
+      PreserveOnDelete: true
+      ResolveConflicts: NONE
+      ConfigurationValues: |
+        {
+          "controller": {
+            "replicaCount": 1,
+            "nodeSelector": {"dameokja.com/node-role": "system"},
+            "tolerations": [
+              {"key": "dameokja.com/system", "operator": "Equal", "value": "true", "effect": "NoSchedule"}
+            ],
+            "resources": {
+              "requests": {"cpu": "50m", "memory": "128Mi"},
+              "limits": {"memory": "256Mi"}
+            }
+          },
+          "sidecars": {
+            "attacher": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
+            "provisioner": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
+            "resizer": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
+            "snapshotter": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
+            "livenessProbe": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
+            "nodeDriverRegistrar": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
+            "volumemodifier": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}}
+          },
+          "node": {
+            "resources": {"requests": {"cpu": "25m", "memory": "64Mi"}, "limits": {"memory": "128Mi"}}
+          }
+        }
