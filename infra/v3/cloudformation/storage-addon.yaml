@@ -56,10 +56,8 @@ Resources:
             "attacher": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
             "provisioner": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
             "resizer": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
-            "snapshotter": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
             "livenessProbe": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
-            "nodeDriverRegistrar": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}},
-            "volumemodifier": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}}
+            "nodeDriverRegistrar": {"resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}}
           },
           "node": {
             "resources": {"requests": {"cpu": "25m", "memory": "64Mi"}, "limits": {"memory": "128Mi"}}
