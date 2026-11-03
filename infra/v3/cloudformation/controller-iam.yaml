@@ -1,4 +1,5 @@
-# 공식 고정 버전 정책을 기존 EKS 역할에 연결하도록 구성했습니다.
+# Karpenter 1.15.1 공식 정책에서 쓰지 않는 자원(Spot 요청, Capacity Reservation, Placement Group)을 뺐습니다.
+# 중단 이벤트 Queue는 쓰지 않습니다(On-Demand만 사용). LBC 역할은 Gateway 단계에서 추가합니다.
 AWSTemplateFormatVersion: '2010-09-09'
 Description: dameokja v3 controller IAM roles
 Parameters:
@@ -25,9 +26,7 @@ Resources:
                   "arn:${AWS::Partition}:ec2:${AWS::Region}::image/*",
                   "arn:${AWS::Partition}:ec2:${AWS::Region}::snapshot/*",
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:security-group/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:subnet/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:capacity-reservation/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:placement-group/*"
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:subnet/*"
                 ],
                 "Action": [
                   "ec2:RunInstances",
@@ -59,8 +58,7 @@ Resources:
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:instance/*",
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:volume/*",
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:network-interface/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:spot-instances-request/*"
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*"
                 ],
                 "Action": [
                   "ec2:RunInstances",
@@ -85,8 +83,7 @@ Resources:
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:instance/*",
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:volume/*",
                   "arn:${AWS::Partition}:ec2:${AWS::Region}:*:network-interface/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*",
-                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:spot-instances-request/*"
+                  "arn:${AWS::Partition}:ec2:${AWS::Region}:*:launch-template/*"
                 ],
                 "Action": "ec2:CreateTags",
                 "Condition": {
@@ -361,196 +358,6 @@ Resources:
           - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
       ManagedPolicyArns:
       - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonEBSCSIDriverPolicyV2
-  LoadBalancerControllerRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Fn::Sub:
-          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
-            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
-            "${OidcIssuerHostPath}:sub": "system:serviceaccount:tool:aws-load-balancer-controller"}}}]}'
-          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
-      Policies:
-      - PolicyName: load-balancer-controller-3-6-2
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - iam:CreateServiceLinkedRole
-            Resource: '*'
-            Condition:
-              StringEquals:
-                iam:AWSServiceName: elasticloadbalancing.amazonaws.com
-          - Effect: Allow
-            Action:
-            - ec2:DescribeAccountAttributes
-            - ec2:DescribeAddresses
-            - ec2:DescribeAvailabilityZones
-            - ec2:DescribeInternetGateways
-            - ec2:DescribeVpcs
-            - ec2:DescribeVpcPeeringConnections
-            - ec2:DescribeSubnets
-            - ec2:DescribeSecurityGroups
-            - ec2:DescribeInstances
-            - ec2:DescribeNetworkInterfaces
-            - ec2:DescribeTags
-            - ec2:GetCoipPoolUsage
-            - ec2:DescribeCoipPools
-            - ec2:GetSecurityGroupsForVpc
-            - ec2:DescribeIpamPools
-            - ec2:DescribeRouteTables
-            - elasticloadbalancing:DescribeLoadBalancers
-            - elasticloadbalancing:DescribeLoadBalancerAttributes
-            - elasticloadbalancing:DescribeListeners
-            - elasticloadbalancing:DescribeListenerCertificates
-            - elasticloadbalancing:DescribeSSLPolicies
-            - elasticloadbalancing:DescribeRules
-            - elasticloadbalancing:DescribeTargetGroups
-            - elasticloadbalancing:DescribeTargetGroupAttributes
-            - elasticloadbalancing:DescribeTargetHealth
-            - elasticloadbalancing:DescribeTags
-            - elasticloadbalancing:DescribeTrustStores
-            - elasticloadbalancing:DescribeListenerAttributes
-            - elasticloadbalancing:DescribeCapacityReservation
-            Resource: '*'
-          - Effect: Allow
-            Action:
-            - cognito-idp:DescribeUserPoolClient
-            - acm:ListCertificates
-            - acm:DescribeCertificate
-            - iam:ListServerCertificates
-            - iam:GetServerCertificate
-            - waf-regional:GetWebACL
-            - waf-regional:GetWebACLForResource
-            - waf-regional:AssociateWebACL
-            - waf-regional:DisassociateWebACL
-            - wafv2:GetWebACL
-            - wafv2:GetWebACLForResource
-            - wafv2:AssociateWebACL
-            - wafv2:DisassociateWebACL
-            - shield:GetSubscriptionState
-            - shield:DescribeProtection
-            - shield:CreateProtection
-            - shield:DeleteProtection
-            Resource: '*'
-          - Effect: Allow
-            Action:
-            - ec2:AuthorizeSecurityGroupIngress
-            - ec2:RevokeSecurityGroupIngress
-            Resource: '*'
-          - Effect: Allow
-            Action:
-            - ec2:CreateSecurityGroup
-            Resource: '*'
-          - Effect: Allow
-            Action:
-            - ec2:CreateTags
-            Resource: arn:aws:ec2:*:*:security-group/*
-            Condition:
-              StringEquals:
-                ec2:CreateAction: CreateSecurityGroup
-              'Null':
-                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - ec2:CreateTags
-            - ec2:DeleteTags
-            Resource: arn:aws:ec2:*:*:security-group/*
-            Condition:
-              'Null':
-                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
-                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - ec2:AuthorizeSecurityGroupIngress
-            - ec2:RevokeSecurityGroupIngress
-            - ec2:DeleteSecurityGroup
-            Resource: '*'
-            Condition:
-              'Null':
-                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:CreateLoadBalancer
-            - elasticloadbalancing:CreateTargetGroup
-            Resource: '*'
-            Condition:
-              'Null':
-                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:CreateListener
-            - elasticloadbalancing:DeleteListener
-            - elasticloadbalancing:CreateRule
-            - elasticloadbalancing:DeleteRule
-            Resource: '*'
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:AddTags
-            - elasticloadbalancing:RemoveTags
-            Resource:
-            - arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
-            - arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*
-            - arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*
-            Condition:
-              'Null':
-                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
-                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:AddTags
-            - elasticloadbalancing:RemoveTags
-            Resource:
-            - arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*
-            - arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*
-            - arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*
-            - arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:ModifyLoadBalancerAttributes
-            - elasticloadbalancing:SetIpAddressType
-            - elasticloadbalancing:SetSecurityGroups
-            - elasticloadbalancing:SetSubnets
-            - elasticloadbalancing:DeleteLoadBalancer
-            - elasticloadbalancing:ModifyTargetGroup
-            - elasticloadbalancing:ModifyTargetGroupAttributes
-            - elasticloadbalancing:DeleteTargetGroup
-            - elasticloadbalancing:ModifyListenerAttributes
-            - elasticloadbalancing:ModifyCapacityReservation
-            - elasticloadbalancing:ModifyIpPools
-            Resource: '*'
-            Condition:
-              'Null':
-                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:AddTags
-            Resource:
-            - arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
-            - arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*
-            - arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*
-            Condition:
-              StringEquals:
-                elasticloadbalancing:CreateAction:
-                - CreateTargetGroup
-                - CreateLoadBalancer
-              'Null':
-                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:RegisterTargets
-            - elasticloadbalancing:DeregisterTargets
-            Resource: arn:aws:elasticloadbalancing:*:*:targetgroup/*/*
-          - Effect: Allow
-            Action:
-            - elasticloadbalancing:SetWebAcl
-            - elasticloadbalancing:ModifyListener
-            - elasticloadbalancing:AddListenerCertificates
-            - elasticloadbalancing:RemoveListenerCertificates
-            - elasticloadbalancing:ModifyRule
-            - elasticloadbalancing:SetRulePriorities
-            Resource: '*'
 Outputs:
   KarpenterControllerRoleArn:
     Value:
@@ -564,8 +371,3 @@ Outputs:
       - Arn
     Export:
       Name: !Sub ${AWS::StackName}-EbsCsiRoleArn
-  LoadBalancerControllerRoleArn:
-    Value:
-      Fn::GetAtt:
-      - LoadBalancerControllerRole
-      - Arn
