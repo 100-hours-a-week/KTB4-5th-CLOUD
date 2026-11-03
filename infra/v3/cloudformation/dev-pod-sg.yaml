@@ -132,6 +132,8 @@ Outputs:
       Name: !Sub ${AWS::StackName}-BePodSecurityGroupId
   AiPodSecurityGroupId:
     Value: !Ref AiPodSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-AiPodSecurityGroupId
   RedisPodSecurityGroupId:
     Value: !Ref RedisPodSecurityGroup
   KafkaPodSecurityGroupId:

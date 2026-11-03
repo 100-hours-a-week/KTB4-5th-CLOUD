@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: v3 dev Pod에서 기존 dev DB EC2(기본 VPC)로 가는 직접 경로
 # 기존 Route Table·DB SG에는 경로와 규칙만 추가합니다. 기존 규칙은 바꾸지 않습니다.
-# AI PostgreSQL(5432)은 위치를 정한 뒤 추가합니다.
+# v3 dev AI용 PostgreSQL도 같은 DB EC2에 설치합니다(#225). v2 dev AI는 자기 EC2의 PostgreSQL을 계속 씁니다.
 
 Parameters:
   VpcId:
@@ -20,6 +20,9 @@ Parameters:
     Type: String
   DatabaseSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
+  # 기존 dev DB EC2는 IaC 밖에서 만든 서버라 ID로 지정합니다.
+  DatabaseInstanceId:
+    Type: AWS::EC2::Instance::Id
   PodSgStackName:
     Type: String
     Default: dameokja-v3-dev-pod-sg
@@ -57,6 +60,44 @@ Resources:
       FromPort: 3306
       ToPort: 3306
       Description: v3 dev BE Pods only
+
+  PostgresFromDevAi:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: DevDatabasePeering
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroupId
+      SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${PodSgStackName}-AiPodSecurityGroupId'}
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      Description: v3 dev AI Pods only
+
+  # Ubuntu 기본 저장소의 PostgreSQL(26.04는 18)을 설치합니다. 메모리 설정은 기본값(shared_buffers 128MB)을 그대로 씁니다.
+  # 이 서버에는 인스턴스 역할과 aws CLI가 없어 SSM의 비밀번호를 읽을 수 없습니다. receipt_ai는 비밀번호 없이 만들고
+  # 사용자가 한 번 직접 설정합니다(README). scram 방식이라 비밀번호를 정하기 전에는 접속되지 않습니다.
+  # pg_hba는 Pod가 SNAT 없이 나오는 App Subnet만 허용하고, SG가 AI Pod SG로 한 번 더 좁힙니다.
+  DevPostgresAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: dameokja-v3-dev-db-postgres
+      Name: AWS-RunShellScript
+      Targets:
+        - {Key: InstanceIds, Values: [!Ref DatabaseInstanceId]}
+      Parameters:
+        executionTimeout: ['1800']
+        commands:
+          - set -e; changed=
+          - dpkg -s postgresql >/dev/null 2>&1 || { apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql; }
+          - V=$(ls /etc/postgresql | sort -n | tail -1); C=/etc/postgresql/$V/main
+          - !Sub
+            - "echo \"listen_addresses = '${Ip}'\" > /tmp/dameokja.conf"
+            - Ip: !Select [0, !Split ['/', !Ref DatabaseHostCidr]]
+          - cmp -s /tmp/dameokja.conf $C/conf.d/dameokja.conf || { install -o postgres -g postgres -m 644 /tmp/dameokja.conf $C/conf.d/dameokja.conf; changed=1; }
+          - !Sub "grep -q '^host receipt_ai receipt_ai ${AppSubnetCidr} scram-sha-256' $C/pg_hba.conf || { echo 'host receipt_ai receipt_ai ${AppSubnetCidr} scram-sha-256' >> $C/pg_hba.conf; changed=1; }"
+          - systemctl enable postgresql; if systemctl is-active -q postgresql; then [ -z "$changed" ] || systemctl restart postgresql; else systemctl start postgresql; fi
+          - sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='receipt_ai'" | grep -q 1 || sudo -u postgres psql -c "CREATE ROLE receipt_ai LOGIN"
+          - sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='receipt_ai'" | grep -q 1 || sudo -u postgres createdb -O receipt_ai receipt_ai
+          - sudo -u postgres psql -d receipt_ai -c "CREATE EXTENSION IF NOT EXISTS pg_trgm"
 
 Outputs:
   DevDatabasePeeringId:
