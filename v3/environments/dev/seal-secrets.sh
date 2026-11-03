@@ -8,6 +8,7 @@ export MSYS_NO_PATHCONV=1
 cd "$(git rev-parse --show-toplevel)"
 K=(--kubeconfig infra/v3/private/kubeconfig)
 tmp=$(mktemp -d -p infra/v3/private); chmod 700 "$tmp"; trap 'rm -rf "$tmp"' EXIT
+mkdir -p v3/environments/dev/secrets
 
 # ssm <secret> <SSM 경로> <키...>: 키마다 파일 하나(값 끝 줄바꿈 없음)
 ssm() {
