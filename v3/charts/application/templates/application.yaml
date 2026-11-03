@@ -1,0 +1,114 @@
+{{- if ne .Release.Namespace "dev" }}{{ fail "현재 application Chart는 dev 전용입니다." }}{{ end }}
+{{- if and (ne .Values.name "fe") (not .Values.iamRoleArn) }}{{ fail "BE·AI는 S3용 IRSA 역할 ARN이 필요합니다(dev-app-iam 스택)." }}{{ end }}
+{{- if and (ne .Values.name "fe") (gt (int .Values.colors.blue.replicas) 0) (gt (int .Values.colors.green.replicas) 0) (not .Values.allowConcurrentConsumers) }}{{ fail "BE·AI 두 색상 동시 실행은 중복 처리 검증 후 allowConcurrentConsumers로 엽니다." }}{{ end }}
+{{- $active := index .Values.colors .Values.activeColor }}
+{{- if or (not $active.image) (lt (int $active.replicas) 1) }}{{ fail "활성 색상의 이미지와 1개 이상의 Replica가 필요합니다." }}{{ end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.name }}
+  namespace: dev
+  {{- with .Values.iamRoleArn }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ . | quote }}
+  {{- end }}
+# 앱은 Kubernetes API를 쓰지 않습니다. IRSA 토큰은 별도 projected volume으로 들어갑니다.
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-config
+  namespace: dev
+data:
+  {{- range $key, $value := .Values.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- range $color, $settings := .Values.colors }}
+{{- if $settings.image }}
+{{- $repo := ternary "ai" $.Values.name (eq $.Values.name "ai-api") }}
+{{- if not (regexMatch (printf "^ghcr.io/100-hours-a-week/ktb4-5th-%s@sha256:[a-f0-9]{64}$" $repo) $settings.image) }}{{ fail "해당 앱의 GHCR digest 형식 이미지가 필요합니다." }}{{ end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Values.name }}-{{ $color }}
+  namespace: dev
+spec:
+  replicas: {{ $settings.replicas }}
+  # 색상 안에서 이미지를 바꾸는 동안 같은 Consumer가 둘 뜨지 않게 합니다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $.Values.name }}
+      dameokja.com/color: {{ $color }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $.Values.name }}
+        dameokja.com/color: {{ $color }}
+      annotations:
+        checksum/config: {{ toJson $.Values.env | sha256sum }}
+    spec:
+      serviceAccountName: {{ $.Values.name }}
+      nodeSelector:
+        dameokja.com/node-role: app
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecret }}
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $.Values.runAsUser }}
+        fsGroup: {{ $.Values.runAsUser }}
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $.Values.name }}
+          image: {{ $settings.image | quote }}
+          ports:
+            - {name: http, containerPort: {{ $.Values.port }}}
+          envFrom:
+            - configMapRef: {name: {{ $.Values.name }}-config}
+            - secretRef: {name: {{ $.Values.secretName }}}
+            {{- range $.Values.extraSecretNames }}
+            - secretRef: {name: {{ . }}}
+            {{- end }}
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml $.Values.startupProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $.Values.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml $.Values.livenessProbe | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            {{- if eq $.Values.name "be" }}
+            # 이미지가 만든 로그 경로(be Dockerfile)
+            - {name: logs, mountPath: /var/log/dameokja}
+            {{- end }}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        {{- if eq $.Values.name "be" }}
+        - {name: logs, emptyDir: {}}
+        {{- end }}
+{{- end }}
+{{- end }}
+{{- range $color := list "active" "blue" "green" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Values.name }}{{ if ne $color "active" }}-{{ $color }}{{ end }}
+  namespace: dev
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    dameokja.com/color: {{ if eq $color "active" }}{{ $.Values.activeColor }}{{ else }}{{ $color }}{{ end }}
+  ports:
+    - {name: http, port: {{ $.Values.port }}, targetPort: http}
+{{- end }}

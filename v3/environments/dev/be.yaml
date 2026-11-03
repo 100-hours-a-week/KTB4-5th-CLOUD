@@ -1,0 +1,25 @@
+# 이미지는 v2 dev가 쓰던 것과 같은 digest입니다(6단계부터 CI가 갱신).
+name: be
+port: 8080
+colors:
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:8dab4cf72790c7cb4219af2d72bdae92bbafcb91de83df6f43a658d4e52fdf7f, replicas: 1}
+  green: {image: '', replicas: 0}
+# v2 dev SSM 값(be-secrets)과 Redis 비밀번호(cloud-secrets의 REDIS_PASSWORD)
+secretName: be-secrets
+extraSecretNames: [cloud-secrets]
+iamRoleArn: arn:aws:iam::906462447513:role/dameokja-v3-dev-be
+# 이미지 USER app(10001)
+runAsUser: 10001
+# v2 dev와 주소가 달라지는 값만 둡니다. 같은 키는 be-secrets에서 뺍니다(seal-secrets.sh).
+env:
+  SERVER_TOMCAT_MBEANREGISTRY_ENABLED: 'true'
+  SPRING_DATA_REDIS_HOST: redis.dev.svc.cluster.local
+  SPRING_DATA_REDIS_PORT: '6379'
+  AI_BASE_URL: http://ai-api.dev.svc.cluster.local:8000
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {cpu: '1', memory: 2Gi}
+# Spring Boot는 Kubernetes 안에서 liveness·readiness 그룹을 스스로 켭니다.
+startupProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 30}
+readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
+livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}

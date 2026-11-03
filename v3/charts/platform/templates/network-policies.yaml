@@ -1,4 +1,4 @@
-# dev는 기본 차단입니다. 앱(FE·ALB·외부 HTTPS) 허용은 4·5단계에서 추가합니다.
+# dev는 기본 차단입니다. ALB → FE·BE 허용은 5단계에서 추가합니다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -104,7 +104,64 @@ spec:
       ports:
         - {protocol: TCP, port: 443}
 ---
-# BE 송신: Redis, Kafka, dev MySQL
+# BE 수신: FE(서버 쪽 API 프록시) → 8080, AI 분석 결과 콜백 → 8080
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: be-ingress
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: be}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: fe}
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ai-api}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# AI 수신: BE → 8000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-api-ingress
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ai-api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: be}
+      ports:
+        - {protocol: TCP, port: 8000}
+---
+# FE 송신: BE 8080, 외부 HTTPS(Discord 버그 리포트 webhook)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fe-egress
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: fe}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: be}
+      ports:
+        - {protocol: TCP, port: 8080}
+    - to:
+        - ipBlock: {{ include "platform.internet" . }}
+      ports:
+        - {protocol: TCP, port: 443}
+---
+# BE 송신: Redis, Kafka, dev MySQL, AI 8000, 외부 HTTPS(Kakao·Sentry·S3)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -129,8 +186,17 @@ spec:
         - ipBlock: {cidr: {{ .Values.network.devDbCidr }}}
       ports:
         - {protocol: TCP, port: 3306}
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ai-api}
+      ports:
+        - {protocol: TCP, port: 8000}
+    - to:
+        - ipBlock: {{ include "platform.internet" . }}
+      ports:
+        - {protocol: TCP, port: 443}
 ---
-# AI 송신: Kafka
+# AI 송신: Kafka, dev PostgreSQL, BE 콜백 8080, 외부 HTTPS(RunPod·Tavily·S3)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -150,3 +216,12 @@ spec:
         - ipBlock: {cidr: {{ .Values.network.devDbCidr }}}
       ports:
         - {protocol: TCP, port: 5432}
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: be}
+      ports:
+        - {protocol: TCP, port: 8080}
+    - to:
+        - ipBlock: {{ include "platform.internet" . }}
+      ports:
+        - {protocol: TCP, port: 443}

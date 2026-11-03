@@ -1,0 +1,89 @@
+# 동기화는 수동입니다. 자동 동기화·Image Updater는 6단계에서 정합니다.
+# secrets를 먼저 동기화해야 앱 Pod가 Secret을 찾습니다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-secrets
+  namespace: tool
+spec:
+  project: dev-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/environments/dev/secrets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-fe
+  namespace: tool
+spec:
+  project: dev-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/charts/application
+    helm:
+      releaseName: fe
+      valueFiles:
+      - ../../environments/dev/fe.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-be
+  namespace: tool
+spec:
+  project: dev-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/charts/application
+    helm:
+      releaseName: be
+      valueFiles:
+      - ../../environments/dev/be.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-ai-api
+  namespace: tool
+spec:
+  project: dev-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/charts/application
+    helm:
+      releaseName: ai-api
+      valueFiles:
+      - ../../environments/dev/ai-api.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
