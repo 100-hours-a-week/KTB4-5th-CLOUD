@@ -10,7 +10,7 @@ on:
     inputs:
       stack:
         type: choice
-        options: [eks, network-addons, system-node, dns-addon, controller-iam, storage-addon, dev-pod-sg, dev-data-access]
+        options: [eks, network-addons, system-node, dns-addon, controller-iam, storage-addon, dev-pod-sg, dev-data-access, dev-app-iam]
       mode:
         description: plan은 change set만 만들고, apply는 가장 최근 plan의 change set을 실행합니다.
         type: choice
@@ -70,7 +70,8 @@ jobs:
           parameter-overrides: file:///${{ github.workspace }}/infra/v3/params/${{ inputs.stack }}.json
           change-set-name: v3-${{ inputs.stack }}-${{ github.run_number }}
           role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
-          capabilities: CAPABILITY_IAM
+          # dev-app-iam은 앱 values가 ARN을 적어 두므로 역할 이름을 고정합니다.
+          capabilities: CAPABILITY_NAMED_IAM
           fail-on-empty-changeset: false
       - name: 변경 내용 요약
         if: always()

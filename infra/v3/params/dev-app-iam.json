@@ -1,0 +1,4 @@
+[
+  {"ParameterKey": "S3BucketName", "ParameterValue": "dameokja-906462447513-ap-northeast-2-an"},
+  {"ParameterKey": "S3UploadPrefix", "ParameterValue": "image/"}
+]

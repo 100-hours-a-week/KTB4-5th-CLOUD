@@ -1,0 +1,20 @@
+name: ''
+port: 8080
+# Service ai-api·be·fe가 가리키는 색상. 다른 색상은 -blue·-green Service로만 닿습니다.
+activeColor: blue
+colors:
+  blue: {image: '', replicas: 1}
+  green: {image: '', replicas: 0}
+# BE·AI는 Kafka Consumer·메모리 작업 큐가 있어 두 색상을 함께 띄우기 전에 중복 처리 검증이 필요합니다.
+allowConcurrentConsumers: false
+secretName: ''
+# 앱 Secret 외에 envFrom으로 읽을 Secret(예: BE의 Redis 비밀번호 cloud-secrets)
+extraSecretNames: []
+imagePullSecret: ghcr-pull
+iamRoleArn: ''
+runAsUser: 10001
+env: {}
+resources: {}
+startupProbe: {}
+readinessProbe: {}
+livenessProbe: {}

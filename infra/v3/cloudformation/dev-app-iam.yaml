@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: v3 dev BE·AI S3 IRSA roles
+# 권한 범위는 v2 dev 태스크 역할(infra/v2/dev.yaml BackendTaskRole·AiTaskRole)과 같습니다.
+# 앱 values(v3/environments/dev)의 ServiceAccount 주석이 ARN을 적으므로 역할 이름을 고정합니다.
+
+Parameters:
+  EksStackName:
+    Type: String
+    Default: dameokja-v3-eks
+  S3BucketName:
+    Type: String
+  S3UploadPrefix:
+    Type: String
+
+Resources:
+  # BE: 이미지 업로드 경로 읽기·쓰기, 프로필 기본 이미지 한 파일 읽기
+  BeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-v3-dev-be
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
+            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+            "${OidcIssuerHostPath}:sub": "system:serviceaccount:dev:be"}}}]}'
+          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
+      Policies:
+        - PolicyName: images
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:aws:s3:::${S3BucketName}/profiles/default.png
+
+  # AI: BE가 올린 이미지를 읽어 서명 URL을 만듭니다.
+  AiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-v3-dev-ai-api
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
+            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+            "${OidcIssuerHostPath}:sub": "system:serviceaccount:dev:ai-api"}}}]}'
+          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
+      Policies:
+        - PolicyName: read-images
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*
+
+Outputs:
+  BeRoleArn:
+    Value: !GetAtt BeRole.Arn
+  AiRoleArn:
+    Value: !GetAtt AiRole.Arn

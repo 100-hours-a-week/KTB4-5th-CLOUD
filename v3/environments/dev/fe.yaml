@@ -1,0 +1,19 @@
+# 이미지는 v2 dev가 쓰던 것과 같은 digest입니다(6단계부터 CI가 갱신).
+name: fe
+port: 3000
+colors:
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-fe@sha256:cd772a6257ee0e85b4e608818cf88c95355d33d6afbe8fe4616bee1f8d123680, replicas: 1}
+  green: {image: '', replicas: 0}
+secretName: fe-secrets
+# 이미지 USER node
+runAsUser: 1000
+env:
+  # Next.js 서버가 /api 요청을 넘기는 BE 주소
+  BACKEND_ORIGIN: http://be.dev.svc.cluster.local:8080
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: '1', memory: 1Gi}
+# FE에는 헬스 엔드포인트가 없어 포트 연결로 확인합니다.
+startupProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 12}
+readinessProbe: {tcpSocket: {port: 3000}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
+livenessProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}

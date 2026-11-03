@@ -1,0 +1,19 @@
+# dev 앱 전용 프로젝트입니다. dev Namespace에 앱 실행에 쓰는 종류만 만들 수 있습니다.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: dev-apps
+  namespace: tool
+spec:
+  sourceRepos:
+  - https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: dev
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - {group: apps, kind: Deployment}
+  - {group: '', kind: Service}
+  - {group: '', kind: ConfigMap}
+  - {group: '', kind: ServiceAccount}
+  - {group: bitnami.com, kind: SealedSecret}

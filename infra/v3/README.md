@@ -16,6 +16,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 6 | dameokja-v3-storage-addon | cloudformation/storage-addon.yaml | EBS CSI·Metrics Server 1 Replica Ready |
 | 7 | dameokja-v3-dev-pod-sg | cloudformation/dev-pod-sg.yaml | dev FE·BE·AI·Redis·Kafka Pod SG |
 | 8 | dameokja-v3-dev-data-access | cloudformation/dev-data-access.yaml | 기본 VPC Peering·경로, dev DB SG의 BE→3306·AI→5432, dev DB EC2 PostgreSQL 설치 |
+| 9 | dameokja-v3-dev-app-iam | cloudformation/dev-app-iam.yaml | dev BE·AI IRSA 역할(S3 image/ 접두사) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -109,6 +110,34 @@ dev DB EC2에는 인스턴스 역할과 aws CLI가 없어 Association이 SSM의 
 aws ssm start-session --target i-0111bde7fc68be69c
 sudo -u postgres psql -c '\password receipt_ai'
 ```
+
+## dev 앱 배포
+
+FE·BE·AI는 `v3/charts/application` 하나로 배포하고 환경 값은 `v3/environments/dev/<앱>.yaml`에 둡니다. 이미지는 v2 dev가 쓰던 digest이며 태그는 받지 않습니다. 색(blue·green)마다 Deployment를 두고 Service `<앱>`이 activeColor를 가리킵니다. 외부 노출(ALB·도메인)은 5단계입니다.
+
+| 앱 | 주소 | Secret | IAM |
+|---|---|---|---|
+| fe | fe.dev.svc.cluster.local:3000 | fe-secrets | 없음 |
+| be | be.dev.svc.cluster.local:8080 | be-secrets, cloud-secrets(REDIS_PASSWORD) | dameokja-v3-dev-be |
+| ai-api | ai-api.dev.svc.cluster.local:8000 | ai-secrets | dameokja-v3-dev-ai-api |
+
+Secret 값은 v2 dev SSM(`/dameokja-v2-dev`, `-ai`, `-fe`)과 Secrets Manager `dameokja-v2-dev/ghcr`에서 옮깁니다. 클러스터 주소가 바뀌는 키(AI_BASE_URL, SPRING_DATA_REDIS_*, CALLBACK_URL, LOG_DIR)는 Secret에서 빼고 values의 env(ConfigMap)로 정합니다. AI의 DATABASE_URL은 호스트만 dev DB EC2로 바꿉니다. 관리자 PC Git Bash에서 kubeseal 0.41.2(Controller와 같은 버전)를 설치한 뒤 실행하고, 생성된 `secrets/*.yaml`만 커밋합니다. 인증서는 `v3/platform/sealed-secrets-cert.pem`(2036년 만료)입니다.
+
+```bash
+AWS_PROFILE=dameokja-aws-cli v3/environments/dev/seal-secrets.sh
+```
+
+Argo CD 정의는 `v3/argocd/`에 있고 dev-apps 프로젝트는 dev Namespace의 Deployment·Service·ConfigMap·ServiceAccount·SealedSecret만 허용합니다. 3단계에서 직접 만든 cloud-secrets는 SealedSecret이 넘겨받도록 표시한 뒤 동기화합니다. 동기화는 수동이며 secrets를 먼저 합니다.
+
+```bash
+kubectl $K -n dev annotate secret cloud-secrets sealedsecrets.bitnami.com/managed=true
+kubectl $K apply -f v3/argocd/dev-apps-project.yaml -f v3/argocd/dev-applications.yaml
+# argocd CLI 없이 Application에 sync 작업을 넣습니다.
+sync() { kubectl $K -n tool patch application "$1" --type merge -p '{"operation":{"sync":{}}}'; }
+sync dev-secrets; for a in be ai-api fe; do sync dev-$a; done
+```
+
+NetworkPolicy는 FE→BE, BE↔AI(요청·콜백), BE→Redis·Kafka·MySQL, AI→Kafka·PostgreSQL, 외부 443(사설 대역 제외)만 엽니다. Pod SG도 같은 방향만 허용합니다(AiToBe 추가).
 
 ## 검증과 한계
 

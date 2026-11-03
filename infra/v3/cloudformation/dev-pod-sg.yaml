@@ -55,6 +55,10 @@ Resources:
   BeToAi:
     Type: AWS::EC2::SecurityGroupIngress
     Properties: {GroupId: !Ref AiPodSecurityGroup, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: tcp, FromPort: 8000, ToPort: 8000}
+  # AI 분석 결과 콜백(CALLBACK_URL)
+  AiToBe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref BePodSecurityGroup, SourceSecurityGroupId: !Ref AiPodSecurityGroup, IpProtocol: tcp, FromPort: 8080, ToPort: 8080}
   BeToRedis:
     Type: AWS::EC2::SecurityGroupIngress
     Properties: {GroupId: !Ref RedisPodSecurityGroup, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: tcp, FromPort: 6379, ToPort: 6379}
