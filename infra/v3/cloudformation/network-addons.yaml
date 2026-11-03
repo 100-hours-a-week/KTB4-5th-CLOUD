@@ -48,7 +48,9 @@ Resources:
       ServiceAccountRoleArn: !GetAtt VpcCniRole.Arn
       ResolveConflicts: NONE
       PreserveOnDelete: true
-      # DB SG가 Pod SG를 식별하도록 dev DB 호스트로 가는 트래픽만 SNAT하지 않습니다.
+      # ENABLE_POD_ENI·standard: Pod SG를 쓰면서 NetworkPolicy도 함께 적용합니다.
+      # EXCLUDE_SNAT_CIDRS: DB SG가 Pod SG를 식별하도록 dev DB 호스트로 가는 트래픽만 Node IP로 바꾸지 않습니다.
+      # DISABLE_TCP_EARLY_DEMUX: Pod SG가 붙은 Pod에 kubelet TCP Probe가 닿도록 하는 AWS 권장 설정입니다.
       ConfigurationValues: |
         {
           "enableNetworkPolicy": "true",
@@ -56,11 +58,9 @@ Resources:
             "ENABLE_POD_ENI": "true",
             "POD_SECURITY_GROUP_ENFORCING_MODE": "standard",
             "NETWORK_POLICY_ENFORCING_MODE": "standard",
-            "AWS_VPC_K8S_CNI_EXTERNALSNAT": "false",
             "AWS_VPC_K8S_CNI_EXCLUDE_SNAT_CIDRS": "172.31.4.192/32"
           },
-          "init": {"env": {"DISABLE_TCP_EARLY_DEMUX": "true"}},
-          "tolerations": [{"operator": "Exists"}]
+          "init": {"env": {"DISABLE_TCP_EARLY_DEMUX": "true"}}
         }
 
   KubeProxy:

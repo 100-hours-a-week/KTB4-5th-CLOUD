@@ -3,7 +3,7 @@ appNodeRoleName: ''
 workerSecurityGroupId: ''
 appSubnetId: subnet-0778204ce3b43756e
 appAmiId: ami-0a3227d9c98935bcb
-# dev-pod-sg 스택 Output. 값이 빈 서비스는 SecurityGroupPolicy를 만들지 않습니다.
+# dev-pod-sg 스택 Output. 5개 모두 필요합니다.
 podSecurityGroups:
   fe: ''
   be: ''
@@ -12,5 +12,6 @@ podSecurityGroups:
   kafka: ''
 network:
   devDbCidr: 172.31.4.192/32
-  # EKS API ENI가 있는 Private Subnet
-  privateSubnetCidrs: [10.20.32.0/20, 10.20.48.0/20]
+  # EKS API ENI가 놓이는 Private Subnet 2개. ENI 주소는 EKS가 바꿀 수 있어 Subnet 단위로 엽니다.
+  # NetworkPolicy는 kube-proxy가 Service 주소(192.168.0.1)를 실제 ENI 주소로 바꾼 뒤 판단합니다.
+  apiEndpointCidrs: [10.20.32.0/20, 10.20.48.0/20]

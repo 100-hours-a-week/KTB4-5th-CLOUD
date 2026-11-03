@@ -32,6 +32,7 @@ redis:
     limits: {memory: 128Mi}
 configs:
   params:
+    # TLS는 5단계의 ALB에서 끝내므로 server는 HTTP로 둡니다.
     server.insecure: true
   cm:
     users.anonymous.enabled: 'false'

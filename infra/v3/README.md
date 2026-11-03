@@ -40,8 +40,6 @@ kubectl --kubeconfig infra/v3/private/kubeconfig config set-cluster "$(aws eks d
 
 시스템 Node 생성 전(1~2단계)에는 kubectl 접속이 필요하지 않습니다.
 
-public endpoint가 필요하면 EnablePublicEndpoint=true와 실제 관리자 공인 IPv4 /32를 명시합니다. 기본 문서용 192.0.2.1/32는 public 모드에서 거부합니다. 전체 인터넷 CIDR은 허용하지 않습니다.
-
 Service CIDR 192.168.0.0/16이 VPC·VPN·관리자 경로와 겹치지 않는지 확인합니다. AMI는 versions.yaml의 확인 시점 ID로 고정하며 recommended를 실행 때마다 추종하지 않습니다.
 
 ## GitHub 설정과 실행
@@ -62,7 +60,7 @@ CloudFormation 6개 스택 뒤에 관리자 PC에서 포트 포워딩을 연 상
 | Argo CD | https://argoproj.github.io/argo-helm argo-cd | 10.11.6 |
 
 ```bash
-K="--kubeconfig infra/v3/private/kubeconfig --kube-context dameokja-v3"
+K="--kubeconfig infra/v3/private/kubeconfig"  # v3 전용 kubeconfig라 context 지정이 필요 없습니다
 out() { aws cloudformation describe-stacks --stack-name "$1" --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text; }
 kubectl $K apply -f v3/platform/namespaces.yaml
 helm $K upgrade --install karpenter-crd oci://public.ecr.aws/karpenter/karpenter-crd --version 1.15.1 -n tool --wait

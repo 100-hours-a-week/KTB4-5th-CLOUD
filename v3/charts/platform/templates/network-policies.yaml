@@ -43,7 +43,8 @@ spec:
       ports:
         - {protocol: TCP, port: 6379}
 ---
-# Kafka: BE·AI는 9092, 브로커끼리 9090·9091, tool의 Strimzi Operator·Entity Operator는 9091·8443
+# Kafka 브로커(1대): BE·AI → 9092, Strimzi Cluster Operator → 9091(복제 리스너)·8443(Kafka Agent), Topic Operator → 9091
+# 브로커는 시작할 때 Kubernetes API(443)에서 자기 설정 Secret을 읽습니다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -62,26 +63,25 @@ spec:
       ports:
         - {protocol: TCP, port: 9092}
     - from:
-        - podSelector:
-            matchLabels: {strimzi.io/name: dev-kafka-kafka}
-      ports:
-        - {protocol: TCP, port: 9090}
-        - {protocol: TCP, port: 9091}
-    - from:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: tool}
+          podSelector:
+            matchLabels: {name: strimzi-cluster-operator}
+      ports:
+        - {protocol: TCP, port: 9091}
+        - {protocol: TCP, port: 8443}
+    - from:
         - podSelector:
             matchLabels: {strimzi.io/name: dev-kafka-entity-operator}
       ports:
         - {protocol: TCP, port: 9091}
-        - {protocol: TCP, port: 8443}
   egress:
     - to:
-        - podSelector:
-            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+        {{- range .Values.network.apiEndpointCidrs }}
+        - ipBlock: {cidr: {{ . }}}
+        {{- end }}
       ports:
-        - {protocol: TCP, port: 9090}
-        - {protocol: TCP, port: 9091}
+        - {protocol: TCP, port: 443}
 ---
 # Topic Operator → Kafka 9091, Kubernetes API 443
 apiVersion: networking.k8s.io/v1
@@ -100,10 +100,9 @@ spec:
       ports:
         - {protocol: TCP, port: 9091}
     - to:
-        {{- range .Values.network.privateSubnetCidrs }}
+        {{- range .Values.network.apiEndpointCidrs }}
         - ipBlock: {cidr: {{ . }}}
         {{- end }}
-        - ipBlock: {cidr: 192.168.0.1/32}
       ports:
         - {protocol: TCP, port: 443}
 ---
