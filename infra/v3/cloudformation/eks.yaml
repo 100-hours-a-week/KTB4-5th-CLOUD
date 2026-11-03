@@ -216,21 +216,33 @@ Outputs:
     Value: !Ref Cluster
   ClusterEndpoint:
     Value: !GetAtt Cluster.Endpoint
+    Export:
+      Name: !Sub ${AWS::StackName}-ClusterEndpoint
   ClusterCertificateAuthority:
     Value: !GetAtt Cluster.CertificateAuthorityData
+    Export:
+      Name: !Sub ${AWS::StackName}-ClusterCertificateAuthority
   ServiceIpv4Cidr:
     Value: !Ref ServiceIpv4Cidr
   ControlPlaneSecurityGroupId:
     Value: !Ref ControlPlaneSecurityGroup
   WorkerSecurityGroupId:
     Value: !Ref WorkerSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-WorkerSecurityGroupId
   SystemNodeRoleName:
     Value: !Ref SystemNodeRole
+    Export:
+      Name: !Sub ${AWS::StackName}-SystemNodeRoleName
   AppNodeRoleName:
     Value: !Ref AppNodeRole
   AppNodeRoleArn:
     Value: !GetAtt AppNodeRole.Arn
   OidcProviderArn:
     Value: !Ref OidcProvider
+    Export:
+      Name: !Sub ${AWS::StackName}-OidcProviderArn
   OidcIssuerHostPath:
     Value: !Select [1, !Split ['https://', !GetAtt Cluster.OpenIdConnectIssuerUrl]]
+    Export:
+      Name: !Sub ${AWS::StackName}-OidcIssuerHostPath

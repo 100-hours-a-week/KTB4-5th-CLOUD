@@ -5,11 +5,9 @@ Parameters:
   ClusterName:
     Type: String
     Default: dameokja-v3
-  OidcProviderArn:
+  EksStackName:
     Type: String
-  OidcIssuerHostPath:
-    Type: String
-    AllowedPattern: 'oidc\.eks\.ap-northeast-2\.amazonaws\.com/id/[A-Za-z0-9]+'
+    Default: dameokja-v3-eks
   VpcCniVersion:
     Type: String
     Default: v1.22.4-eksbuild.10
@@ -21,20 +19,23 @@ Resources:
   VpcCniRole:
     Type: AWS::IAM::Role
     Properties:
-      # 동적 조건 키는 JSON 문자열 치환으로 구성합니다.
-      AssumeRolePolicyDocument: !Sub |
-        {
-          "Version": "2012-10-17",
-          "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"Federated": "${OidcProviderArn}"},
-            "Action": "sts:AssumeRoleWithWebIdentity",
-            "Condition": {"StringEquals": {
-              "${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
-              "${OidcIssuerHostPath}:sub": "system:serviceaccount:kube-system:aws-node"
-            }}
-          }]
-        }
+      # 동적 조건 키는 JSON 문자열 치환으로 구성하고, OIDC 값은 EKS 스택 Export에서 가져옵니다.
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${OidcProviderArn}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {"StringEquals": {
+                "${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+                "${OidcIssuerHostPath}:sub": "system:serviceaccount:kube-system:aws-node"
+              }}
+            }]
+          }
+        - OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}
+          OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEKS_CNI_Policy
 

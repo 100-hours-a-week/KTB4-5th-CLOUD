@@ -1,93 +1,70 @@
-name: v3 dev 기반 CloudFormation
+name: v3 EKS 기반 CloudFormation
 
+# PR은 lint만 실행합니다. 스택은 main에서 수동으로 README의 순서(eks -> network-addons -> system-node -> dns-addon)대로 실행합니다.
 on:
   pull_request:
     paths:
       - infra/v3/**
       - .github/workflows/infra-v3-cfn.yml
-  push:
-    branches: [main]
-    paths:
-      - infra/v3/**
-      - .github/workflows/infra-v3-cfn.yml
   workflow_dispatch:
     inputs:
-      operation:
-        description: plan으로 변경 내용을 확인한 뒤 apply를 별도로 실행합니다.
+      stack:
+        type: choice
+        options: [eks, network-addons, system-node, dns-addon]
+      mode:
+        description: plan은 change set만 만들고, apply는 스택에 적용합니다.
         type: choice
         options: [plan, apply]
         default: plan
-      stack:
-        description: README의 스택 적용 순서에 따라 선택합니다.
-        type: choice
-        options: [eks, network-addons, system-node, dns-addon]
-        default: eks
-      change_set_arn:
-        description: apply일 때 plan 결과의 Change Set ARN을 입력합니다.
-        type: string
-        required: false
 
 permissions:
   contents: read
 
-# 실행 중인 스택 작업을 취소하거나 다른 기반 스택 변경과 겹치지 않게 합니다.
-concurrency:
-  group: v3-dev-cloudformation
-  cancel-in-progress: false
+env:
+  AWS_REGION: ap-northeast-2
 
 jobs:
-  validate:
+  lint:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-      - name: CloudFormation 검사
+      - name: cfn-lint
         run: |
-          python -m pip install cfn-lint==1.58.0
-          cfn-lint --regions ap-northeast-2 -- infra/v3/cloudformation/*.yaml
-      - name: 배포 제어와 파라미터 연결 검사
-        run: python -m unittest discover -s infra/v3/tests -v
+          pipx install cfn-lint
+          cfn-lint --regions "$AWS_REGION" -- infra/v3/cloudformation/*.yaml
 
   operate:
-    needs: validate
+    needs: lint
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # 스택 작업이 겹치지 않게 하나씩 실행합니다.
+    concurrency:
+      group: infra-v3-cfn
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
-    env:
-      AWS_REGION: ap-northeast-2
-      AWS_DEFAULT_REGION: ap-northeast-2
-      AWS_CLI_FILE_ENCODING: UTF-8
-      V3_INFRA_ENABLED: ${{ vars.V3_INFRA_ENABLED }}
-      DEPLOY_ROLE: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
-      EXECUTION_ROLE: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
-      OPERATION: ${{ inputs.operation }}
-      STACK: ${{ inputs.stack }}
-      CHANGE_SET_ARN: ${{ inputs.change_set_arn }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - name: 명시적 활성화와 입력 확인
-        shell: bash
-        run: |
-          test "$V3_INFRA_ENABLED" = true || { echo 'V3_INFRA_ENABLED=true 설정이 필요합니다.'; exit 1; }
-          test -n "$DEPLOY_ROLE" && test -n "$EXECUTION_ROLE"
-          if [ "$OPERATION" = apply ]; then test -n "$CHANGE_SET_ARN"; fi
-      # 기존 역할의 main 브랜치 OIDC 신뢰를 사용합니다. Environment를 추가하면 sub가 바뀝니다.
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.DEPLOY_ROLE }}
-          aws-region: ap-northeast-2
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: '906462447513'
-          role-session-name: v3-dev-${{ github.run_id }}
-          role-duration-seconds: 3600
-      - name: 선택한 스택의 Change Set 처리
-        run: python infra/v3/scripts/stack.py "$OPERATION" "$STACK" --change-set "$CHANGE_SET_ARN"
+      - name: ${{ inputs.mode }} dameokja-v3-${{ inputs.stack }}
+        id: cs
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: ${{ inputs.mode == 'plan' && 'create-only' || 'create-and-execute' }}
+          name: dameokja-v3-${{ inputs.stack }}
+          template: infra/v3/cloudformation/${{ inputs.stack }}.yaml
+          parameter-overrides: file:///${{ github.workspace }}/infra/v3/params/${{ inputs.stack }}.json
+          change-set-name: v3-${{ inputs.stack }}-${{ github.run_number }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_IAM
+          fail-on-empty-changeset: false
+      - name: 변경 내용 요약
+        if: always()
+        env:
+          BODY: ${{ steps.cs.outputs.changes-markdown || '변경 없음' }}
+        run: echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
