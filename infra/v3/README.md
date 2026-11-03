@@ -15,7 +15,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 5 | dameokja-v3-controller-iam | cloudformation/controller-iam.yaml | Karpenter·EBS CSI IRSA 역할 |
 | 6 | dameokja-v3-storage-addon | cloudformation/storage-addon.yaml | EBS CSI·Metrics Server 1 Replica Ready |
 | 7 | dameokja-v3-dev-pod-sg | cloudformation/dev-pod-sg.yaml | dev FE·BE·AI·Redis·Kafka Pod SG |
-| 8 | dameokja-v3-dev-data-access | cloudformation/dev-data-access.yaml | 기본 VPC Peering·경로, dev DB SG의 BE→3306 |
+| 8 | dameokja-v3-dev-data-access | cloudformation/dev-data-access.yaml | 기본 VPC Peering·경로, dev DB SG의 BE→3306·AI→5432, dev DB EC2 PostgreSQL 설치 |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -99,8 +99,16 @@ kubectl $K -n dev wait kafkatopic --all --for=condition=Ready --timeout=300s
 | Redis | StatefulSet 1, AOF everysec, maxmemory 512mb, redis-gp3 10Gi | redis.dev.svc.cluster.local:6379 |
 | Kafka | Strimzi Kafka 4.2.2 broker·controller 1 Pod, kafka-gp3 10Gi, 내부 PLAINTEXT | dev-kafka-kafka-bootstrap.dev.svc.cluster.local:9092 |
 | 토픽 | dev.dameokja.* 7개, partitions·replicas 1, 30일 보존 | |
+| PostgreSQL | dev DB EC2에 Ubuntu 기본 패키지(18), DB·계정 receipt_ai, pg_trgm | 172.31.4.192:5432 |
 
 Redis·Kafka는 앱 Node, Topic Operator는 시스템 Node에 둡니다. PVC는 Retain이고 Kafka·Topic CR은 Argo가 지우지 않습니다. `helm uninstall dev-data`는 업무 토픽을 지우므로 정리 수단으로 쓰지 않습니다. 단일 Pod라 재시작·EBS 재연결 동안 중단됩니다.
+
+dev DB EC2에는 인스턴스 역할과 aws CLI가 없어 Association이 SSM의 비밀번호를 읽지 못합니다. receipt_ai는 비밀번호 없이 만들어지므로 Association 성공 뒤 한 번 직접 설정합니다. 같은 값을 v3 AI의 DATABASE_URL에 넣습니다.
+
+```bash
+aws ssm start-session --target i-0111bde7fc68be69c
+sudo -u postgres psql -c '\password receipt_ai'
+```
 
 ## 검증과 한계
 

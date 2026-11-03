@@ -146,3 +146,7 @@ spec:
             matchLabels: {strimzi.io/name: dev-kafka-kafka}
       ports:
         - {protocol: TCP, port: 9092}
+    - to:
+        - ipBlock: {cidr: {{ .Values.network.devDbCidr }}}
+      ports:
+        - {protocol: TCP, port: 5432}
