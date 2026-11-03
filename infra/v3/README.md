@@ -56,7 +56,7 @@ CloudFormation 6개 스택 뒤에 관리자 PC에서 포트 포워딩을 연 상
 |---|---|---|
 | Karpenter(CRD 포함) | oci://public.ecr.aws/karpenter/karpenter-crd, karpenter | 1.15.1 |
 | Strimzi(dev 감시) | oci://quay.io/strimzi-helm/strimzi-kafka-operator | 1.3.0 |
-| Sealed Secrets | https://bitnami-labs.github.io/sealed-secrets sealed-secrets | 2.22.0 |
+| Sealed Secrets | https://bitnami.github.io/sealed-secrets sealed-secrets | 2.22.0 |
 | Argo CD | https://argoproj.github.io/argo-helm argo-cd | 10.11.6 |
 
 ```bash
@@ -68,7 +68,7 @@ helm $K upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --v
   -f v3/platform/values/karpenter.yaml \
   --set serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(out dameokja-v3-controller-iam KarpenterControllerRoleArn)
 helm $K upgrade --install strimzi oci://quay.io/strimzi-helm/strimzi-kafka-operator --version 1.3.0 -n tool --wait -f v3/platform/values/strimzi.yaml
-helm $K upgrade --install sealed-secrets sealed-secrets --repo https://bitnami-labs.github.io/sealed-secrets --version 2.22.0 -n tool --wait -f v3/platform/values/sealed-secrets.yaml
+helm $K upgrade --install sealed-secrets sealed-secrets --repo https://bitnami.github.io/sealed-secrets --version 2.22.0 -n tool --wait -f v3/platform/values/sealed-secrets.yaml
 helm $K upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --version 10.11.6 -n tool --wait -f v3/platform/values/argo-cd.yaml
 helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
