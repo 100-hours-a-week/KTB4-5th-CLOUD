@@ -1,6 +1,6 @@
 # 공식 고정 버전 정책을 기존 EKS 역할에 연결하도록 구성했습니다.
 AWSTemplateFormatVersion: '2010-09-09'
-Description: dameokja v3 controller IAM and interruption resources
+Description: dameokja v3 controller IAM roles
 Parameters:
   ClusterName:
     Type: String
@@ -253,27 +253,6 @@ Resources:
               }
             ]
           }
-  InterruptionPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      Path: /
-      PolicyDocument:
-        Fn::Sub: |
-          {
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Sid": "AllowInterruptionQueueActions",
-                "Effect": "Allow",
-                "Resource": "${KarpenterInterruptionQueue.Arn}",
-                "Action": [
-                  "sqs:DeleteMessage",
-                  "sqs:GetQueueUrl",
-                  "sqs:ReceiveMessage"
-                ]
-              }
-            ]
-          }
   ZonalShiftPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -356,112 +335,6 @@ Resources:
               }
             ]
           }
-  KarpenterInterruptionQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName:
-        Fn::Sub: ${ClusterName}
-      MessageRetentionPeriod: 300
-      SqsManagedSseEnabled: true
-  KarpenterInterruptionQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-      - Ref: KarpenterInterruptionQueue
-      PolicyDocument:
-        Id: EC2InterruptionPolicy
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - events.amazonaws.com
-            - sqs.amazonaws.com
-          Action: sqs:SendMessage
-          Resource:
-            Fn::GetAtt:
-            - KarpenterInterruptionQueue
-            - Arn
-        - Sid: DenyHTTP
-          Effect: Deny
-          Action: sqs:*
-          Resource:
-            Fn::GetAtt:
-            - KarpenterInterruptionQueue
-            - Arn
-          Condition:
-            Bool:
-              aws:SecureTransport: false
-          Principal: '*'
-  ScheduledChangeRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-        - aws.health
-        detail-type:
-        - AWS Health Event
-      Targets:
-      - Id: KarpenterInterruptionQueueTarget
-        Arn:
-          Fn::GetAtt:
-          - KarpenterInterruptionQueue
-          - Arn
-  SpotInterruptionRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-        - aws.ec2
-        detail-type:
-        - EC2 Spot Instance Interruption Warning
-      Targets:
-      - Id: KarpenterInterruptionQueueTarget
-        Arn:
-          Fn::GetAtt:
-          - KarpenterInterruptionQueue
-          - Arn
-  RebalanceRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-        - aws.ec2
-        detail-type:
-        - EC2 Instance Rebalance Recommendation
-      Targets:
-      - Id: KarpenterInterruptionQueueTarget
-        Arn:
-          Fn::GetAtt:
-          - KarpenterInterruptionQueue
-          - Arn
-  InstanceStateChangeRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-        - aws.ec2
-        detail-type:
-        - EC2 Instance State-change Notification
-      Targets:
-      - Id: KarpenterInterruptionQueueTarget
-        Arn:
-          Fn::GetAtt:
-          - KarpenterInterruptionQueue
-          - Arn
-  CapacityReservationInterruptionRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-        - aws.ec2
-        detail-type:
-        - EC2 Capacity Reservation Instance Interruption Warning
-      Targets:
-      - Id: KarpenterInterruptionQueueTarget
-        Arn:
-          Fn::GetAtt:
-          - KarpenterInterruptionQueue
-          - Arn
   KarpenterControllerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -475,7 +348,6 @@ Resources:
       - Ref: NodeLifecyclePolicy
       - Ref: IAMIntegrationPolicy
       - Ref: EKSIntegrationPolicy
-      - Ref: InterruptionPolicy
       - Ref: ZonalShiftPolicy
       - Ref: ResourceDiscoveryPolicy
   EbsCsiRole:
@@ -697,8 +569,3 @@ Outputs:
       Fn::GetAtt:
       - LoadBalancerControllerRole
       - Arn
-  InterruptionQueueName:
-    Value:
-      Fn::GetAtt:
-      - KarpenterInterruptionQueue
-      - QueueName
