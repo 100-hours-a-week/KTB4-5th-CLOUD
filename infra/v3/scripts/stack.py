@@ -53,7 +53,7 @@ def describe_stack(key, allow_missing=False):
 
 
 def parameters(key, outputs):
-    entries = json.loads((ROOT / "params" / f"{key}.example.json").read_text(encoding="utf-8"))
+    entries = json.loads((ROOT / "params" / f"{key}.json").read_text(encoding="utf-8"))
     required = OUTPUT_KEYS.get(key, ())
     missing = [name for name in required if not outputs.get(name)]
     if missing:

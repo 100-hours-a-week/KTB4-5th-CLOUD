@@ -40,7 +40,7 @@ class StackTests(unittest.TestCase):
                     self.assertEqual(values[name], outputs[name])
         self.assertEqual(stack.parameters("eks", {})[2]["ParameterValue"], "vpc-04fc5393afa0ce9fd")
 
-    def test_missing_outputs_fail_instead_of_using_examples(self):
+    def test_missing_outputs_fail_instead_of_using_placeholders(self):
         for key in stack.OUTPUT_KEYS:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 stack.parameters(key, {})
