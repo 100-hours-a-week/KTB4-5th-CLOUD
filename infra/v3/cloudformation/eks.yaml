@@ -125,24 +125,16 @@ Resources:
       FromPort: 443
       ToPort: 443
 
-  ControlPlaneKubeletAccess:
+  # kubelet 10250, Metrics Server 10251, Controller webhook(9443 등)을 포함하는 EKS 권장 범위입니다.
+  ControlPlaneExtensionAccess:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !Ref WorkerSecurityGroup
       SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
       IpProtocol: tcp
-      FromPort: 10250
-      ToPort: 10250
-
-  ControlPlaneWebhookAccess:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref WorkerSecurityGroup
-      SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
-      IpProtocol: tcp
-      FromPort: 9443
-      ToPort: 9443
-      Description: AWS Load Balancer Controller webhook
+      FromPort: 1025
+      ToPort: 65535
+      Description: kubelet, metrics server and controller webhooks
 
   ControlPlaneHttpsWebhookAccess:
     Type: AWS::EC2::SecurityGroupIngress

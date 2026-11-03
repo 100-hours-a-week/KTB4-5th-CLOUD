@@ -23,7 +23,20 @@ EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 
 
 params/*.example.json에는 조회한 실제 계정·재사용 VPC·Subnet과 고정 AMI를 넣었습니다. 실행 전 대상과 소유권을 다시 대조합니다. REPLACE_FROM_EKS_STACK_OUTPUT은 다음 스택 실행 시 EKS Outputs로 자동 치환합니다. 실제 실행 입력·kubeconfig는 Git 제외 경로 private/에 보관합니다.
 
-API endpoint는 기본 private입니다. VPN이나 승인된 VPC 관리 경로가 필요하며 기존 prod Worker를 관리 호스트로 임의 사용하지 않습니다. public endpoint가 필요하면 EnablePublicEndpoint=true와 실제 관리자 공인 IPv4 /32를 명시합니다. 기본 문서용 192.0.2.1/32는 public 모드에서 거부합니다. 전체 인터넷 CIDR은 허용하지 않습니다.
+API endpoint는 기본 private입니다. 기존 prod Worker를 관리 호스트로 임의 사용하지 않고, 3단계 이후 시스템 Node를 거치는 SSM 포트 포워딩으로 접속합니다. Access Entry에 등록한 관리자 principal(dameokja-aws-cli)로 실행합니다.
+
+```bash
+ENDPOINT=$(aws eks describe-cluster --name dameokja-v3 --query cluster.endpoint --output text | sed 's#https://##')
+NODE=$(aws cloudformation describe-stacks --stack-name dameokja-v3-system-node --query "Stacks[0].Outputs[?OutputKey=='SystemNodeInstanceId'].OutputValue" --output text)
+aws ssm start-session --target "$NODE" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "host=$ENDPOINT,portNumber=443,localPortNumber=8443"
+# 다른 터미널에서
+aws eks update-kubeconfig --name dameokja-v3 --kubeconfig infra/v3/private/kubeconfig
+kubectl --kubeconfig infra/v3/private/kubeconfig config set-cluster "$(aws eks describe-cluster --name dameokja-v3 --query cluster.arn --output text)" --server https://127.0.0.1:8443 --tls-server-name "$ENDPOINT"
+```
+
+시스템 Node 생성 전(1~2단계)에는 kubectl 접속이 필요하지 않습니다.
+
+public endpoint가 필요하면 EnablePublicEndpoint=true와 실제 관리자 공인 IPv4 /32를 명시합니다. 기본 문서용 192.0.2.1/32는 public 모드에서 거부합니다. 전체 인터넷 CIDR은 허용하지 않습니다.
 
 Service CIDR 192.168.0.0/16이 VPC·VPN·관리자 경로와 겹치지 않는지 확인합니다. AMI는 versions.yaml의 확인 시점 ID로 고정하며 recommended를 실행 때마다 추종하지 않습니다. API endpoint·CA·OIDC·역할·SG는 다음 스택에 Outputs로 전달합니다.
 
