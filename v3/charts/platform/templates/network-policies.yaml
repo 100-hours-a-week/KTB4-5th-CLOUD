@@ -100,9 +100,7 @@ spec:
       ports:
         - {protocol: TCP, port: 9091}
     - to:
-        {{- range .Values.network.apiEndpointCidrs }}
-        - ipBlock: {cidr: {{ . }}}
-        {{- end }}
+        - ipBlock: {cidr: {{ .Values.network.apiServiceIp }}}
       ports:
         - {protocol: TCP, port: 443}
 ---

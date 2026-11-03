@@ -13,5 +13,8 @@ podSecurityGroups:
 network:
   devDbCidr: 172.31.4.192/32
   # EKS API ENI가 놓이는 Private Subnet 2개. ENI 주소는 EKS가 바꿀 수 있어 Subnet 단위로 엽니다.
-  # NetworkPolicy는 kube-proxy가 Service 주소(192.168.0.1)를 실제 ENI 주소로 바꾼 뒤 판단합니다.
+  # Pod SG(branch ENI)를 쓰는 Pod(Kafka 브로커)는 Service 주소가 ENI 주소로 바뀐 뒤 판단돼 이 값만으로 API에 닿습니다(11/03 확인).
   apiEndpointCidrs: [10.20.32.0/20, 10.20.48.0/20]
+  # kubernetes Service 주소. Pod SG가 없는 Pod(Entity Operator)는 바뀌기 전 주소로 판단돼
+  # 이 값이 없으면 API SYN이 버려집니다(11/03 PolicyEndpoint·SYN_SENT로 확인).
+  apiServiceIp: 192.168.0.1/32
