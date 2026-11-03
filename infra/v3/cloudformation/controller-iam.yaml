@@ -1,4 +1,6 @@
 # Karpenter 1.15.1 공식 정책에서 쓰지 않는 자원(Spot 요청, Capacity Reservation, Placement Group)을 뺐습니다.
+# 조회 권한도 쓰지 않는 기능(Capacity Reservation·Placement Group 선택, Zonal Shift, AMI alias용 SSM)은 뺐습니다.
+# 그래서 EC2NodeClass는 AMI를 id로 지정하고, Karpenter의 Zonal Shift는 끈 상태(기본값)로 둡니다.
 # 중단 이벤트 Queue는 쓰지 않습니다(On-Demand만 사용). LBC 역할은 Gateway 단계에서 추가합니다.
 AWSTemplateFormatVersion: '2010-09-09'
 Description: dameokja v3 controller IAM roles
@@ -166,8 +168,7 @@ Resources:
                   "Condition": {
                     "StringEquals": {
                       "iam:PassedToService": [
-                        "ec2.amazonaws.com",
-                        "ec2.amazonaws.com.cn"
+                        "ec2.amazonaws.com"
                       ]
                     }
                   }
@@ -250,30 +251,6 @@ Resources:
               }
             ]
           }
-  ZonalShiftPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      Path: /
-      PolicyDocument:
-        Fn::Sub: |
-          {
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Sid": "AllowZonalShiftStatusReadOnly",
-                "Effect": "Allow",
-                "Resource": "*",
-                "Action": [
-                  "arc-zonal-shift:GetManagedResource"
-                ],
-                "Condition": {
-                  "StringEquals": {
-                    "arc-zonal-shift:ResourceIdentifier": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-                  }
-                }
-              }
-            ]
-          }
   ResourceDiscoveryPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -288,14 +265,12 @@ Resources:
                 "Effect": "Allow",
                 "Resource": "*",
                 "Action": [
-                  "ec2:DescribeCapacityReservations",
                   "ec2:DescribeImages",
                   "ec2:DescribeInstances",
                   "ec2:DescribeInstanceStatus",
                   "ec2:DescribeInstanceTypeOfferings",
                   "ec2:DescribeInstanceTypes",
                   "ec2:DescribeLaunchTemplates",
-                  "ec2:DescribePlacementGroups",
                   "ec2:DescribeSecurityGroups",
                   "ec2:DescribeSpotPriceHistory",
                   "ec2:DescribeSubnets"
@@ -305,12 +280,6 @@ Resources:
                     "aws:RequestedRegion": "${AWS::Region}"
                   }
                 }
-              },
-              {
-                "Sid": "AllowSSMReadActions",
-                "Effect": "Allow",
-                "Resource": "arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/*",
-                "Action": "ssm:GetParameter"
               },
               {
                 "Sid": "AllowPricingReadActions",
@@ -345,7 +314,6 @@ Resources:
       - Ref: NodeLifecyclePolicy
       - Ref: IAMIntegrationPolicy
       - Ref: EKSIntegrationPolicy
-      - Ref: ZonalShiftPolicy
       - Ref: ResourceDiscoveryPolicy
   EbsCsiRole:
     Type: AWS::IAM::Role
