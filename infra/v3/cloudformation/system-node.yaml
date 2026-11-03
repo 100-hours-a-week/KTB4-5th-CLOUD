@@ -16,6 +16,10 @@ Parameters:
   AmiId:
     Type: AWS::EC2::Image::Id
     Description: Verified EKS optimized AL2023 x86_64 AMI for the cluster minor version
+  # UserData 안의 {{resolve:ssm:}}는 풀리지 않으므로 SSM 파라미터 타입으로 배포 시점에 CA를 읽습니다.
+  ClusterCertificateAuthority:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /dameokja-v3-eks/cluster-ca
 
 Resources:
   SystemInstanceProfile:
@@ -72,7 +76,6 @@ Resources:
                   - --register-with-taints=dameokja.com/system=true:NoSchedule
             --DAMEOKJA_NODE--
           - ClusterEndpoint: {'Fn::ImportValue': !Sub '${EksStackName}-ClusterEndpoint'}
-            ClusterCertificateAuthority: !Sub '{{resolve:ssm:/${EksStackName}/cluster-ca}}'
       Tags:
         - Key: Name
           Value: !Sub ${ClusterName}-system
