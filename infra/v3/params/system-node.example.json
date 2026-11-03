@@ -1,0 +1,10 @@
+[
+  {"ParameterKey": "ClusterName", "ParameterValue": "dameokja-v3"},
+  {"ParameterKey": "ClusterEndpoint", "ParameterValue": "REPLACE_FROM_EKS_STACK_OUTPUT"},
+  {"ParameterKey": "ClusterCertificateAuthority", "ParameterValue": "REPLACE_FROM_EKS_STACK_OUTPUT"},
+  {"ParameterKey": "ServiceIpv4Cidr", "ParameterValue": "192.168.0.0/16"},
+  {"ParameterKey": "SubnetId", "ParameterValue": "subnet-0778204ce3b43756e"},
+  {"ParameterKey": "WorkerSecurityGroupId", "ParameterValue": "REPLACE_FROM_EKS_STACK_OUTPUT"},
+  {"ParameterKey": "SystemNodeRoleName", "ParameterValue": "REPLACE_FROM_EKS_STACK_OUTPUT"},
+  {"ParameterKey": "AmiId", "ParameterValue": "ami-0a3227d9c98935bcb"}
+]

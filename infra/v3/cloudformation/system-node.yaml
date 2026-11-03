@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 single self-managed AL2023 system node without ASG
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: dameokja-v3
+  ClusterEndpoint:
+    Type: String
+    AllowedPattern: 'https://.+'
+  ClusterCertificateAuthority:
+    Type: String
+    MinLength: 1
+  ServiceIpv4Cidr:
+    Type: String
+    Default: 192.168.0.0/16
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  WorkerSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  SystemNodeRoleName:
+    Type: String
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Verified EKS optimized AL2023 x86_64 AMI for the cluster minor version
+
+Resources:
+  SystemInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref SystemNodeRoleName]
+
+  SystemNode:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: m7i.large
+      IamInstanceProfile: !Ref SystemInstanceProfile
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: false
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref WorkerSecurityGroupId]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 30
+            Encrypted: true
+            DeleteOnTermination: true
+      # EKS 최적화 AL2023의 systemd가 nodeadm을 실행하므로 직접 init하지 않습니다.
+      UserData:
+        Fn::Base64: !Sub |
+          MIME-Version: 1.0
+          Content-Type: multipart/mixed; boundary="DAMEOKJA_NODE"
+
+          --DAMEOKJA_NODE
+          Content-Type: application/node.eks.aws
+
+          ---
+          apiVersion: node.eks.aws/v1alpha1
+          kind: NodeConfig
+          spec:
+            cluster:
+              name: ${ClusterName}
+              apiServerEndpoint: ${ClusterEndpoint}
+              certificateAuthority: ${ClusterCertificateAuthority}
+              cidr: ${ServiceIpv4Cidr}
+            kubelet:
+              flags:
+                - --node-labels=dameokja.com/node-role=system
+                - --register-with-taints=dameokja.com/system=true:NoSchedule
+          --DAMEOKJA_NODE--
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-system
+        - Key: Project
+          Value: dameokja
+        - Key: Generation
+          Value: v3
+
+Outputs:
+  SystemNodeInstanceId:
+    Value: !Ref SystemNode
+  SystemNodePrivateIp:
+    Value: !GetAtt SystemNode.PrivateIp

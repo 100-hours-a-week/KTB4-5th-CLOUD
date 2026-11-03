@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 CoreDNS after the system node is Ready
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: dameokja-v3
+  CoreDnsVersion:
+    Type: String
+    Default: v1.13.2-eksbuild.62
+
+Resources:
+  CoreDns:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref ClusterName
+      AddonName: coredns
+      AddonVersion: !Ref CoreDnsVersion
+      ResolveConflicts: NONE
+      PreserveOnDelete: true
+      ConfigurationValues: |
+        {
+          "replicaCount": 1,
+          "nodeSelector": {"dameokja.com/node-role": "system"},
+          "tolerations": [
+            {"key": "CriticalAddonsOnly", "operator": "Exists"},
+            {"key": "node-role.kubernetes.io/control-plane", "operator": "Exists", "effect": "NoSchedule"},
+            {"key": "dameokja.com/system", "operator": "Equal", "value": "true", "effect": "NoSchedule"}
+          ],
+          "resources": {
+            "requests": {"cpu": "100m", "memory": "70Mi"},
+            "limits": {"memory": "170Mi"}
+          }
+        }

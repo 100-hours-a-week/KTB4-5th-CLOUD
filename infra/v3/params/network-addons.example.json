@@ -1,0 +1,7 @@
+[
+  {"ParameterKey": "ClusterName", "ParameterValue": "dameokja-v3"},
+  {"ParameterKey": "OidcProviderArn", "ParameterValue": "REPLACE_FROM_EKS_STACK_OUTPUT"},
+  {"ParameterKey": "OidcIssuerHostPath", "ParameterValue": "REPLACE_FROM_EKS_STACK_OUTPUT"},
+  {"ParameterKey": "VpcCniVersion", "ParameterValue": "v1.22.4-eksbuild.10"},
+  {"ParameterKey": "KubeProxyVersion", "ParameterValue": "v1.35.3-eksbuild.62"}
+]
