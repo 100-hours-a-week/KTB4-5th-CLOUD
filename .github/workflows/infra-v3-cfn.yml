@@ -1,6 +1,6 @@
 name: v3 EKS 기반 CloudFormation
 
-# PR은 lint만 실행합니다. 스택은 main에서 수동으로 README의 순서(eks -> network-addons -> system-node -> dns-addon)대로 실행합니다.
+# PR은 lint만 실행합니다. 스택은 main에서 수동으로 README의 순서(eks -> network-addons -> system-node -> dns-addon -> controller-iam -> storage-addon)대로 실행합니다.
 on:
   pull_request:
     paths:
@@ -10,7 +10,7 @@ on:
     inputs:
       stack:
         type: choice
-        options: [eks, network-addons, system-node, dns-addon]
+        options: [eks, network-addons, system-node, dns-addon, controller-iam, storage-addon]
       mode:
         description: plan은 change set만 만들고, apply는 가장 최근 plan의 change set을 실행합니다.
         type: choice

@@ -1,6 +1,6 @@
 # v3 EKS 기반과 수동 배포
 
-기존 prod VPC·Private Subnet·NAT를 재사용하는 EKS 기반입니다. 이 변경에는 클러스터·IAM·SG·시스템 EC2·CNI·kube-proxy·CoreDNS만 포함합니다. 관리 Controller·앱 Node 공급·DB·Redis·Kafka·앱 배포는 후속 변경입니다.
+기존 prod VPC·Private Subnet·NAT를 재사용하는 EKS 기반입니다. 클러스터·IAM·SG·시스템 EC2·CNI·kube-proxy·CoreDNS와 Controller IAM·EBS CSI·Metrics Server를 포함합니다. Helm으로 설치하는 관리 도구·앱 Node 공급·DB·Redis·Kafka·앱 배포는 후속 변경입니다.
 
 PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 plan으로 실행해 변경 내용을 확인한 뒤, 같은 스택을 apply로 실행할 때 생성됩니다.
 
@@ -12,6 +12,8 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 2 | dameokja-v3-network-addons | cloudformation/network-addons.yaml | CNI·kube-proxy·IRSA |
 | 3 | dameokja-v3-system-node | cloudformation/system-node.yaml | 시스템 Node 1대 Ready |
 | 4 | dameokja-v3-dns-addon | cloudformation/dns-addon.yaml | CoreDNS 1 Replica Ready·DNS |
+| 5 | dameokja-v3-controller-iam | cloudformation/controller-iam.yaml | Karpenter·EBS CSI IRSA 역할 |
+| 6 | dameokja-v3-storage-addon | cloudformation/storage-addon.yaml | EBS CSI·Metrics Server 1 Replica Ready |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -30,7 +32,7 @@ ENDPOINT=$(aws eks describe-cluster --name dameokja-v3 --query cluster.endpoint 
 NODE=$(aws cloudformation describe-stacks --stack-name dameokja-v3-system-node --query "Stacks[0].Outputs[?OutputKey=='SystemNodeInstanceId'].OutputValue" --output text)
 aws ssm start-session --target "$NODE" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "host=$ENDPOINT,portNumber=443,localPortNumber=8443"
 # 다른 터미널에서
-aws eks update-kubeconfig --name dameokja-v3 --kubeconfig infra/v3/private/kubeconfig
+aws eks update-kubeconfig --name dameokja-v3 --kubeconfig infra/v3/private/kubeconfig --alias dameokja-v3
 kubectl --kubeconfig infra/v3/private/kubeconfig config set-cluster "$(aws eks describe-cluster --name dameokja-v3 --query cluster.arn --output text)" --server https://127.0.0.1:8443 --tls-server-name "$ENDPOINT"
 ```
 
