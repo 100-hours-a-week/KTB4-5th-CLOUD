@@ -1,0 +1,151 @@
+# dev는 기본 차단입니다. 앱(FE·ALB·외부 HTTPS) 허용은 4·5단계에서 추가합니다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+# BE → Redis 6379
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: redis}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: be}
+      ports:
+        - {protocol: TCP, port: 6379}
+---
+# Kafka: BE·AI는 9092, 브로커끼리 9090·9091, tool의 Strimzi Operator·Entity Operator는 9091·8443
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {strimzi.io/name: dev-kafka-kafka}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: be}
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: ai-api}
+      ports:
+        - {protocol: TCP, port: 9092}
+    - from:
+        - podSelector:
+            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+      ports:
+        - {protocol: TCP, port: 9090}
+        - {protocol: TCP, port: 9091}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: tool}
+        - podSelector:
+            matchLabels: {strimzi.io/name: dev-kafka-entity-operator}
+      ports:
+        - {protocol: TCP, port: 9091}
+        - {protocol: TCP, port: 8443}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+      ports:
+        - {protocol: TCP, port: 9090}
+        - {protocol: TCP, port: 9091}
+---
+# Topic Operator → Kafka 9091, Kubernetes API 443
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka-entity-operator
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {strimzi.io/name: dev-kafka-entity-operator}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+      ports:
+        - {protocol: TCP, port: 9091}
+    - to:
+        {{- range .Values.network.privateSubnetCidrs }}
+        - ipBlock: {cidr: {{ . }}}
+        {{- end }}
+        - ipBlock: {cidr: 192.168.0.1/32}
+      ports:
+        - {protocol: TCP, port: 443}
+---
+# BE 송신: Redis, Kafka, dev MySQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: be-egress
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: be}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: redis}
+      ports:
+        - {protocol: TCP, port: 6379}
+    - to:
+        - podSelector:
+            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+      ports:
+        - {protocol: TCP, port: 9092}
+    - to:
+        - ipBlock: {cidr: {{ .Values.network.devDbCidr }}}
+      ports:
+        - {protocol: TCP, port: 3306}
+---
+# AI 송신: Kafka
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-api-egress
+  namespace: dev
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: ai-api}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+      ports:
+        - {protocol: TCP, port: 9092}

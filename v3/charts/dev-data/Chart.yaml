@@ -1,0 +1,5 @@
+apiVersion: v2
+name: dameokja-dev-data
+description: dev Redis와 단일 Node Strimzi Kafka
+type: application
+version: 0.1.0

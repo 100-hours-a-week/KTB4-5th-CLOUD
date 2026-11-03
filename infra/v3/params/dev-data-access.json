@@ -1,0 +1,9 @@
+[
+  {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"},
+  {"ParameterKey": "DatabaseVpcId", "ParameterValue": "vpc-0dc397a47a708f727"},
+  {"ParameterKey": "AppRouteTableId", "ParameterValue": "rtb-01db294fbb6aa721a"},
+  {"ParameterKey": "DatabaseRouteTableId", "ParameterValue": "rtb-0b803993570ee77ab"},
+  {"ParameterKey": "DatabaseHostCidr", "ParameterValue": "172.31.4.192/32"},
+  {"ParameterKey": "AppSubnetCidr", "ParameterValue": "10.20.32.0/20"},
+  {"ParameterKey": "DatabaseSecurityGroupId", "ParameterValue": "sg-039d80e4bb3d2aa4d"}
+]

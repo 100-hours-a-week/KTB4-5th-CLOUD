@@ -1,0 +1,3 @@
+{{- if ne .Release.Namespace "dev" -}}
+{{- fail "dev-data Chart는 dev Namespace에만 설치합니다." -}}
+{{- end -}}

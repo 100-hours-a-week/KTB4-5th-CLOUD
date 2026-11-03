@@ -1,5 +1,16 @@
-# appNodeRoleName·workerSecurityGroupId는 설치 때 eks 스택 Output으로 넣습니다.
+# 빈 값은 설치 때 스택 Output으로 넣습니다(infra/v3/README.md).
 appNodeRoleName: ''
 workerSecurityGroupId: ''
 appSubnetId: subnet-0778204ce3b43756e
 appAmiId: ami-0a3227d9c98935bcb
+# dev-pod-sg 스택 Output. 값이 빈 서비스는 SecurityGroupPolicy를 만들지 않습니다.
+podSecurityGroups:
+  fe: ''
+  be: ''
+  ai-api: ''
+  redis: ''
+  kafka: ''
+network:
+  devDbCidr: 172.31.4.192/32
+  # EKS API ENI가 있는 Private Subnet
+  privateSubnetCidrs: [10.20.32.0/20, 10.20.48.0/20]

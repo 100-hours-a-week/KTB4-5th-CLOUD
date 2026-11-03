@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: v3 dev Pod에서 기존 dev DB EC2(기본 VPC)로 가는 직접 경로
+# 기존 Route Table·DB SG에는 경로와 규칙만 추가합니다. 기존 규칙은 바꾸지 않습니다.
+# AI PostgreSQL(5432)은 위치를 정한 뒤 추가합니다.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  DatabaseVpcId:
+    Type: AWS::EC2::VPC::Id
+  AppRouteTableId:
+    Type: String
+    AllowedPattern: 'rtb-[a-f0-9]+'
+  DatabaseRouteTableId:
+    Type: String
+    AllowedPattern: 'rtb-[a-f0-9]+'
+  DatabaseHostCidr:
+    Type: String
+  AppSubnetCidr:
+    Type: String
+  DatabaseSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  PodSgStackName:
+    Type: String
+    Default: dameokja-v3-dev-pod-sg
+
+Resources:
+  DevDatabasePeering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !Ref VpcId
+      PeerVpcId: !Ref DatabaseVpcId
+      Tags: [{Key: Name, Value: dameokja-v3-to-dev-db}]
+
+  AppToDatabase:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppRouteTableId
+      DestinationCidrBlock: !Ref DatabaseHostCidr
+      VpcPeeringConnectionId: !Ref DevDatabasePeering
+
+  DatabaseToApp:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DatabaseRouteTableId
+      DestinationCidrBlock: !Ref AppSubnetCidr
+      VpcPeeringConnectionId: !Ref DevDatabasePeering
+
+  # Peering이 active여야 다른 VPC의 SG를 참조할 수 있습니다.
+  MySqlFromDevBe:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: DevDatabasePeering
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroupId
+      SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${PodSgStackName}-BePodSecurityGroupId'}
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      Description: v3 dev BE Pods only
+
+Outputs:
+  DevDatabasePeeringId:
+    Value: !Ref DevDatabasePeering
