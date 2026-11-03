@@ -1,0 +1,5 @@
+[
+  {"ParameterKey": "ClusterName", "ParameterValue": "dameokja-v3"},
+  {"ParameterKey": "VpcCniVersion", "ParameterValue": "v1.22.4-eksbuild.10"},
+  {"ParameterKey": "KubeProxyVersion", "ParameterValue": "v1.35.3-eksbuild.62"}
+]

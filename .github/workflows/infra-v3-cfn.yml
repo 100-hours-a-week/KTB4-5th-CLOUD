@@ -1,0 +1,70 @@
+name: v3 EKS 기반 CloudFormation
+
+# PR은 lint만 실행합니다. 스택은 main에서 수동으로 README의 순서(eks -> network-addons -> system-node -> dns-addon)대로 실행합니다.
+on:
+  pull_request:
+    paths:
+      - infra/v3/**
+      - .github/workflows/infra-v3-cfn.yml
+  workflow_dispatch:
+    inputs:
+      stack:
+        type: choice
+        options: [eks, network-addons, system-node, dns-addon]
+      mode:
+        description: plan은 change set만 만들고, apply는 스택에 적용합니다.
+        type: choice
+        options: [plan, apply]
+        default: plan
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: cfn-lint
+        run: |
+          pipx install cfn-lint
+          cfn-lint --regions "$AWS_REGION" -- infra/v3/cloudformation/*.yaml
+
+  operate:
+    needs: lint
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # 스택 작업이 겹치지 않게 하나씩 실행합니다.
+    concurrency:
+      group: infra-v3-cfn
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '906462447513'
+      - name: ${{ inputs.mode }} dameokja-v3-${{ inputs.stack }}
+        id: cs
+        uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
+        with:
+          mode: ${{ inputs.mode == 'plan' && 'create-only' || 'create-and-execute' }}
+          name: dameokja-v3-${{ inputs.stack }}
+          template: infra/v3/cloudformation/${{ inputs.stack }}.yaml
+          parameter-overrides: file:///${{ github.workspace }}/infra/v3/params/${{ inputs.stack }}.json
+          change-set-name: v3-${{ inputs.stack }}-${{ github.run_number }}
+          role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
+          capabilities: CAPABILITY_IAM
+          fail-on-empty-changeset: false
+      - name: 변경 내용 요약
+        if: always()
+        env:
+          BODY: ${{ steps.cs.outputs.changes-markdown || '변경 없음' }}
+        run: echo "$BODY" >> "$GITHUB_STEP_SUMMARY"

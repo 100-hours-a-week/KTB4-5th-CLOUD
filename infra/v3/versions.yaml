@@ -1,0 +1,30 @@
+# 버전 제공 여부는 확인했으며 실제 배포 검증은 아직 수행하지 않았습니다.
+checkedAt: '2026-11-02'
+region: ap-northeast-2
+deploymentValidated: false
+cluster:
+  name: dameokja-v3
+  kubernetesVersion: '1.35'
+  serviceIpv4Cidr: 192.168.0.0/16
+  status: aws-api-compatible
+node:
+  instanceType: m7i.large
+  architecture: amd64
+  operatingSystem: AL2023
+  availabilityZone: ap-northeast-2b
+  ami:
+    id: ami-0a3227d9c98935bcb
+    name: amazon-eks-node-al2023-x86_64-standard-1.35-v20261031
+    release: 1.35.9-20261031
+    sourceParameter: /aws/service/eks/optimized-ami/1.35/amazon-linux-2023/x86_64/standard/recommended
+    status: resolved-from-aws-ssm
+addons:
+  vpc-cni:
+    version: v1.22.4-eksbuild.10
+    configurationSchemaChecked: true
+  kube-proxy:
+    version: v1.35.3-eksbuild.62
+    configurationSchemaChecked: false
+  coredns:
+    version: v1.13.2-eksbuild.62
+    configurationSchemaChecked: true

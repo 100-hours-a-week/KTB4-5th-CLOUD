@@ -1,0 +1,6 @@
+[
+  {"ParameterKey": "ClusterName", "ParameterValue": "dameokja-v3"},
+  {"ParameterKey": "ServiceIpv4Cidr", "ParameterValue": "192.168.0.0/16"},
+  {"ParameterKey": "SubnetId", "ParameterValue": "subnet-0778204ce3b43756e"},
+  {"ParameterKey": "AmiId", "ParameterValue": "ami-0a3227d9c98935bcb"}
+]

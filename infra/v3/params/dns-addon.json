@@ -1,0 +1,4 @@
+[
+  {"ParameterKey": "ClusterName", "ParameterValue": "dameokja-v3"},
+  {"ParameterKey": "CoreDnsVersion", "ParameterValue": "v1.13.2-eksbuild.62"}
+]
