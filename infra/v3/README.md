@@ -111,6 +111,8 @@ aws ssm start-session --target i-0111bde7fc68be69c
 sudo -u postgres psql -c '\password receipt_ai'
 ```
 
+MySQL의 BE 계정도 v3 앱 Subnet(10.20.32.0/255.255.240.0) host로 같은 권한·비밀번호를 한 번 추가합니다. 없으면 BE가 1130(Host is not allowed)으로 시작하지 못합니다.
+
 ## dev 앱 배포
 
 FE·BE·AI는 `v3/charts/application` 하나로 배포하고 환경 값은 `v3/environments/dev/<앱>.yaml`에 둡니다. 이미지는 v2 dev가 쓰던 digest이며 태그는 받지 않습니다. 색(blue·green)마다 Deployment를 두고 Service `<앱>`이 activeColor를 가리킵니다. 외부 노출(ALB·도메인)은 5단계입니다.
