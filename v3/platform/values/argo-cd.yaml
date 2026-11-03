@@ -1,0 +1,39 @@
+# 초기 접속은 port-forward로 합니다. 도메인 연결은 5단계입니다.
+global:
+  domain: argocd.dameokja.com
+  nodeSelector:
+    dameokja.com/node-role: system
+  tolerations:
+  - key: dameokja.com/system
+    operator: Equal
+    value: 'true'
+    effect: NoSchedule
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  replicas: 0
+controller:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+server:
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+repoServer:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+redis:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 128Mi}
+configs:
+  params:
+    server.insecure: true
+  cm:
+    users.anonymous.enabled: 'false'
+  rbac:
+    policy.default: role:readonly

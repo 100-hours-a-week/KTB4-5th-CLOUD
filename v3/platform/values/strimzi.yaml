@@ -1,0 +1,22 @@
+# dev만 감시합니다. Kafka 접근 정책은 3단계 NetworkPolicy에서 관리합니다.
+replicas: 1
+watchNamespaces:
+- dev
+watchAnyNamespace: false
+generateNetworkPolicy: false
+nodeSelector:
+  dameokja.com/node-role: system
+tolerations:
+- key: dameokja.com/system
+  operator: Equal
+  value: 'true'
+  effect: NoSchedule
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 384Mi
+extraEnvs:
+- name: JAVA_OPTS
+  value: -Xms128m -Xmx192m

@@ -1,0 +1,5 @@
+# appNodeRoleName·workerSecurityGroupId는 설치 때 eks 스택 Output으로 넣습니다.
+appNodeRoleName: ''
+workerSecurityGroupId: ''
+appSubnetId: subnet-0778204ce3b43756e
+appAmiId: ami-0a3227d9c98935bcb
