@@ -12,7 +12,7 @@ on:
         type: choice
         options: [eks, network-addons, system-node, dns-addon]
       mode:
-        description: plan은 change set만 만들고, apply는 스택에 적용합니다.
+        description: plan은 change set만 만들고, apply는 가장 최근 plan의 change set을 실행합니다.
         type: choice
         options: [plan, apply]
         default: plan
@@ -50,12 +50,21 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_CFN_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          allowed-account-ids: '906462447513'
+      # 새 스택은 plan 뒤 REVIEW_IN_PROGRESS라서 새 change set을 만들 수 없으므로, apply는 plan이 만든 change set을 실행합니다.
+      - name: 최근 plan의 change set 찾기
+        if: inputs.mode == 'apply'
+        id: plan
+        run: |
+          name=$(aws cloudformation list-change-sets --stack-name "dameokja-v3-${{ inputs.stack }}" \
+            --query "reverse(sort_by(Summaries[?ExecutionStatus=='AVAILABLE'], &CreationTime))[0].ChangeSetName" --output text)
+          if [ -z "$name" ] || [ "$name" = None ]; then echo "::error::실행할 change set이 없습니다. plan을 먼저 실행하세요."; exit 1; fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
       - name: ${{ inputs.mode }} dameokja-v3-${{ inputs.stack }}
         id: cs
         uses: aws-actions/aws-cloudformation-github-deploy@v2.0.0
         with:
-          mode: ${{ inputs.mode == 'plan' && 'create-only' || 'create-and-execute' }}
+          mode: ${{ inputs.mode == 'plan' && 'create-only' || 'execute-only' }}
+          execute-change-set-id: ${{ steps.plan.outputs.name }}
           name: dameokja-v3-${{ inputs.stack }}
           template: infra/v3/cloudformation/${{ inputs.stack }}.yaml
           parameter-overrides: file:///${{ github.workspace }}/infra/v3/params/${{ inputs.stack }}.json

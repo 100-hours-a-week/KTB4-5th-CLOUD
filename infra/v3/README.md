@@ -44,7 +44,7 @@ Service CIDR 192.168.0.0/16이 VPC·VPN·관리자 경로와 겹치지 않는지
 
 Repository Variables의 `AWS_CFN_DEPLOY_ROLE_ARN`(dameokja-github-cfn-deploy), `AWS_CFN_EXEC_ROLE_ARN`(dameokja-cfn-execution)을 v2와 같이 사용합니다. 기존 배포 역할의 main OIDC 신뢰를 재사용하며 GitHub Environment 승인은 두지 않습니다.
 
-Actions의 "v3 EKS 기반 CloudFormation"을 main에서 실행합니다. 스택을 고르고 plan으로 실행해 Summary의 변경 내용(특히 Replacement)을 확인한 뒤, 같은 스택을 apply로 실행합니다. 다음 스택은 앞 스택이 끝난 뒤 실행합니다. Export를 다른 스택이 쓰고 있으면 EKS 스택의 해당 Output을 바꾸거나 지울 수 없습니다.
+Actions의 "v3 EKS 기반 CloudFormation"을 main에서 실행합니다. 스택을 고르고 plan으로 실행해 Summary의 변경 내용(특히 Replacement)을 확인한 뒤, 같은 스택을 apply로 실행합니다. apply는 새 change set을 만들지 않고 가장 최근 plan의 change set을 그대로 실행합니다. 다음 스택은 앞 스택이 끝난 뒤 실행합니다. Export를 다른 스택이 쓰고 있으면 EKS 스택의 해당 Output을 바꾸거나 지울 수 없습니다.
 
 ## 검증과 한계
 
