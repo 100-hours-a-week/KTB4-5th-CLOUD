@@ -21,7 +21,7 @@ EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 
 
 ## 입력과 접근 경로
 
-params/*.json은 Workflow가 그대로 쓰는 실제 입력입니다. 여기에는 조회한 실제 계정·재사용 VPC·Subnet과 고정 AMI를 넣었습니다. 실행 전 대상과 소유권을 다시 대조합니다. 클러스터 endpoint·CA·OIDC·역할·SG처럼 EKS 스택이 만드는 값은 파라미터로 넣지 않고 `dameokja-v3-eks-*` Export를 ImportValue로 가져옵니다. kubeconfig는 Git 제외 경로 private/에 보관합니다.
+params/*.json은 Workflow가 그대로 쓰는 실제 입력입니다. 여기에는 조회한 실제 계정·재사용 VPC·Subnet과 고정 AMI를 넣었습니다. 실행 전 대상과 소유권을 다시 대조합니다. 클러스터 endpoint·CA·OIDC·역할·SG처럼 EKS 스택이 만드는 값은 파라미터로 넣지 않고 `dameokja-v3-eks-*` Export를 ImportValue로 가져옵니다. CA는 Export 길이 제한(1024자)을 넘어 SSM Parameter `/dameokja-v3-eks/cluster-ca`로 전달합니다. kubeconfig는 Git 제외 경로 private/에 보관합니다.
 
 API endpoint는 기본 private입니다. 기존 prod Worker를 관리 호스트로 임의 사용하지 않고, 3단계 이후 시스템 Node를 거치는 SSM 포트 포워딩으로 접속합니다. Access Entry에 등록한 관리자 principal(dameokja-aws-cli)로 실행합니다.
 
