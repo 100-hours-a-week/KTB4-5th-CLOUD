@@ -19,6 +19,8 @@ env:
   # Strimzi dev-kafka 내부 PLAINTEXT. 토픽 이름은 <KAFKA_ENV>.dameokja.* (dev-data 차트)
   KAFKA_BOOTSTRAP_SERVERS: dev-kafka-kafka-bootstrap.dev.svc.cluster.local:9092
   KAFKA_ENV: dev
+  # BE Kafka Consumer 시작(BE 기본값 false). v2 dev SSM도 같은 키를 둠
+  KAFKA_LISTENER_ENABLED: 'true'
 resources:
   requests: {cpu: 500m, memory: 1Gi}
   limits: {cpu: '1', memory: 2Gi}
