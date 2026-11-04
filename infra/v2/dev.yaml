@@ -502,7 +502,8 @@ Resources:
       Type: A
       TTL: "300"
       SetIdentifier: v2
-      Weight: 100
+      # v3(CloudFront, infra/v3 edge 스택)로 전환해 0(#231). 되돌릴 때 100
+      Weight: 0
       ResourceRecords: [!GetAtt Instance.PublicIp]
 
   # 기존 dev1 DB 보안그룹에 앱 인스턴스(BE)의 3306 접근만 추가. 스택 삭제 시 이 규칙만 제거됨
