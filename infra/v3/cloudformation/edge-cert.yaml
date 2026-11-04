@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 CloudFront certificate (us-east-1)
+# CloudFront는 us-east-1 인증서만 씁니다. Workflow가 이 스택만 us-east-1에 만듭니다.
+# 검증 CNAME은 ACM이 dameokja.com 호스티드 존에 직접 만듭니다.
+Parameters:
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  DomainName:
+    Type: String
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions: [{DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId}]
+      Tags: [{Key: Name, Value: dameokja-v3-edge}]
+Outputs:
+  # 리전이 달라 Export로 넘길 수 없어 edge 파라미터에 적습니다.
+  CertificateArn:
+    Value: !Ref Certificate

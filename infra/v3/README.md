@@ -69,14 +69,14 @@ kubectl $K apply -f v3/platform/namespaces.yaml
 helm $K upgrade --install karpenter-crd oci://public.ecr.aws/karpenter/karpenter-crd --version 1.15.1 -n tool --wait
 helm $K upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version 1.15.1 -n tool --skip-crds --wait \
   -f v3/platform/values/karpenter.yaml \
-  --set serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(out dameokja-v3-controller-iam KarpenterControllerRoleArn)
+  --set 'serviceAccount.annotations.eks\.amazonaws\.com/role-arn'=$(out dameokja-v3-controller-iam KarpenterControllerRoleArn)
 helm $K upgrade --install strimzi oci://quay.io/strimzi-helm/strimzi-kafka-operator --version 1.3.0 -n tool --wait -f v3/platform/values/strimzi.yaml
 helm $K upgrade --install sealed-secrets sealed-secrets --repo https://bitnami.github.io/sealed-secrets --version 2.22.0 -n tool --wait -f v3/platform/values/sealed-secrets.yaml
 helm $K upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --version 10.11.6 -n tool --wait -f v3/platform/values/argo-cd.yaml
 kubectl $K apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml
 helm $K upgrade --install aws-load-balancer-controller aws-load-balancer-controller --repo https://aws.github.io/eks-charts --version 3.6.2 -n tool --wait \
   -f v3/platform/values/load-balancer-controller.yaml \
-  --set serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(out dameokja-v3-controller-iam LoadBalancerControllerRoleArn)
+  --set 'serviceAccount.annotations.eks\.amazonaws\.com/role-arn'=$(out dameokja-v3-controller-iam LoadBalancerControllerRoleArn)
 helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set gatewayAlbSecurityGroupId=$(out dameokja-v3-dev-pod-sg GatewayAlbSecurityGroupId) \
   --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
@@ -147,6 +147,15 @@ sync dev-secrets; for a in be ai-api fe; do sync dev-$a; done
 ```
 
 NetworkPolicy는 FE→BE, BE↔AI(요청·콜백), BE→Redis·Kafka·MySQL, AI→Kafka·PostgreSQL, 외부 443(사설 대역 제외)만 엽니다. Pod SG도 같은 방향만 허용합니다(AiToBe 추가).
+
+## dev 외부 진입점
+
+CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 80) → FE·BE Pod 순서입니다. ALB는 LBC가 만들고, edge 스택은 그 ARN·DNS 이름만 params로 받습니다. ALB SG는 CloudFront origin-facing prefix list만 받으므로 VPC 밖에서 ALB로 직접 들어올 수 없습니다. 캐시는 끄고 Host·쿠키·Authorization·쿼리를 모두 넘깁니다.
+
+1. edge-cert(us-east-1) plan → apply. ACM이 검증 CNAME을 만들고 ISSUED가 되면 끝납니다.
+2. Output CertificateArn과 ALB ARN·DNS 이름으로 params/edge.json을 만들고 edge plan → apply(DnsWeight 0이라 사용자 트래픽은 아직 v2입니다).
+3. CloudFront 도메인으로 Host를 유지해 사전 시험합니다(`curl --connect-to dev.dameokja.com:443:<배포>.cloudfront.net:443 https://dev.dameokja.com/...`). 로그인 redirect, Secure Cookie, 업로드, SSE를 확인합니다.
+4. 전환: edge의 DnsWeight 100, v2 dev 스택의 DevDomainV2Record Weight 0. 복원은 두 값을 되돌립니다(TTL 300). prod·stage 레코드는 바꾸지 않습니다.
 
 ## 검증과 한계
 
