@@ -17,3 +17,5 @@ spec:
   - {group: '', kind: ConfigMap}
   - {group: '', kind: ServiceAccount}
   - {group: bitnami.com, kind: SealedSecret}
+  - {group: gateway.networking.k8s.io, kind: HTTPRoute}
+  - {group: gateway.k8s.aws, kind: TargetGroupConfiguration}

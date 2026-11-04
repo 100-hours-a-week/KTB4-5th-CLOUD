@@ -3,6 +3,8 @@ appNodeRoleName: ''
 workerSecurityGroupId: ''
 appSubnetId: subnet-0778204ce3b43756e
 appAmiId: ami-0a3227d9c98935bcb
+# dev-pod-sg 스택 Output(GatewayAlbSecurityGroupId)
+gatewayAlbSecurityGroupId: ''
 # dev-pod-sg 스택 Output. 5개 모두 필요합니다.
 podSecurityGroups:
   fe: ''
@@ -18,3 +20,7 @@ network:
   # kubernetes Service 주소. Pod SG가 없는 Pod(Entity Operator)는 바뀌기 전 주소로 판단돼
   # 이 값이 없으면 API SYN이 버려집니다(11/03 PolicyEndpoint·SYN_SENT로 확인).
   apiServiceIp: 192.168.0.1/32
+  # Gateway ALB를 두는 Private Subnet 2개(eks 스택과 같음). ALB가 Pod로 보내는 출발 주소입니다.
+  albSubnets:
+    - {id: subnet-0778204ce3b43756e, cidr: 10.20.32.0/20}
+    - {id: subnet-0f86136fb72318e11, cidr: 10.20.48.0/20}

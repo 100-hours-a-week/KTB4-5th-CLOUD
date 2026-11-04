@@ -1,0 +1,28 @@
+# Gateway API(ALB)만 씁니다. 역할 ARN은 설치 때 controller-iam Output으로 넣습니다.
+replicaCount: 1
+clusterName: dameokja-v3
+region: ap-northeast-2
+vpcId: vpc-04fc5393afa0ce9fd
+serviceAccount:
+  name: aws-load-balancer-controller
+nodeSelector:
+  dameokja.com/node-role: system
+tolerations:
+- key: dameokja.com/system
+  operator: Equal
+  value: 'true'
+  effect: NoSchedule
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 256Mi}
+# Ingress는 쓰지 않습니다.
+createIngressClassResource: false
+# IAM 정책에서 뺀 기능(WAF·Shield, SG 관리)을 끕니다.
+enableShield: false
+enableWaf: false
+enableWafv2: false
+enableBackendSecurityGroup: false
+controllerConfig:
+  featureGates:
+    ALBGatewayAPI: true
+    NLBGatewayAPI: false

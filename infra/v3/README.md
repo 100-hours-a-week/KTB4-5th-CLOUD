@@ -59,6 +59,8 @@ CloudFormation 6개 스택 뒤에 관리자 PC에서 포트 포워딩을 연 상
 | Strimzi(dev 감시) | oci://quay.io/strimzi-helm/strimzi-kafka-operator | 1.3.0 |
 | Sealed Secrets | https://bitnami.github.io/sealed-secrets sealed-secrets | 2.22.0 |
 | Argo CD | https://argoproj.github.io/argo-helm argo-cd | 10.11.6 |
+| Gateway API CRD(standard) | https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml | v1.6.0 |
+| AWS Load Balancer Controller(CRD 포함) | https://aws.github.io/eks-charts aws-load-balancer-controller | 3.6.2 |
 
 ```bash
 K="--kubeconfig infra/v3/private/kubeconfig"  # v3 전용 kubeconfig라 context 지정이 필요 없습니다
@@ -71,7 +73,12 @@ helm $K upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --v
 helm $K upgrade --install strimzi oci://quay.io/strimzi-helm/strimzi-kafka-operator --version 1.3.0 -n tool --wait -f v3/platform/values/strimzi.yaml
 helm $K upgrade --install sealed-secrets sealed-secrets --repo https://bitnami.github.io/sealed-secrets --version 2.22.0 -n tool --wait -f v3/platform/values/sealed-secrets.yaml
 helm $K upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm --version 10.11.6 -n tool --wait -f v3/platform/values/argo-cd.yaml
+kubectl $K apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml
+helm $K upgrade --install aws-load-balancer-controller aws-load-balancer-controller --repo https://aws.github.io/eks-charts --version 3.6.2 -n tool --wait \
+  -f v3/platform/values/load-balancer-controller.yaml \
+  --set serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$(out dameokja-v3-controller-iam LoadBalancerControllerRoleArn)
 helm $K upgrade --install platform v3/charts/platform -n tool --wait \
+  --set gatewayAlbSecurityGroupId=$(out dameokja-v3-dev-pod-sg GatewayAlbSecurityGroupId) \
   --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
   --set workerSecurityGroupId=$(out dameokja-v3-eks WorkerSecurityGroupId) \
   --set podSecurityGroups.fe=$(out dameokja-v3-dev-pod-sg FePodSecurityGroupId) \
@@ -81,7 +88,7 @@ helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set podSecurityGroups.kafka=$(out dameokja-v3-dev-pod-sg KafkaPodSecurityGroupId)
 ```
 
-NodePool은 Pending Pod가 있을 때만 앱 Node(m7i.large·2b·On-Demand)를 만들고, 빈 Node는 5분 뒤 정리합니다. redis-gp3·kafka-gp3는 Retain이라 PVC를 지워도 EBS가 남습니다. platform 차트는 dev Pod에 Pod SG를 붙이고 dev를 기본 차단한 뒤 DNS·Redis·Kafka·DB만 허용합니다. LBC·Gateway API는 5단계에서 추가합니다.
+NodePool은 Pending Pod가 있을 때만 앱 Node(m7i.large·2b·On-Demand)를 만들고, 빈 Node는 5분 뒤 정리합니다. redis-gp3·kafka-gp3는 Retain이라 PVC를 지워도 EBS가 남습니다. platform 차트는 dev Pod에 Pod SG를 붙이고 dev를 기본 차단한 뒤 DNS·Redis·Kafka·DB만 허용합니다. platform 차트는 tool에 공용 Gateway(internal ALB, HTTP 80)도 만듭니다. LBC는 ALB만 만들고 SG는 dev-pod-sg의 Gateway ALB SG를 그대로 씁니다(SG 생성·Pod SG 규칙 변경 권한 없음). Gateway에는 `dameokja.com/gateway-access: 'true'` 라벨이 있는 Namespace의 HTTPRoute만 붙습니다.
 
 ## dev 데이터 계층
 
@@ -115,7 +122,7 @@ MySQL의 BE 계정도 v3 앱 Subnet(10.20.32.0/255.255.240.0) host로 같은 권
 
 ## dev 앱 배포
 
-FE·BE·AI는 `v3/charts/application` 하나로 배포하고 환경 값은 `v3/environments/dev/<앱>.yaml`에 둡니다. 이미지는 v2 dev가 쓰던 digest이며 태그는 받지 않습니다. 색(blue·green)마다 Deployment를 두고 Service `<앱>`이 activeColor를 가리킵니다. 외부 노출(ALB·도메인)은 5단계입니다.
+FE·BE·AI는 `v3/charts/application` 하나로 배포하고 환경 값은 `v3/environments/dev/<앱>.yaml`에 둡니다. 이미지는 v2 dev가 쓰던 digest이며 태그는 받지 않습니다. 색(blue·green)마다 Deployment를 두고 Service `<앱>`이 activeColor를 가리킵니다. FE(/)·BE(/api, Swagger)는 HTTPRoute로 tool Gateway에 붙고, Target Group은 Pod IP 대상입니다.
 
 | 앱 | 주소 | Secret | IAM |
 |---|---|---|---|
