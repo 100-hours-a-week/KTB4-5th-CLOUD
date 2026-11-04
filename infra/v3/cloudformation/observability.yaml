@@ -1,0 +1,234 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 dev observability EC2 (Prometheus, Loki, Grafana)
+# 클러스터 안 Alloy가 로그는 Loki(3100)로, 메트릭은 Prometheus remote-write(9090)로 보냅니다.
+# Prometheus가 클러스터를 직접 긁지 않으므로 EC2에 클러스터 자격 증명을 두지 않고, Node SG에 10250·8080 수신도 열지 않습니다.
+# Grafana는 127.0.0.1에만 열고 SSM 포트 포워딩으로만 접속합니다.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  # 실행할 때마다 최신 AMI를 따라가면 인스턴스가 교체되므로 확인한 ID로 고정합니다.
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Verified Amazon Linux 2023 x86_64 AMI
+  EksStackName:
+    Type: String
+    Default: dameokja-v3-eks
+
+Resources:
+  ObservabilitySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 dev observability EC2
+      SecurityGroupIngress:
+        # Alloy는 Pod SG 없이 Node SG(Worker)로 나갑니다.
+        - {IpProtocol: tcp, FromPort: 3100, ToPort: 3100, SourceSecurityGroupId: {'Fn::ImportValue': !Sub '${EksStackName}-WorkerSecurityGroupId'}, Description: Alloy logs to Loki}
+        - {IpProtocol: tcp, FromPort: 9090, ToPort: 9090, SourceSecurityGroupId: {'Fn::ImportValue': !Sub '${EksStackName}-WorkerSecurityGroupId'}, Description: Alloy remote-write to Prometheus}
+      # 패키지·이미지 설치와 SSM 연결에 NAT 송신이 필요합니다.
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-observability}]
+
+  # SSM 관리(접속·Run Command)용 권한만 둡니다.
+  ObservabilityRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - {Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: sts:AssumeRole}
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+  ObservabilityInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ObservabilityRole]
+
+  ObservabilityInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      # Prometheus·Loki·Grafana 1개씩의 dev 규모(4GiB)입니다.
+      InstanceType: t3.medium
+      # 평시 사용량이 낮아 unlimited 추가 요금이 생기지 않게 standard로 둡니다.
+      CreditSpecification: {CPUCredits: standard}
+      IamInstanceProfile: !Ref ObservabilityInstanceProfile
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: false
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref ObservabilitySecurityGroup]
+      BlockDeviceMappings:
+        # 루트는 OS·컨테이너 이미지용입니다. 데이터는 아래 별도 EBS에 둡니다.
+        - DeviceName: /dev/xvda
+          Ebs: {VolumeType: gp3, VolumeSize: 16, Encrypted: true, DeleteOnTermination: true}
+      Tags:
+        - {Key: Name, Value: dameokja-v3-observability}
+        - {Key: Project, Value: dameokja}
+        - {Key: Generation, Value: v3}
+
+  # 인스턴스를 바꾸거나 스택을 지워도 메트릭·로그·Grafana 설정이 남도록 분리합니다.
+  DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt ObservabilityInstance.AvailabilityZone
+      VolumeType: gp3
+      Size: 30
+      Encrypted: true
+      Tags: [{Key: Name, Value: dameokja-v3-observability-data}]
+  DataVolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref ObservabilityInstance
+      VolumeId: !Ref DataVolume
+      Device: /dev/sdf
+
+  # 설정은 State Manager가 적용합니다. UserData는 첫 부팅에만 실행되지만 Association은 내용이 바뀌면 다시 실행됩니다.
+  # CloudFormation이 저장소의 다른 파일을 읽을 수 없어 설정 파일을 여기에 둡니다(한 곳에서만 관리).
+  # 바이너리+systemd보다 짧아서 docker compose를 씁니다(서비스 3개를 한 파일로, 이미지 digest로 버전 고정).
+  ObservabilityAssociation:
+    Type: AWS::SSM::Association
+    DependsOn: DataVolumeAttachment
+    Properties:
+      AssociationName: dameokja-v3-observability
+      Name: AWS-RunShellScript
+      Targets:
+        - {Key: InstanceIds, Values: [!Ref ObservabilityInstance]}
+      Parameters:
+        executionTimeout: ['1800']
+        commands:
+          - set -euo pipefail
+          - !Sub VOL=${DataVolume}
+          - rpm -q docker >/dev/null || dnf install -y docker
+          # 컨테이너 로그가 루트 디스크를 채우지 않게 크기를 제한합니다.
+          - mkdir -p /etc/docker; echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' > /etc/docker/daemon.json
+          - systemctl enable --now docker
+          # AL2023 저장소에 compose 플러그인이 없어 공식 릴리스를 checksum으로 확인해 설치합니다.
+          - |
+            P=/usr/local/lib/docker/cli-plugins/docker-compose
+            SUM=a5ea28722d5da628b59226626f7d6c33c89a7ed19e39f750645925242044c9d2
+            if ! echo "$SUM  $P" | sha256sum -c --status 2>/dev/null; then
+              mkdir -p "$(dirname $P)"
+              curl -fsSL -o "$P" https://github.com/docker/compose/releases/download/v2.39.1/docker-compose-linux-x86_64
+              echo "$SUM  $P" | sha256sum -c
+              chmod 755 "$P"
+            fi
+          # 데이터 EBS: 처음 붙었을 때만 포맷하고 /data에 마운트합니다.
+          - |
+            DEV=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$(echo $VOL | tr -d -)
+            for i in $(seq 60); do [ -e "$DEV" ] && break; sleep 5; done
+            blkid "$DEV" >/dev/null || mkfs.xfs "$DEV"
+            mkdir -p /data
+            grep -q ' /data ' /etc/fstab || echo "UUID=$(blkid -s UUID -o value $DEV) /data xfs defaults,nofail 0 2" >> /etc/fstab
+            mountpoint -q /data || mount /data
+            # 이미지별 실행 UID: prometheus 65534, loki 10001, grafana 472
+            mkdir -p /data/prometheus /data/loki /data/grafana
+            chown 65534:65534 /data/prometheus; chown 10001:10001 /data/loki; chown 472:472 /data/grafana
+          - mkdir -p /opt/observability.new
+          - |
+            cat > /opt/observability.new/compose.yaml <<'EOF'
+            services:
+              prometheus:
+                image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+                command:
+                  - --config.file=/etc/prometheus/prometheus.yml
+                  - --storage.tsdb.path=/prometheus
+                  # 메트릭 보존 15일. 30GiB 디스크를 Loki·Grafana와 나눠 쓰므로 크기 상한도 둡니다.
+                  - --storage.tsdb.retention.time=15d
+                  - --storage.tsdb.retention.size=15GB
+                  # 클러스터 안 Alloy가 remote_write로 보냅니다.
+                  - --web.enable-remote-write-receiver
+                volumes:
+                  - /opt/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+                  - /data/prometheus:/prometheus
+                ports: ["9090:9090"]
+                restart: unless-stopped
+              loki:
+                image: grafana/loki:3.5.0@sha256:4c431d2e6b9b38718694b31c5d56be7c80dc69c513215fde1aeb5b02cd4e2665
+                command: [-config.file=/etc/loki/config.yaml]
+                volumes:
+                  - /opt/observability/loki.yaml:/etc/loki/config.yaml:ro
+                  - /data/loki:/loki
+                ports: ["3100:3100"]
+                restart: unless-stopped
+              grafana:
+                image: grafana/grafana:12.0.0@sha256:263cbefd5d9b179893c47c415daab4da5c1f3d6770154741eca4f45c81119884
+                environment:
+                  - GF_AUTH_ANONYMOUS_ENABLED=false
+                  - GF_USERS_ALLOW_SIGN_UP=false
+                volumes:
+                  - /opt/observability/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+                  - /data/grafana:/var/lib/grafana
+                # SSM 포트 포워딩으로만 접속하도록 인스턴스 내부에만 엽니다.
+                ports: ["127.0.0.1:3000:3000"]
+                restart: unless-stopped
+            EOF
+          - |
+            cat > /opt/observability.new/prometheus.yml <<'EOF'
+            # 수집 대상은 클러스터 안 Alloy가 정하고 remote_write로 보냅니다. 여기서는 자기 자신만 긁습니다.
+            global:
+              scrape_interval: 30s
+            scrape_configs:
+              - job_name: prometheus
+                static_configs: [{targets: ['localhost:9090']}]
+            EOF
+          - |
+            cat > /opt/observability.new/loki.yaml <<'EOF'
+            # 단일 프로세스, 로컬 디스크 저장
+            auth_enabled: false
+            server:
+              http_listen_port: 3100
+            common:
+              path_prefix: /loki
+              replication_factor: 1
+              ring:
+                kvstore: {store: inmemory}
+              storage:
+                filesystem: {chunks_directory: /loki/chunks, rules_directory: /loki/rules}
+            schema_config:
+              configs:
+                - {from: 2026-11-01, store: tsdb, object_store: filesystem, schema: v13, index: {prefix: index_, period: 24h}}
+            # 로그 보존 7일. 삭제는 compactor가 합니다.
+            limits_config:
+              retention_period: 168h
+            compactor:
+              working_directory: /loki/compactor
+              retention_enabled: true
+              delete_request_store: filesystem
+            EOF
+          - |
+            cat > /opt/observability.new/datasources.yaml <<'EOF'
+            apiVersion: 1
+            datasources:
+              - {name: Prometheus, type: prometheus, url: 'http://prometheus:9090', isDefault: true}
+              - {name: Loki, type: loki, url: 'http://loki:3100'}
+            EOF
+          # 설정이 바뀐 경우에만 컨테이너를 다시 만듭니다.
+          - |
+            if diff -rq /opt/observability.new /opt/observability >/dev/null 2>&1; then
+              rm -rf /opt/observability.new; RECREATE=
+            else
+              rm -rf /opt/observability; mv /opt/observability.new /opt/observability; RECREATE=--force-recreate
+            fi
+            docker compose -f /opt/observability/compose.yaml up -d $RECREATE
+
+Outputs:
+  ObservabilityInstanceId:
+    Value: !Ref ObservabilityInstance
+  # 클러스터 쪽 Alloy의 송신 주소와 NetworkPolicy 예외에 씁니다.
+  ObservabilityPrivateIp:
+    Value: !GetAtt ObservabilityInstance.PrivateIp
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateIp
+  ObservabilitySecurityGroupId:
+    Value: !Ref ObservabilitySecurityGroup
+  DataVolumeId:
+    Value: !Ref DataVolume
