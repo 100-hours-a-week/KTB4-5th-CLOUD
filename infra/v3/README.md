@@ -176,6 +176,8 @@ CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 8
 aws ssm start-session --target <ObservabilityInstanceId> --document-name AWS-StartPortForwardingSession --parameters "portNumber=3000,localPortNumber=3000" --profile dameokja-aws-cli --region ap-northeast-2
 ```
 
+4. 대시보드 "v3 dev 개요"(uid dameokja-v3-dev)는 Association이 파일로 넣습니다. Node Ready·CPU·메모리, Pending Pod, Pod 재시작, BE 요청률·5xx·응답 시간(평균·최대), dev 로그를 봅니다. 화면에서 고칠 수 없으니 `observability.yaml`을 고쳐 다시 apply합니다. BE가 histogram bucket을 내보내지 않아 p95는 없습니다.
+
 스택을 지워도 데이터 EBS는 남습니다. 다시 쓰지 않으면 Output DataVolumeId의 볼륨을 직접 지웁니다.
 
 ## 검증과 한계

@@ -166,6 +166,7 @@ Resources:
                   - GF_USERS_ALLOW_SIGN_UP=false
                 volumes:
                   - /opt/observability/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+                  - /opt/observability/dashboards:/etc/grafana/provisioning/dashboards:ro
                   - /data/grafana:/var/lib/grafana
                 # SSM 포트 포워딩으로만 접속하도록 인스턴스 내부에만 엽니다.
                 ports: ["127.0.0.1:3000:3000"]
@@ -210,6 +211,59 @@ Resources:
             datasources:
               - {name: Prometheus, type: prometheus, url: 'http://prometheus:9090', isDefault: true}
               - {name: Loki, type: loki, url: 'http://loki:3100'}
+            EOF
+          # 대시보드는 파일에서만 관리합니다(화면에서 고친 내용은 다음 적용 때 덮어씀).
+          - |
+            mkdir -p /opt/observability.new/dashboards
+            cat > /opt/observability.new/dashboards/provider.yaml <<'EOF'
+            apiVersion: 1
+            providers:
+              - {name: dameokja, type: file, allowUiUpdates: false, options: {path: /etc/grafana/provisioning/dashboards}}
+            EOF
+          # dev 개요. 데이터 소스는 변수로 골라 Grafana가 만든 uid에 묶이지 않게 합니다.
+          # BE는 histogram bucket을 내보내지 않아 p95 대신 평균·최대 응답 시간을 봅니다.
+          - |
+            cat > /opt/observability.new/dashboards/dev-overview.json <<'EOF'
+            {
+              "uid": "dameokja-v3-dev", "title": "v3 dev 개요", "schemaVersion": 41, "refresh": "1m",
+              "time": {"from": "now-6h", "to": "now"},
+              "templating": {"list": [
+                {"name": "prom", "type": "datasource", "query": "prometheus"},
+                {"name": "loki", "type": "datasource", "query": "loki"}
+              ]},
+              "panels": [
+                {"id": 1, "type": "stat", "title": "Node Ready / 전체", "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"},
+                 "targets": [
+                   {"refId": "A", "legendFormat": "Ready", "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})"},
+                   {"refId": "B", "legendFormat": "전체", "expr": "count(kube_node_info)"}]},
+                {"id": 2, "type": "stat", "title": "Pending Pod", "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"},
+                 "targets": [{"refId": "A", "legendFormat": "{{namespace}}", "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Pending\"})"}]},
+                {"id": 3, "type": "timeseries", "title": "Pod 재시작(1시간 증가분)", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"},
+                 "targets": [{"refId": "A", "legendFormat": "{{namespace}}/{{pod}}", "expr": "sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[1h])) > 0"}]},
+                {"id": 4, "type": "timeseries", "title": "Node CPU 사용(core)", "gridPos": {"x": 0, "y": 4, "w": 6, "h": 8},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"},
+                 "targets": [{"refId": "A", "legendFormat": "{{instance}}", "expr": "sum by (instance) (rate(container_cpu_usage_seconds_total{id=\"/\"}[5m]))"}]},
+                {"id": 5, "type": "timeseries", "title": "Node 메모리 사용(working set)", "gridPos": {"x": 6, "y": 4, "w": 6, "h": 8},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"}, "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+                 "targets": [{"refId": "A", "legendFormat": "{{instance}}", "expr": "container_memory_working_set_bytes{id=\"/\"}"}]},
+                {"id": 6, "type": "timeseries", "title": "BE 요청률·5xx(req/s, actuator 제외)", "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"},
+                 "targets": [
+                   {"refId": "A", "legendFormat": "전체", "expr": "sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[5m]))"},
+                   {"refId": "B", "legendFormat": "5xx", "expr": "sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\",status=~\"5..\"}[5m]))"}]},
+                {"id": 7, "type": "timeseries", "title": "BE 응답 시간(평균·최대, actuator 제외)", "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+                 "datasource": {"type": "prometheus", "uid": "${prom}"}, "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+                 "targets": [
+                   {"refId": "A", "legendFormat": "평균", "expr": "sum(rate(http_server_requests_seconds_sum{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[5m]))"},
+                   {"refId": "B", "legendFormat": "최대", "expr": "max(http_server_requests_seconds_max{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"})"}]},
+                {"id": 8, "type": "logs", "title": "dev 로그", "gridPos": {"x": 0, "y": 20, "w": 24, "h": 10},
+                 "datasource": {"type": "loki", "uid": "${loki}"},
+                 "targets": [{"refId": "A", "expr": "{cluster=\"dameokja-v3\", namespace=\"dev\"}"}]}
+              ]
+            }
             EOF
           # 설정이 바뀐 경우에만 컨테이너를 다시 만듭니다.
           - |
