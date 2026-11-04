@@ -18,3 +18,10 @@ resources: {}
 startupProbe: {}
 readinessProbe: {}
 livenessProbe: {}
+# tool Gateway에 붙일 경로. 비우면 HTTPRoute를 만들지 않습니다(AI는 BE 내부 연결만 사용).
+route:
+  hostname: ''
+  pathPrefixes: []
+  # ALB Target Group 헬스 체크(Pod IP 대상)
+  healthCheckPath: ''
+  healthCheckCodes: '200'

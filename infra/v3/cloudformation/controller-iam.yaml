@@ -1,7 +1,7 @@
 # Karpenter 1.15.1 공식 정책에서 쓰지 않는 자원(Spot 요청, Capacity Reservation, Placement Group)을 뺐습니다.
 # 조회 권한도 쓰지 않는 기능(Capacity Reservation·Placement Group 선택, Zonal Shift, AMI alias용 SSM)은 뺐습니다.
 # 그래서 EC2NodeClass는 AMI를 id로 지정하고, Karpenter의 Zonal Shift는 끈 상태(기본값)로 둡니다.
-# 중단 이벤트 Queue는 쓰지 않습니다(On-Demand만 사용). LBC 역할은 Gateway 단계에서 추가합니다.
+# 중단 이벤트 Queue는 쓰지 않습니다(On-Demand만 사용).
 AWSTemplateFormatVersion: '2010-09-09'
 Description: dameokja v3 controller IAM roles
 Parameters:
@@ -326,6 +326,181 @@ Resources:
           - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
       ManagedPolicyArns:
       - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AmazonEBSCSIDriverPolicyV2
+  # LBC 3.6.2 공식 정책(docs/install/iam_policy.json)에서 쓰지 않는 권한을 뺐습니다.
+  # 빼는 것: WAF·Shield·Cognito·ACM·서버 인증서(HTTP 리스너만, values에서 WAF·Shield 끔),
+  # SG 생성·규칙 변경(ALB SG는 dev-pod-sg가 만들고 manageBackendSecurityGroupRules: false),
+  # ELB Service-Linked Role 생성(계정에 이미 있음).
+  LoadBalancerControllerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Path: /
+      PolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DescribeAccountAttributes",
+                "ec2:DescribeAddresses",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeInternetGateways",
+                "ec2:DescribeVpcs",
+                "ec2:DescribeVpcPeeringConnections",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeInstances",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:DescribeTags",
+                "ec2:GetCoipPoolUsage",
+                "ec2:DescribeCoipPools",
+                "ec2:GetSecurityGroupsForVpc",
+                "ec2:DescribeIpamPools",
+                "ec2:DescribeRouteTables",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeLoadBalancerAttributes",
+                "elasticloadbalancing:DescribeListeners",
+                "elasticloadbalancing:DescribeListenerCertificates",
+                "elasticloadbalancing:DescribeSSLPolicies",
+                "elasticloadbalancing:DescribeRules",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTargetGroupAttributes",
+                "elasticloadbalancing:DescribeTargetHealth",
+                "elasticloadbalancing:DescribeTags",
+                "elasticloadbalancing:DescribeTrustStores",
+                "elasticloadbalancing:DescribeListenerAttributes",
+                "elasticloadbalancing:DescribeCapacityReservation"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:CreateLoadBalancer",
+                "elasticloadbalancing:CreateTargetGroup"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "Null": {
+                  "aws:RequestTag/elbv2.k8s.aws/cluster": "false"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:CreateListener",
+                "elasticloadbalancing:DeleteListener",
+                "elasticloadbalancing:CreateRule",
+                "elasticloadbalancing:DeleteRule"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:RemoveTags"
+              ],
+              "Resource": [
+                "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*",
+                "arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*",
+                "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*"
+              ],
+              "Condition": {
+                "Null": {
+                  "aws:RequestTag/elbv2.k8s.aws/cluster": "true",
+                  "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:RemoveTags"
+              ],
+              "Resource": [
+                "arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*",
+                "arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*",
+                "arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*",
+                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:ModifyLoadBalancerAttributes",
+                "elasticloadbalancing:SetIpAddressType",
+                "elasticloadbalancing:SetSecurityGroups",
+                "elasticloadbalancing:SetSubnets",
+                "elasticloadbalancing:DeleteLoadBalancer",
+                "elasticloadbalancing:ModifyTargetGroup",
+                "elasticloadbalancing:ModifyTargetGroupAttributes",
+                "elasticloadbalancing:DeleteTargetGroup",
+                "elasticloadbalancing:ModifyListenerAttributes",
+                "elasticloadbalancing:ModifyCapacityReservation",
+                "elasticloadbalancing:ModifyIpPools"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "Null": {
+                  "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:AddTags"
+              ],
+              "Resource": [
+                "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*",
+                "arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*",
+                "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "elasticloadbalancing:CreateAction": [
+                    "CreateTargetGroup",
+                    "CreateLoadBalancer"
+                  ]
+                },
+                "Null": {
+                  "aws:RequestTag/elbv2.k8s.aws/cluster": "false"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:RegisterTargets",
+                "elasticloadbalancing:DeregisterTargets"
+              ],
+              "Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:ModifyListener",
+                "elasticloadbalancing:ModifyRule",
+                "elasticloadbalancing:SetRulePriorities"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+  LoadBalancerControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - '{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Federated": "${OidcProviderArn}"},
+            "Action": "sts:AssumeRoleWithWebIdentity", "Condition": {"StringEquals": {"${OidcIssuerHostPath}:aud": "sts.amazonaws.com",
+            "${OidcIssuerHostPath}:sub": "system:serviceaccount:tool:aws-load-balancer-controller"}}}]}'
+          - {OidcProviderArn: {'Fn::ImportValue': !Sub '${EksStackName}-OidcProviderArn'}, OidcIssuerHostPath: {'Fn::ImportValue': !Sub '${EksStackName}-OidcIssuerHostPath'}}
+      ManagedPolicyArns:
+      - Ref: LoadBalancerControllerPolicy
 Outputs:
   KarpenterControllerRoleArn:
     Value:
@@ -339,3 +514,5 @@ Outputs:
       - Arn
     Export:
       Name: !Sub ${AWS::StackName}-EbsCsiRoleArn
+  LoadBalancerControllerRoleArn:
+    Value: !GetAtt LoadBalancerControllerRole.Arn

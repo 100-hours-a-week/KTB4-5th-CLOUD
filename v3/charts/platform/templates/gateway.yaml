@@ -1,0 +1,44 @@
+{{- if not .Values.gatewayAlbSecurityGroupId }}{{ fail "gatewayAlbSecurityGroupId(dev-pod-sg Output)가 필요합니다." }}{{ end }}
+# 공용 HTTP Gateway입니다. LBC가 internal ALB를 만들고, CloudFront VPC Origin만 이 ALB에 닿습니다.
+# TLS는 CloudFront에서 끝나고 ALB 리스너는 HTTP 80입니다.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: alb
+spec:
+  controllerName: gateway.k8s.aws/alb
+---
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: gateway
+  namespace: tool
+spec:
+  loadBalancerName: dameokja-v3-gateway
+  scheme: internal
+  loadBalancerSubnets:
+    {{- range .Values.network.albSubnets }}
+    - identifier: {{ .id }}
+    {{- end }}
+  # SG는 CloudFormation이 관리하므로 LBC는 SG를 만들거나 Pod SG 규칙을 바꾸지 않습니다.
+  securityGroups: [{{ .Values.gatewayAlbSecurityGroupId }}]
+  manageBackendSecurityGroupRules: false
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+  namespace: tool
+spec:
+  gatewayClassName: alb
+  infrastructure:
+    parametersRef: {group: gateway.k8s.aws, kind: LoadBalancerConfiguration, name: gateway}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels: {dameokja.com/gateway-access: 'true'}

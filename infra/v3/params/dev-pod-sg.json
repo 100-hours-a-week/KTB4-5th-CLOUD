@@ -1,3 +1,4 @@
 [
-  {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"}
+  {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"},
+  {"ParameterKey": "CloudFrontOriginPrefixListId", "ParameterValue": "pl-22a6434b"}
 ]

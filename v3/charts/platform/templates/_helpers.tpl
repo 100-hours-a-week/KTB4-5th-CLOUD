@@ -2,3 +2,10 @@
 {{- define "platform.internet" -}}
 {cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]}
 {{- end }}
+
+{{/* Gateway ALB가 놓인 Subnet. ALB 주소는 바뀔 수 있어 Subnet 단위로 엽니다. */}}
+{{- define "platform.albSources" -}}
+{{- range .Values.network.albSubnets }}
+- ipBlock: {cidr: {{ .cidr }}}
+{{- end }}
+{{- end }}

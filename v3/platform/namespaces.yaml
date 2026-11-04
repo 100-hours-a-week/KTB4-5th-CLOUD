@@ -5,6 +5,8 @@ metadata:
   name: dev
   labels:
     dameokja.com/environment: dev
+    # tool Gateway에 HTTPRoute를 붙일 수 있습니다.
+    dameokja.com/gateway-access: 'true'
 ---
 apiVersion: v1
 kind: Namespace

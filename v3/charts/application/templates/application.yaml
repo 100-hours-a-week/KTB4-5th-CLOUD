@@ -112,3 +112,36 @@ spec:
   ports:
     - {name: http, port: {{ $.Values.port }}, targetPort: http}
 {{- end }}
+{{- with .Values.route }}{{- if .pathPrefixes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $.Values.name }}
+  namespace: dev
+spec:
+  parentRefs:
+    - {group: gateway.networking.k8s.io, kind: Gateway, namespace: tool, name: gateway, sectionName: http}
+  hostnames: [{{ .hostname | quote }}]
+  rules:
+    - matches:
+        {{- range .pathPrefixes }}
+        - path: {type: PathPrefix, value: {{ . | quote }}}
+        {{- end }}
+      backendRefs:
+        - {name: {{ $.Values.name }}, port: {{ $.Values.port }}}
+---
+# Pod IP로 바로 보내 Node·NodePort를 거치지 않습니다(Pod SG가 ALB SG를 허용).
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: {{ $.Values.name }}
+  namespace: dev
+spec:
+  targetReference: {name: {{ $.Values.name }}}
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: {{ .healthCheckPath | quote }}
+      matcher: {httpCode: {{ .healthCheckCodes | quote }}}
+{{- end }}{{- end }}

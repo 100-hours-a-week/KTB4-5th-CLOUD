@@ -10,6 +10,9 @@ Parameters:
   EksStackName:
     Type: String
     Default: dameokja-v3-eks
+  # com.amazonaws.global.cloudfront.origin-facing
+  CloudFrontOriginPrefixListId:
+    Type: String
 
 Resources:
   FePodSecurityGroup:
@@ -47,6 +50,25 @@ Resources:
       GroupDescription: v3 dev Kafka Pods
       SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
       Tags: [{Key: Name, Value: dameokja-v3-dev-kafka}]
+
+  # Gateway ALB(LBC가 만드는 internal ALB에 붙입니다). 지금은 dev만 쓰므로 여기에 둡니다.
+  # CloudFront VPC Origin만 80으로 들어오고, 나가는 곳은 FE·BE Pod뿐입니다.
+  GatewayAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 Gateway ALB
+      SecurityGroupIngress: [{IpProtocol: tcp, FromPort: 80, ToPort: 80, SourcePrefixListId: !Ref CloudFrontOriginPrefixListId}]
+      SecurityGroupEgress:
+      - {IpProtocol: tcp, FromPort: 3000, ToPort: 3000, DestinationSecurityGroupId: !Ref FePodSecurityGroup}
+      - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, DestinationSecurityGroupId: !Ref BePodSecurityGroup}
+      Tags: [{Key: Name, Value: dameokja-v3-gateway-alb}]
+  AlbToFe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref FePodSecurityGroup, SourceSecurityGroupId: !Ref GatewayAlbSecurityGroup, IpProtocol: tcp, FromPort: 3000, ToPort: 3000}
+  AlbToBe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref BePodSecurityGroup, SourceSecurityGroupId: !Ref GatewayAlbSecurityGroup, IpProtocol: tcp, FromPort: 8080, ToPort: 8080}
 
   # 서비스 간 수신
   FeToBe:
@@ -128,6 +150,8 @@ Resources:
     Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
 
 Outputs:
+  GatewayAlbSecurityGroupId:
+    Value: !Ref GatewayAlbSecurityGroup
   FePodSecurityGroupId:
     Value: !Ref FePodSecurityGroup
   BePodSecurityGroupId:

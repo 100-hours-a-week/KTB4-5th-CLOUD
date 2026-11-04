@@ -23,3 +23,8 @@ resources:
 startupProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 30}
 readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
 livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}
+# v2 dev nginx와 같은 경로(/api, Swagger)
+route:
+  hostname: dev.dameokja.com
+  pathPrefixes: [/api, /swagger-ui, /v3/api-docs]
+  healthCheckPath: /actuator/health/readiness

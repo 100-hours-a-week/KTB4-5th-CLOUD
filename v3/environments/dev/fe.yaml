@@ -17,3 +17,7 @@ resources:
 startupProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 12}
 readinessProbe: {tcpSocket: {port: 3000}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
 livenessProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}
+route:
+  hostname: dev.dameokja.com
+  pathPrefixes: [/]
+  healthCheckPath: /
