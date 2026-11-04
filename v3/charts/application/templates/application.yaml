@@ -140,6 +140,8 @@ metadata:
 spec:
   targetReference: {name: {{ $.Values.name }}}
   defaultConfiguration:
+    # LBC IAM 정책이 dameokja-v3-* Target Group만 Target을 등록할 수 있습니다.
+    targetGroupName: dameokja-v3-dev-{{ $.Values.name }}
     targetType: ip
     healthCheckConfig:
       healthCheckPath: {{ .healthCheckPath | quote }}

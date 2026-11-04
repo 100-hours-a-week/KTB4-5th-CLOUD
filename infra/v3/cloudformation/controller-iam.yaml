@@ -329,7 +329,9 @@ Resources:
   # LBC 3.6.2 공식 정책(docs/install/iam_policy.json)에서 쓰지 않는 권한을 뺐습니다.
   # 빼는 것: WAF·Shield·Cognito·ACM·서버 인증서(HTTP 리스너만, values에서 WAF·Shield 끔),
   # SG 생성·규칙 변경(ALB SG는 dev-pod-sg가 만들고 manageBackendSecurityGroupRules: false),
-  # ELB Service-Linked Role 생성(계정에 이미 있음).
+  # ELB Service-Linked Role 생성(계정에 이미 있음), 쓰지 않는 기능(NLB·Outposts CoIP·IPAM·Capacity Reservation·mTLS Trust Store).
+  # 조건 없이 열려 있던 리스너·규칙·Target 변경은 v3 ALB(dameokja-v3-gateway)와 v3 Target Group(dameokja-v3-*)으로 좁혀
+  # 같은 계정의 v2 stage·prod ALB에 닿지 않게 합니다. Target Group 이름은 TargetGroupConfiguration에서 정합니다.
   LoadBalancerControllerPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -352,10 +354,7 @@ Resources:
                 "ec2:DescribeInstances",
                 "ec2:DescribeNetworkInterfaces",
                 "ec2:DescribeTags",
-                "ec2:GetCoipPoolUsage",
-                "ec2:DescribeCoipPools",
                 "ec2:GetSecurityGroupsForVpc",
-                "ec2:DescribeIpamPools",
                 "ec2:DescribeRouteTables",
                 "elasticloadbalancing:DescribeLoadBalancers",
                 "elasticloadbalancing:DescribeLoadBalancerAttributes",
@@ -367,9 +366,7 @@ Resources:
                 "elasticloadbalancing:DescribeTargetGroupAttributes",
                 "elasticloadbalancing:DescribeTargetHealth",
                 "elasticloadbalancing:DescribeTags",
-                "elasticloadbalancing:DescribeTrustStores",
-                "elasticloadbalancing:DescribeListenerAttributes",
-                "elasticloadbalancing:DescribeCapacityReservation"
+                "elasticloadbalancing:DescribeListenerAttributes"
               ],
               "Resource": "*"
             },
@@ -394,7 +391,11 @@ Resources:
                 "elasticloadbalancing:CreateRule",
                 "elasticloadbalancing:DeleteRule"
               ],
-              "Resource": "*"
+              "Resource": [
+                "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/dameokja-v3-gateway/*",
+                "arn:aws:elasticloadbalancing:*:*:listener/app/dameokja-v3-gateway/*/*",
+                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/dameokja-v3-gateway/*/*/*"
+              ]
             },
             {
               "Effect": "Allow",
@@ -404,7 +405,6 @@ Resources:
               ],
               "Resource": [
                 "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*",
-                "arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*",
                 "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*"
               ],
               "Condition": {
@@ -421,10 +421,8 @@ Resources:
                 "elasticloadbalancing:RemoveTags"
               ],
               "Resource": [
-                "arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*"
+                "arn:aws:elasticloadbalancing:*:*:listener/app/dameokja-v3-gateway/*/*",
+                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/dameokja-v3-gateway/*/*/*"
               ]
             },
             {
@@ -438,9 +436,7 @@ Resources:
                 "elasticloadbalancing:ModifyTargetGroup",
                 "elasticloadbalancing:ModifyTargetGroupAttributes",
                 "elasticloadbalancing:DeleteTargetGroup",
-                "elasticloadbalancing:ModifyListenerAttributes",
-                "elasticloadbalancing:ModifyCapacityReservation",
-                "elasticloadbalancing:ModifyIpPools"
+                "elasticloadbalancing:ModifyListenerAttributes"
               ],
               "Resource": "*",
               "Condition": {
@@ -456,7 +452,6 @@ Resources:
               ],
               "Resource": [
                 "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*",
-                "arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*",
                 "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*"
               ],
               "Condition": {
@@ -477,7 +472,7 @@ Resources:
                 "elasticloadbalancing:RegisterTargets",
                 "elasticloadbalancing:DeregisterTargets"
               ],
-              "Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+              "Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/dameokja-v3-*/*"
             },
             {
               "Effect": "Allow",
@@ -486,7 +481,10 @@ Resources:
                 "elasticloadbalancing:ModifyRule",
                 "elasticloadbalancing:SetRulePriorities"
               ],
-              "Resource": "*"
+              "Resource": [
+                "arn:aws:elasticloadbalancing:*:*:listener/app/dameokja-v3-gateway/*/*",
+                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/dameokja-v3-gateway/*/*/*"
+              ]
             }
           ]
         }
