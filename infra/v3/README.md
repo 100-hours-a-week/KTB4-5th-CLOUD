@@ -17,6 +17,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 7 | dameokja-v3-dev-pod-sg | cloudformation/dev-pod-sg.yaml | dev FE·BE·AI·Redis·Kafka Pod SG |
 | 8 | dameokja-v3-dev-data-access | cloudformation/dev-data-access.yaml | 기본 VPC Peering·경로, dev DB SG의 BE→3306·AI→5432, dev DB EC2 PostgreSQL 설치 |
 | 9 | dameokja-v3-dev-app-iam | cloudformation/dev-app-iam.yaml | dev BE·AI IRSA 역할(S3 image/ 접두사) |
+| 10 | dameokja-v3-observability | cloudformation/observability.yaml | 관측 EC2(Prometheus·Loki·Grafana), Association 성공 |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -156,6 +157,20 @@ CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 8
 2. Output CertificateArn과 ALB ARN·DNS 이름으로 params/edge.json을 만들고 edge plan → apply(DnsWeight 0이라 사용자 트래픽은 아직 v2입니다).
 3. CloudFront 도메인으로 Host를 유지해 사전 시험합니다(`curl --connect-to dev.dameokja.com:443:<배포>.cloudfront.net:443 https://dev.dameokja.com/...`). 로그인 redirect, Secure Cookie, 업로드, SSE를 확인합니다.
 4. 전환: edge의 DnsWeight 100, v2 dev 스택의 DevDomainV2Record Weight 0. 복원은 두 값을 되돌립니다(TTL 300). prod·stage 레코드는 바꾸지 않습니다.
+
+## dev 관측
+
+관측 EC2(t3.medium, 시스템 Node와 같은 사설 Subnet)에 Prometheus·Loki·Grafana를 docker compose로 띄웁니다. 클러스터 안 Alloy가 로그를 Loki(3100)로, 메트릭을 Prometheus remote-write(9090)로 보내므로 EC2에는 클러스터 자격 증명이 없습니다. 보존은 메트릭 15일·로그 7일입니다. 데이터는 별도 EBS(gp3 30GiB, Retain)의 /data에 둡니다.
+
+1. observability plan → apply. 설정은 State Manager Association(dameokja-v3-observability)이 적용하고, 템플릿의 설정을 바꾸면 다시 실행됩니다.
+2. Output ObservabilityPrivateIp(Export `dameokja-v3-observability-PrivateIp`)를 클러스터 쪽 Alloy 송신 주소와 NetworkPolicy 예외에 씁니다(후속 변경).
+3. Grafana는 인스턴스 내부(127.0.0.1:3000)에만 열려 있어 SSM 포트 포워딩으로 접속합니다. 첫 로그인은 admin/admin이고 바로 비밀번호를 바꿉니다.
+
+```bash
+aws ssm start-session --target <ObservabilityInstanceId> --document-name AWS-StartPortForwardingSession --parameters "portNumber=3000,localPortNumber=3000" --profile dameokja-aws-cli --region ap-northeast-2
+```
+
+스택을 지워도 데이터 EBS는 남습니다. 다시 쓰지 않으면 Output DataVolumeId의 볼륨을 직접 지웁니다.
 
 ## 검증과 한계
 
