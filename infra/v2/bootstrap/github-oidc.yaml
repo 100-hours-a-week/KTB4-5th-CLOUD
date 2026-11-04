@@ -101,7 +101,10 @@ Resources:
                   - cloudformation:GetTemplate
                   - cloudformation:GetTemplateSummary
                   - cloudformation:ListChangeSets
-                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/dameokja-*/*"
+                Resource:
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/dameokja-*/*"
+                  # CloudFront 인증서는 us-east-1에만 둘 수 있어 이 스택 하나만 엽니다(v3 edge-cert).
+                  - !Sub "arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stack/dameokja-v3-edge-cert/*"
               - Effect: Allow
                 Action: cloudformation:ValidateTemplate
                 Resource: "*"
