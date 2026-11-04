@@ -62,6 +62,8 @@ CloudFormation 6개 스택 뒤에 관리자 PC에서 포트 포워딩을 연 상
 | Argo CD | https://argoproj.github.io/argo-helm argo-cd | 10.11.6 |
 | Gateway API CRD(standard) | https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/standard-install.yaml | v1.6.0 |
 | AWS Load Balancer Controller(CRD 포함) | https://aws.github.io/eks-charts aws-load-balancer-controller | 3.6.2 |
+| kube-state-metrics | https://prometheus-community.github.io/helm-charts kube-state-metrics | 9.0.0 |
+| Grafana Alloy(DaemonSet) | https://grafana.github.io/helm-charts alloy | 1.15.0 |
 
 ```bash
 K="--kubeconfig infra/v3/private/kubeconfig"  # v3 전용 kubeconfig라 context 지정이 필요 없습니다
@@ -78,6 +80,9 @@ kubectl $K apply --server-side -f https://github.com/kubernetes-sigs/gateway-api
 helm $K upgrade --install aws-load-balancer-controller aws-load-balancer-controller --repo https://aws.github.io/eks-charts --version 3.6.2 -n tool --wait \
   -f v3/platform/values/load-balancer-controller.yaml \
   --set 'serviceAccount.annotations.eks\.amazonaws\.com/role-arn'=$(out dameokja-v3-controller-iam LoadBalancerControllerRoleArn)
+# 관측(observability 스택 뒤): 로그·메트릭을 관측 EC2(10.20.32.213)로 보냅니다.
+helm $K upgrade --install kube-state-metrics kube-state-metrics --repo https://prometheus-community.github.io/helm-charts --version 9.0.0 -n tool --wait -f v3/platform/values/kube-state-metrics.yaml
+helm $K upgrade --install alloy alloy --repo https://grafana.github.io/helm-charts --version 1.15.0 -n tool --wait -f v3/platform/values/alloy.yaml
 helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set gatewayAlbSecurityGroupId=$(out dameokja-v3-dev-pod-sg GatewayAlbSecurityGroupId) \
   --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
@@ -163,7 +168,8 @@ CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 8
 관측 EC2(t3.medium, 시스템 Node와 같은 사설 Subnet)에 Prometheus·Loki·Grafana를 docker compose로 띄웁니다. 클러스터 안 Alloy가 로그를 Loki(3100)로, 메트릭을 Prometheus remote-write(9090)로 보내므로 EC2에는 클러스터 자격 증명이 없습니다. 보존은 메트릭 15일·로그 7일입니다. 데이터는 별도 EBS(gp3 30GiB, Retain)의 /data에 둡니다.
 
 1. observability plan → apply. 설정은 State Manager Association(dameokja-v3-observability)이 적용하고, 템플릿의 설정을 바꾸면 다시 실행됩니다.
-2. Output ObservabilityPrivateIp(Export `dameokja-v3-observability-PrivateIp`)를 클러스터 쪽 Alloy 송신 주소와 NetworkPolicy 예외에 씁니다(후속 변경).
+2. 클러스터 쪽은 "관리 도구 설치"의 kube-state-metrics·Alloy Helm 명령으로 설치합니다. Alloy는 Node마다 1개로, 자기 Node의 Pod 로그(/var/log/pods)를 Loki로, 자기 Node의 kubelet·cAdvisor와 같은 Node의 kube-state-metrics·dev BE(/actuator/prometheus) 메트릭을 Prometheus remote-write로 보냅니다. 송신 주소는 Output ObservabilityPrivateIp(10.20.32.213)이고 `v3/platform/values/alloy.yaml`에 적혀 있습니다. 로그 읽기 위치는 Node의 /var/lib/alloy(hostPath)에 남습니다.
+   - dev BE는 NetworkPolicy가 tool의 Alloy에서 8080만 추가로 허용합니다(platform 차트). Alloy는 Pod SG 없이 Node SG로 나가므로 관측 SG와 BE Pod SG(BeProbe)를 그대로 통과합니다.
 3. Grafana는 인스턴스 내부(127.0.0.1:3000)에만 열려 있어 SSM 포트 포워딩으로 접속합니다. 첫 로그인은 admin/admin이고 바로 비밀번호를 바꿉니다.
 
 ```bash

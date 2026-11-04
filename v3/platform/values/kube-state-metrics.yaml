@@ -1,0 +1,23 @@
+# Kubernetes 객체 상태(Pod 재시작·Pending, Deployment·DaemonSet·StatefulSet Replica, Node, PVC)를 메트릭으로 냅니다.
+# 같은 Node의 Alloy가 8080을 긁어 관측 EC2 Prometheus로 보냅니다.
+replicas: 1
+nodeSelector:
+  dameokja.com/node-role: system
+tolerations:
+  - {key: dameokja.com/system, operator: Equal, value: 'true', effect: NoSchedule}
+# 시스템 Node 한 대의 초기 예산이며 실측 후 조정합니다.
+resources:
+  requests: {cpu: 10m, memory: 64Mi}
+  limits: {memory: 128Mi}
+# 7단계 확인 항목(재시작·Pending·Replica·Node·PVC)에 필요한 것만 수집합니다. secrets·configmaps 등은 넣지 않아 그 읽기 권한도 생기지 않습니다.
+collectors:
+  - daemonsets
+  - deployments
+  - jobs
+  - namespaces
+  - nodes
+  - persistentvolumeclaims
+  - persistentvolumes
+  - pods
+  - replicasets
+  - statefulsets
