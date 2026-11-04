@@ -4,5 +4,5 @@
   {"ParameterKey": "CertificateArn", "ParameterValue": "arn:aws:acm:us-east-1:906462447513:certificate/187486db-ac30-404c-857c-b529154d09e1"},
   {"ParameterKey": "DomainName", "ParameterValue": "dev.dameokja.com"},
   {"ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9"},
-  {"ParameterKey": "DnsWeight", "ParameterValue": "0"}
+  {"ParameterKey": "DnsWeight", "ParameterValue": "100"}
 ]
