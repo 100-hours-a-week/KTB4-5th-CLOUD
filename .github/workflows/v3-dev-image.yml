@@ -1,0 +1,64 @@
+name: v3 dev 이미지 반영
+run-name: "v3 dev ${{ inputs.app }} ${{ inputs.image }}"
+
+# FE·BE·AI CI가 dev 이미지를 빌드한 뒤 CLOUD_DISPATCH_TOKEN으로 실행합니다.
+# v3/environments/dev/<앱>.yaml의 활성 색상 이미지를 바꿔 main에 커밋하면 Argo CD가 자동 sync합니다(#238).
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        type: choice
+        options: [fe, be, ai-api]
+        required: true
+      image:
+        description: GHCR image@sha256 digest
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+# 모든 앱이 같은 main에 커밋하므로 하나씩 실행합니다.
+concurrency:
+  group: v3-dev-image
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      APP: ${{ inputs.app }}
+      IMAGE: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: 이미지 값 바꾸기
+        shell: python
+        run: |
+          import os, re, pathlib
+          app, image = os.environ["APP"], os.environ["IMAGE"]
+          repo = "ai" if app == "ai-api" else app
+          if not re.fullmatch(rf"ghcr\.io/100-hours-a-week/ktb4-5th-{repo}@sha256:[0-9a-f]{{64}}", image):
+              raise SystemExit(f"{app}의 GHCR digest가 아닙니다: {image}")
+          path = pathlib.Path(f"v3/environments/dev/{app}.yaml")
+          text = path.read_text(encoding="utf-8")
+          active = re.search(r"^activeColor: (\w+)$", text, re.M)
+          color = active.group(1) if active else "blue"
+          # 주석을 지키려고 YAML을 다시 쓰지 않고 활성 색상 줄의 image 값만 바꿉니다.
+          text, count = re.subn(rf"^(  {color}: \{{image: )[^,]+,", rf"\g<1>{image},", text, flags=re.M)
+          if count != 1:
+              raise SystemExit(f"{path}에서 {color} 이미지 줄을 찾지 못했습니다.")
+          path.write_text(text, encoding="utf-8")
+      - name: main에 커밋
+        run: |
+          if git diff --quiet; then echo "이미 같은 이미지입니다."; exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -am "chore(v3): dev $APP 이미지 갱신" -m "$IMAGE"
+          # 사람이 그 사이 main에 push했으면 받아서 다시 시도합니다.
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1

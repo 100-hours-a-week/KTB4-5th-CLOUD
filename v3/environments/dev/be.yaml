@@ -1,4 +1,4 @@
-# 이미지는 v2 dev가 쓰던 것과 같은 digest입니다(6단계부터 CI가 갱신).
+# 이미지는 앱 CI가 .github/workflows/v3-dev-image.yml로 갱신합니다(#238).
 name: be
 port: 8080
 colors:
