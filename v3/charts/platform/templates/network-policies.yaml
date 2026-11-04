@@ -121,7 +121,8 @@ spec:
         - podSelector:
             matchLabels: {app.kubernetes.io/name: ai-api}
       ports:
-        - {protocol: TCP, port: 8080}    # Gateway ALB(/api 등)
+        - {protocol: TCP, port: 8080}
+    # Gateway ALB(/api 등)
     - from:
         {{- include "platform.albSources" . | nindent 8 }}
       ports:

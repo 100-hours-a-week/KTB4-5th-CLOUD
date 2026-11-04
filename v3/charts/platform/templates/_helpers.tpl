@@ -3,7 +3,7 @@
 {cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]}
 {{- end }}
 
-{{/* Gateway ALB가 놓인 Subnet. ALB 주소는 바뀔 수 있어 Subnet 단위로 엽니다. */}}
+{{/* Gateway ALB가 놓인 Subnet. ALB 주소는 바뀔 수 있어 Subnet 단위로 엽니다. 같은 Subnet의 다른 출발지는 Pod SG(ALB SG만 허용)가 막습니다. */}}
 {{- define "platform.albSources" -}}
 {{- range .Values.network.albSubnets }}
 - ipBlock: {cidr: {{ .cidr }}}
