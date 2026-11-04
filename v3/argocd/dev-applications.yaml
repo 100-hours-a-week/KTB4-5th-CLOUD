@@ -1,4 +1,4 @@
-# 동기화는 수동입니다. 자동 동기화·Image Updater는 6단계에서 정합니다.
+# secrets는 수동 동기화입니다. 앱(fe·be·ai-api)은 CI가 이미지를 main에 커밋하면 자동 동기화합니다(#238).
 # secrets를 먼저 동기화해야 앱 Pod가 Secret을 찾습니다.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -38,6 +38,8 @@ spec:
     server: https://kubernetes.default.svc
     namespace: dev
   syncPolicy:
+    # main 변경을 자동 반영하고, Chart에서 빠진 자원은 지웁니다.
+    automated: {prune: true}
     syncOptions:
     # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
     - FailOnSharedResource=true
@@ -61,6 +63,8 @@ spec:
     server: https://kubernetes.default.svc
     namespace: dev
   syncPolicy:
+    # main 변경을 자동 반영하고, Chart에서 빠진 자원은 지웁니다.
+    automated: {prune: true}
     syncOptions:
     # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
     - FailOnSharedResource=true
@@ -84,6 +88,8 @@ spec:
     server: https://kubernetes.default.svc
     namespace: dev
   syncPolicy:
+    # main 변경을 자동 반영하고, Chart에서 빠진 자원은 지웁니다.
+    automated: {prune: true}
     syncOptions:
     # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
     - FailOnSharedResource=true
