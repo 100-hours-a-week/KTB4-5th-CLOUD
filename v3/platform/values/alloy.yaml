@@ -1,0 +1,168 @@
+# Node마다 1개. 자기 Node의 Pod 로그를 Loki로, 자기 Node의 kubelet·cAdvisor와 이 Node에 있는 kube-state-metrics·dev BE 메트릭을
+# 관측 EC2 Prometheus로 remote_write합니다. Node별로 나눠 긁어 같은 대상을 여러 Alloy가 중복 수집하지 않습니다.
+# 관측 EC2 주소 10.20.32.213은 dameokja-v3-observability 스택 Output(PrivateIp)입니다. Alloy는 Pod SG 없이 Node SG로 나가 관측 SG를 통과합니다.
+alloy:
+  configMap:
+    content: |
+      // 이 Node에 배치된 Pod(로그와 Pod 메트릭 대상)
+      discovery.kubernetes "pods" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("HOSTNAME")
+        }
+      }
+
+      // ---- 로그 ----
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+        // kubelet이 쓰는 Node 로컬 로그 파일
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+      }
+      local.file_match "pod_logs" {
+        path_targets = discovery.relabel.pod_logs.output
+      }
+      // 읽은 위치는 storagePath(hostPath)에 남아 Alloy가 재시작해도 이어서 읽습니다.
+      loki.source.file "pod_logs" {
+        targets    = local.file_match.pod_logs.targets
+        forward_to = [loki.process.pod_logs.receiver]
+      }
+      loki.process "pod_logs" {
+        stage.cri {}
+        forward_to = [loki.write.observability.receiver]
+      }
+      loki.write "observability" {
+        endpoint {
+          url = "http://10.20.32.213:3100/loki/api/v1/push"
+        }
+        external_labels = {cluster = "dameokja-v3"}
+      }
+
+      // ---- 메트릭 ----
+      discovery.kubernetes "node" {
+        role = "node"
+        selectors {
+          role  = "node"
+          field = "metadata.name=" + sys.env("HOSTNAME")
+        }
+      }
+      // kubelet 인증서는 Node별 자체 서명이라 검증을 끄고, ServiceAccount 토큰으로 인증합니다(nodes/metrics 권한).
+      prometheus.scrape "kubelet" {
+        targets           = discovery.kubernetes.node.targets
+        scheme            = "https"
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        tls_config {
+          insecure_skip_verify = true
+        }
+        forward_to = [prometheus.remote_write.observability.receiver]
+      }
+      prometheus.scrape "cadvisor" {
+        targets           = discovery.kubernetes.node.targets
+        scheme            = "https"
+        metrics_path      = "/metrics/cadvisor"
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        tls_config {
+          insecure_skip_verify = true
+        }
+        forward_to = [prometheus.remote_write.observability.receiver]
+      }
+
+      // kube-state-metrics는 1개뿐이라 그 Pod가 있는 Node의 Alloy만 긁습니다.
+      discovery.relabel "kube_state_metrics" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
+          regex         = "kube-state-metrics;8080"
+          action        = "keep"
+        }
+      }
+      prometheus.scrape "kube_state_metrics" {
+        targets    = discovery.relabel.kube_state_metrics.output
+        forward_to = [prometheus.remote_write.observability.receiver]
+      }
+
+      // dev BE(Spring Actuator). BE NetworkPolicy가 tool의 Alloy에서 8080을 허용합니다.
+      discovery.relabel "be" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
+          regex         = "dev;be;8080"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+      }
+      prometheus.scrape "be" {
+        targets      = discovery.relabel.be.output
+        metrics_path = "/actuator/prometheus"
+        forward_to   = [prometheus.remote_write.observability.receiver]
+      }
+
+      prometheus.remote_write "observability" {
+        endpoint {
+          url = "http://10.20.32.213:9090/api/v1/write"
+        }
+        external_labels = {cluster = "dameokja-v3"}
+      }
+  # 로그 읽기 위치·WAL을 Node 디스크에 남깁니다(아래 hostPath).
+  storagePath: /var/lib/alloy
+  mounts:
+    # /var/log/pods 읽기
+    varlog: true
+    extra:
+      - {name: alloy-data, mountPath: /var/lib/alloy}
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+
+controller:
+  type: daemonset
+  volumes:
+    extra:
+      - name: alloy-data
+        hostPath: {path: /var/lib/alloy, type: DirectoryOrCreate}
+  # 시스템 Node의 로그·메트릭도 수집해야 하므로 시스템 taint를 허용합니다.
+  tolerations:
+    - {key: dameokja.com/system, operator: Equal, value: 'true', effect: NoSchedule}
+
+# 위 설정이 쓰는 것만 허용합니다(차트 기본값의 configmaps·secrets 등 읽기는 뺍니다).
+rbac:
+  rules:
+    - apiGroups: ['']
+      resources: [pods]
+      verbs: [get, list, watch]
+  clusterRules:
+    - apiGroups: ['']
+      resources: [nodes]
+      verbs: [get, list, watch]
+    # kubelet /metrics·/metrics/cadvisor
+    - apiGroups: ['']
+      resources: [nodes/metrics]
+      verbs: [get]

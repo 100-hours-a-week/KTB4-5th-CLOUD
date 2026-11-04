@@ -127,6 +127,14 @@ spec:
         {{- include "platform.albSources" . | nindent 8 }}
       ports:
         - {protocol: TCP, port: 8080}
+    # 관측: tool의 Alloy가 /actuator/prometheus를 긁습니다(SG는 Alloy가 쓰는 Node SG를 BeProbe 규칙으로 이미 허용).
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: tool}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: alloy}
+      ports:
+        - {protocol: TCP, port: 8080}
 ---
 # FE 수신: Gateway ALB → 3000
 apiVersion: networking.k8s.io/v1
