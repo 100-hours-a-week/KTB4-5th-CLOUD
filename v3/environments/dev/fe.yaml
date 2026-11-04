@@ -20,4 +20,5 @@ livenessProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, f
 route:
   hostname: dev.dameokja.com
   pathPrefixes: [/]
-  healthCheckPath: /
+  # /는 로그인 안 된 요청을 /login으로 307 redirect합니다(proxy.ts). manifest는 redirect 대상에서 빠지고 앱 프로세스가 응답합니다.
+  healthCheckPath: /manifest.webmanifest

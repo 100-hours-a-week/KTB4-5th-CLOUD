@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 dev edge (CloudFront + VPC Origin)
+# CloudFront → VPC Origin → internal Gateway ALB(LBC가 만듦, 이 스택은 ARN만 받음) → FE·BE Pod.
+# TLS는 CloudFront에서 끝나고 Origin 구간은 HTTP 80입니다.
+# 캐시는 끄고(Managed-CachingDisabled) Host·쿠키·Authorization·쿼리를 모두 넘깁니다(Managed-AllViewer).
+# 이미지는 BE가 발급한 S3 presigned URL로 브라우저가 S3에 직접 올리고 받으므로 S3 Origin은 두지 않습니다.
+Parameters:
+  GatewayAlbArn:
+    Type: String
+  GatewayAlbDnsName:
+    Type: String
+  CertificateArn:
+    Type: String
+  DomainName:
+    Type: String
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  # dev.dameokja.com 가중치 레코드(v2 dev 스택의 SetIdentifier v2와 같은 이름 집합). 전환 때 v2와 함께 바꿉니다.
+  DnsWeight:
+    Type: Number
+Resources:
+  GatewayOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: dameokja-v3-gateway
+        Arn: !Ref GatewayAlbArn
+        HTTPPort: 80
+        HTTPSPort: 443
+        OriginProtocolPolicy: http-only
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: dameokja v3 dev
+        Aliases: [!Ref DomainName]
+        HttpVersion: http2
+        # 한국을 포함하는 가장 작은 등급
+        PriceClass: PriceClass_200
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: gateway
+            DomainName: !Ref GatewayAlbDnsName
+            VpcOriginConfig: {VpcOriginId: !Ref GatewayOrigin}
+        DefaultCacheBehavior:
+          TargetOriginId: gateway
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          # Managed-CachingDisabled
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # Managed-AllViewer
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+  DevDomainV3Record:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub '${DomainName}.'
+      Type: A
+      SetIdentifier: v3
+      Weight: !Ref DnsWeight
+      # CloudFront 별칭의 고정 호스티드 존
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false}
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Value: !GetAtt Distribution.DomainName
