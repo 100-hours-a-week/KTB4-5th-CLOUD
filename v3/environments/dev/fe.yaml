@@ -2,7 +2,7 @@
 name: fe
 port: 3000
 colors:
-  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-fe@sha256:712c2d001745693ecf17741f9fc74983eb8512b4b34f4c1e7ad0fd4763d88173, replicas: 1}
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-fe@sha256:bdc8beb1cfd99911d6902e0eee2034478899a7d05720388e27bcc45333323183, replicas: 1}
   green: {image: '', replicas: 0}
 secretName: fe-secrets
 # 이미지 USER node
