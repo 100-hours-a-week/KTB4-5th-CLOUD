@@ -11,6 +11,9 @@ runAsUser: 10001
 # v2 dev와 달라지는 값만 둡니다. 같은 키는 ai-secrets에서 뺍니다(seal-secrets.sh).
 env:
   CALLBACK_URL: http://be.dev.svc.cluster.local:8080/api/v1/internal/image-analyses/callback
+  # Strimzi dev-kafka 내부 PLAINTEXT. 토픽 이름은 <KAFKA_ENV>.dameokja.* (dev-data 차트)
+  KAFKA_BOOTSTRAP_SERVERS: dev-kafka-kafka-bootstrap.dev.svc.cluster.local:9092
+  KAFKA_ENV: dev
   # 이미지의 /app은 root 소유라 로그는 /tmp(emptyDir)에 씁니다.
   LOG_DIR: /tmp/ai-logs
 resources:

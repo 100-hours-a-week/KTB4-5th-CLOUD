@@ -16,3 +16,6 @@ topics:
     - analysis.feedback.v1
     - recommendation.requested.v1
     - recommendation.completed.v1
+    # BE application.yml이 쓰는 토픽(자동 생성이 꺼져 있어 미리 만듭니다)
+    - analysis.completed.v1.dlt
+    - cooking.applied.v1
