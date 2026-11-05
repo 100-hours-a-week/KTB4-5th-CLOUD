@@ -1,18 +1,20 @@
-{{- range $service, $group := .Values.podSecurityGroups }}
+{{- range $env, $cfg := .Values.environments }}
+{{- range $service, $group := $cfg.podSecurityGroups }}
 ---
 apiVersion: vpcresources.k8s.aws/v1beta1
 kind: SecurityGroupPolicy
 metadata:
   name: {{ $service }}
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels:
       {{- if eq $service "kafka" }}
-      strimzi.io/name: dev-kafka-kafka
+      strimzi.io/name: {{ $env }}-kafka-kafka
       {{- else }}
       app.kubernetes.io/name: {{ $service }}
       {{- end }}
   securityGroups:
-    groupIds: [{{ required (printf "dev-pod-sg 스택 Output이 필요합니다: %s" $service) $group | quote }}]
+    groupIds: [{{ required (printf "%s-pod-sg 스택 Output이 필요합니다: %s" $env $service) $group | quote }}]
+{{- end }}
 {{- end }}

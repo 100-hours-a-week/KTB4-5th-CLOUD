@@ -1,5 +1,5 @@
 apiVersion: v2
 name: dameokja-platform
-description: v3 dev StorageClass, 앱 NodePool, Pod SG 연결, NetworkPolicy
+description: v3 StorageClass, 앱 NodePool(dev-app·stage-app), 환경별 Pod SG 연결·NetworkPolicy
 type: application
 version: 0.1.0
