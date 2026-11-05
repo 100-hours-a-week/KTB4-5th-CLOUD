@@ -42,16 +42,9 @@ fi
 k scale sts redis --replicas=1
 # annotation을 지우면 Operator가 PodSet과 Entity Operator를 다시 만듭니다.
 k annotate kafka stage-kafka strimzi.io/pause-reconciliation-
-# 새로 생긴 Node에서 처음 뜬 브로커가 Kubernetes API에 닿지 못해 재시작을 반복하는 일이 있습니다(#272).
-# 3번 이상 재시작한 브로커는 다시 만듭니다.
 for i in $(seq 1 90); do
   st=$(k get kafka stage-kafka -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
   [[ $st == True ]] && break
-  # 이미 지우는 중(deletionTimestamp 있음)인 Pod는 건너뜁니다.
-  for p in $(k get pods -l strimzi.io/name=stage-kafka-kafka -o jsonpath='{range .items[*]}{.metadata.name}={.status.containerStatuses[0].restartCount}={.metadata.deletionTimestamp}{"\n"}{end}'); do
-    IFS== read -r name count deleting <<<"$p"
-    [[ -z $deleting && ${count:-0} -ge 3 ]] && { echo "재생성: $name"; k delete pod "$name" --wait=false; }
-  done
   sleep 20
 done
 [[ $st == True ]] || { echo "Kafka가 Ready가 되지 않았습니다" >&2; k get pods; exit 1; }

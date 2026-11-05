@@ -24,10 +24,9 @@ stageNodePool:
   limits: {cpu: '16', memory: 64Gi}
 network:
   # EKS API ENI가 놓이는 Private Subnet 2개. ENI 주소는 EKS가 바꿀 수 있어 Subnet 단위로 엽니다.
-  # Pod SG(branch ENI)를 쓰는 Pod(Kafka 브로커)는 Service 주소가 ENI 주소로 바뀐 뒤 판단돼 이 값만으로 API에 닿습니다(11/03 확인).
   apiEndpointCidrs: [10.20.32.0/20, 10.20.48.0/20]
-  # kubernetes Service 주소. Pod SG가 없는 Pod(Entity Operator)는 바뀌기 전 주소로 판단돼
-  # 이 값이 없으면 API SYN이 버려집니다(11/03 PolicyEndpoint·SYN_SENT로 확인).
+  # kubernetes Service 주소. NetworkPolicy는 바뀌기 전 주소로 판단하므로 Pod SG 유무와 관계없이 필요합니다.
+  # Kafka 브로커에 없어서 정책이 붙은 뒤 API 접속이 막혔습니다(#275, 11/05 시험 Pod로 확인).
   apiServiceIp: 192.168.0.1/32
   # Gateway ALB를 두는 Private Subnet 2개(eks 스택과 같음). ALB가 Pod로 보내는 출발 주소입니다.
   albSubnets:
