@@ -60,7 +60,8 @@ spec:
     cpu: "26"
     memory: 104Gi
   disruption:
-    consolidationPolicy: WhenEmpty
+    # 빈 Node뿐 아니라 덜 찬 Node도 합쳐 dev를 1대로 모읍니다(#279). drift 해시에 들지 않아 Node 교체를 일으키지 않습니다.
+    consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 5m
     budgets:
       - nodes: "1"

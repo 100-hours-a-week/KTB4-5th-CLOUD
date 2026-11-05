@@ -12,7 +12,8 @@ spec:
   replicas: 1
   roles: [broker, controller]
   resources:
-    requests: {cpu: 500m, memory: 2Gi}
+    # dev는 Node 1대에 모으려고 요청량을 낮춥니다(#279).
+    requests: {cpu: 250m, memory: 2Gi}
     limits: {cpu: "2", memory: 2Gi}
   # 힙은 컨테이너 메모리의 절반 이하로 두고 나머지는 페이지 캐시에 씁니다.
   jvmOptions:
