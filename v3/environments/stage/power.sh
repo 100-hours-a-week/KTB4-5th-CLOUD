@@ -48,6 +48,10 @@ for i in $(seq 1 90); do
   sleep 20
 done
 [[ $st == True ]] || { echo "Kafka가 Ready가 되지 않았습니다" >&2; k get pods; exit 1; }
+# 꺼진 동안 main에 반영된 stage 이미지(v3-stage-image.yml)로 띄우려고 Argo stage 앱을 sync합니다.
+for app in stage-secrets stage-be stage-ai-api stage-fe; do
+  "$work/kubectl" -n tool patch application "$app" --type merge -p '{"operation":{"sync":{"revision":"main"}}}'
+done
 for a in $APPS; do k scale deploy "${a%%=*}" --replicas="${a#*=}"; done
 for i in $(seq 1 60); do
   ok=1; for a in $APPS; do [[ $(ready "deploy/${a%%=*}") == "${a#*=}" ]] || ok=; done

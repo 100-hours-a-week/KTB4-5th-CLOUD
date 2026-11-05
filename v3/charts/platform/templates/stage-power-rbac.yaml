@@ -31,3 +31,24 @@ metadata:
 subjects:
   - {kind: Group, name: 'dameokja:stage-power', apiGroup: rbac.authorization.k8s.io}
 roleRef: {kind: Role, name: stage-power, apiGroup: rbac.authorization.k8s.io}
+---
+# 켜기 때 Argo stage 앱만 sync합니다(이름으로 제한).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stage-power
+  namespace: tool
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [stage-secrets, stage-be, stage-ai-api, stage-fe]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stage-power
+  namespace: tool
+subjects:
+  - {kind: Group, name: 'dameokja:stage-power', apiGroup: rbac.authorization.k8s.io}
+roleRef: {kind: Role, name: stage-power, apiGroup: rbac.authorization.k8s.io}

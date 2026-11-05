@@ -1,0 +1,80 @@
+name: v3 stage 이미지 반영
+# prod-approval.yml이 이 실행 이름으로 요청 실행·이미지와 짝을 맞춥니다. 형식을 바꾸면 같이 바꿉니다.
+run-name: "v3 stage ${{ inputs.repository }} ${{ inputs.run_id }}.${{ inputs.run_attempt }} ${{ inputs.image }}"
+
+# FE·BE·AI main CI가 이미지를 빌드한 뒤 CLOUD_DISPATCH_TOKEN으로 실행합니다(v2 stage 배포를 대신함, #277).
+# v3/environments/stage/<앱>.yaml의 활성 색상 이미지를 바꿔 main에 커밋합니다. stage 앱은 수동 sync이고,
+# stage가 꺼져 있으면 다음 켜기에서 이 이미지로 뜹니다. prod는 이 실행이 성공한 digest만 승인합니다.
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        type: choice
+        options: [fe, be, ai-api]
+        required: true
+      image:
+        description: GHCR image@sha256 digest
+        type: string
+        required: true
+      repository:
+        description: 요청한 앱 저장소
+        type: choice
+        options: [KTB4-5th-FE, KTB4-5th-BE, KTB4-5th-AI]
+        required: true
+      run_id:
+        type: string
+        required: true
+      run_attempt:
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+# 모든 앱이 같은 main에 커밋하므로 하나씩 실행합니다.
+concurrency:
+  group: v3-stage-image
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      APP: ${{ inputs.app }}
+      IMAGE: ${{ inputs.image }}
+      SOURCE_REPO: ${{ inputs.repository }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: 이미지 값 바꾸기
+        shell: python
+        run: |
+          import os, re, pathlib
+          app, image = os.environ["APP"], os.environ["IMAGE"]
+          repo = "ai" if app == "ai-api" else app
+          if os.environ["SOURCE_REPO"] != f"KTB4-5th-{repo.upper()}":
+              raise SystemExit(f"{app}와 요청 저장소가 맞지 않습니다: {os.environ['SOURCE_REPO']}")
+          if not re.fullmatch(rf"ghcr\.io/100-hours-a-week/ktb4-5th-{repo}@sha256:[0-9a-f]{{64}}", image):
+              raise SystemExit(f"{app}의 GHCR digest가 아닙니다: {image}")
+          path = pathlib.Path(f"v3/environments/stage/{app}.yaml")
+          text = path.read_text(encoding="utf-8")
+          active = re.search(r"^activeColor: (\w+)$", text, re.M)
+          color = active.group(1) if active else "blue"
+          # 주석을 지키려고 YAML을 다시 쓰지 않고 활성 색상 줄의 image 값만 바꿉니다.
+          text, count = re.subn(rf"^(  {color}: \{{image: )[^,]+,", rf"\g<1>{image},", text, flags=re.M)
+          if count != 1:
+              raise SystemExit(f"{path}에서 {color} 이미지 줄을 찾지 못했습니다.")
+          path.write_text(text, encoding="utf-8")
+      - name: main에 커밋
+        run: |
+          if git diff --quiet; then echo "이미 같은 이미지입니다."; exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -am "chore(v3): stage $APP 이미지 갱신" -m "$IMAGE"
+          # 사람이 그 사이 main에 push했으면 받아서 다시 시도합니다.
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1

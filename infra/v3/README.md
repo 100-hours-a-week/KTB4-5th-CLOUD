@@ -207,8 +207,12 @@ BE는 `ddl-auto=validate`라 빈 DB에서 시작하지 못합니다. 앱 동기�
 Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실행합니다. 러너가 SSM으로 시스템 Node에서 `v3/environments/stage/power.sh`를 실행하고, 그 스크립트는 kubectl 역할(stage Namespace의 `stage-power` Role만)로 앱·Redis·Kafka를 조정합니다. DB EC2는 Workflow가 시작·중지합니다.
 
 - stop: 앱 0 → Kafka 조정 일시정지(`strimzi.io/pause-reconciliation`)·StrimziPodSet 삭제 → Redis 0 → DB 중지. PVC는 남고, 빈 stage Node는 Karpenter가 5분 뒤 지웁니다.
-- start: DB 시작 → Redis 1 → Kafka 조정 재개 → 앱 FE 2·BE 2·AI 1.
+- start: DB 시작 → Redis 1 → Kafka 조정 재개 → Argo stage 앱 sync(꺼진 동안 반영된 이미지) → 앱 FE 2·BE 2·AI 1.
 - 꺼진 동안 Argo의 stage 앱은 OutOfSync로 보입니다(수동 sync라 되돌리지 않음). 켜진 상태에서만 sync합니다.
+
+## stage 이미지와 prod 승인
+
+FE·BE·AI main CI는 이미지를 빌드한 뒤 "v3 stage 이미지 반영"(`v3-stage-image.yml`)을 실행합니다. 이 Workflow가 `v3/environments/stage/<앱>.yaml`의 활성 색상 이미지를 main에 커밋하고, 실행 이름은 `v3 stage <저장소> <실행ID>.<재시도> <이미지>`입니다. `prod-approval.yml`은 같은 이름의 성공 실행이 있어야 prod 배포를 진행합니다. stage가 꺼져 있으면 다음 켜기 때 그 이미지로 뜹니다.
 
 ## dev 외부 진입점
 
