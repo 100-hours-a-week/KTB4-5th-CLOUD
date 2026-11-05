@@ -7,6 +7,9 @@ Parameters:
     Type: AWS::Route53::HostedZone::Id
   DomainName:
     Type: String
+  # 공용 배포가 함께 받는 도메인(dev 외). 설계상 prod(dameokja.com)도 나중에 여기에 더합니다.
+  StageDomainName:
+    Type: String
 Resources:
   Certificate:
     Type: AWS::CertificateManager::Certificate
@@ -15,7 +18,21 @@ Resources:
       ValidationMethod: DNS
       DomainValidationOptions: [{DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId}]
       Tags: [{Key: Name, Value: dameokja-v3-edge}]
+  # dev·stage를 함께 담는 인증서. 도메인을 바꾸면 인증서가 교체되므로 새 자원으로 만듭니다.
+  # 위 dev 인증서는 edge가 옮겨 간 뒤에도 남겨 둡니다(공인 인증서는 무료이고, 지울 때 같은 검증 CNAME이 지워질 위험을 피함).
+  SharedCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames: [!Ref StageDomainName]
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - {DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId}
+        - {DomainName: !Ref StageDomainName, HostedZoneId: !Ref HostedZoneId}
+      Tags: [{Key: Name, Value: dameokja-v3-edge-shared}]
 Outputs:
   # 리전이 달라 Export로 넘길 수 없어 edge 파라미터에 적습니다.
   CertificateArn:
     Value: !Ref Certificate
+  SharedCertificateArn:
+    Value: !Ref SharedCertificate
