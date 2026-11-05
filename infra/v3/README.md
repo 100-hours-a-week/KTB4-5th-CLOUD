@@ -185,6 +185,22 @@ sync dev-secrets; for a in be ai-api fe; do sync dev-$a; done
 
 NetworkPolicy는 FE→BE, BE↔AI(요청·콜백), BE→Redis·Kafka·MySQL, AI→Kafka·PostgreSQL, 외부 443(사설 대역 제외)만 엽니다. Pod SG도 같은 방향만 허용합니다(AiToBe 추가).
 
+## stage 앱 배포
+
+dev와 같은 `v3/charts/application`을 쓰고 값은 `v3/environments/stage/<앱>.yaml`입니다. FE·BE는 2개, AI는 분석 결과를 메모리에 두므로 v2 stage처럼 1개입니다. 모두 stage-app Node(라벨·taint)에만 놓입니다. 이미지는 dev에서 확인한 digest를 수동으로 올립니다.
+
+Secret은 v2 stage SSM에서 옮기고, DB 계정·비밀번호는 prod SSM과 같은 값, DB 주소는 stage DB EC2입니다. v2 stage에 없던 SENTRY_DSN·TAVILY_API_KEY는 dev 값을 씁니다.
+
+```bash
+AWS_PROFILE=dameokja-aws-cli v3/environments/stage/seal-secrets.sh
+kubectl $K -n stage annotate secret cloud-secrets sealedsecrets.bitnami.com/managed=true
+kubectl $K apply -f v3/argocd/stage-apps-project.yaml -f v3/argocd/stage-applications.yaml
+sync() { kubectl $K -n tool patch application "$1" --type merge -p '{"operation":{"sync":{}}}'; }
+sync stage-secrets; for a in be ai-api fe; do sync stage-$a; done
+```
+
+BE는 `ddl-auto=validate`라 빈 DB에서 시작하지 못합니다. 앱 동기화 전에 dev DB의 BE 스키마(데이터 제외)와 AI 스키마·기준 데이터를 stage DB에 한 번 넣습니다(v2 stage 데이터는 옮기지 않음, #266).
+
 ## dev 외부 진입점
 
 CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 80) → FE·BE Pod 순서입니다. ALB는 LBC가 만들고, edge 스택은 그 ARN·DNS 이름만 params로 받습니다. ALB SG는 CloudFront origin-facing prefix list만 받으므로 VPC 밖에서 ALB로 직접 들어올 수 없습니다. 캐시는 끄고 Host·쿠키·Authorization·쿼리를 모두 넘깁니다.

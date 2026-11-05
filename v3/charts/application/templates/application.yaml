@@ -1,5 +1,5 @@
-{{- if ne .Release.Namespace "dev" }}{{ fail "현재 application Chart는 dev 전용입니다." }}{{ end }}
-{{- if and (ne .Values.name "fe") (not .Values.iamRoleArn) }}{{ fail "BE·AI는 S3용 IRSA 역할 ARN이 필요합니다(dev-app-iam 스택)." }}{{ end }}
+{{- if not (has .Release.Namespace (list "dev" "stage")) }}{{ fail "application Chart는 dev·stage Namespace에만 설치합니다." }}{{ end }}
+{{- if and (ne .Values.name "fe") (not .Values.iamRoleArn) }}{{ fail "BE·AI는 S3용 IRSA 역할 ARN이 필요합니다(<환경>-app-iam 스택)." }}{{ end }}
 {{- if and (ne .Values.name "fe") (gt (int .Values.colors.blue.replicas) 0) (gt (int .Values.colors.green.replicas) 0) (not .Values.allowConcurrentConsumers) }}{{ fail "BE·AI 두 색상 동시 실행은 중복 처리 검증 후 allowConcurrentConsumers로 엽니다." }}{{ end }}
 {{- $active := index .Values.colors .Values.activeColor }}
 {{- if or (not $active.image) (lt (int $active.replicas) 1) }}{{ fail "활성 색상의 이미지와 1개 이상의 Replica가 필요합니다." }}{{ end }}
@@ -7,7 +7,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ .Values.name }}
-  namespace: dev
+  namespace: {{ $.Release.Namespace }}
   {{- with .Values.iamRoleArn }}
   annotations:
     eks.amazonaws.com/role-arn: {{ . | quote }}
@@ -19,7 +19,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Values.name }}-config
-  namespace: dev
+  namespace: {{ $.Release.Namespace }}
 data:
   {{- range $key, $value := .Values.env }}
   {{ $key }}: {{ $value | quote }}
@@ -33,7 +33,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $.Values.name }}-{{ $color }}
-  namespace: dev
+  namespace: {{ $.Release.Namespace }}
 spec:
   replicas: {{ $settings.replicas }}
   # 색상 안에서 이미지를 바꾸는 동안 같은 Consumer가 둘 뜨지 않게 합니다.
@@ -53,7 +53,11 @@ spec:
     spec:
       serviceAccountName: {{ $.Values.name }}
       nodeSelector:
-        dameokja.com/node-role: app
+        {{- toYaml $.Values.nodeSelector | nindent 8 }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       imagePullSecrets:
         - name: {{ $.Values.imagePullSecret }}
       terminationGracePeriodSeconds: 60
@@ -103,7 +107,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $.Values.name }}{{ if ne $color "active" }}-{{ $color }}{{ end }}
-  namespace: dev
+  namespace: {{ $.Release.Namespace }}
 spec:
   type: ClusterIP
   selector:
@@ -118,7 +122,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: {{ $.Values.name }}
-  namespace: dev
+  namespace: {{ $.Release.Namespace }}
 spec:
   parentRefs:
     - {group: gateway.networking.k8s.io, kind: Gateway, namespace: tool, name: gateway, sectionName: http}
@@ -136,12 +140,12 @@ apiVersion: gateway.k8s.aws/v1
 kind: TargetGroupConfiguration
 metadata:
   name: {{ $.Values.name }}
-  namespace: dev
+  namespace: {{ $.Release.Namespace }}
 spec:
   targetReference: {name: {{ $.Values.name }}}
   defaultConfiguration:
     # LBC IAM 정책이 dameokja-v3-* Target Group만 Target을 등록할 수 있습니다.
-    targetGroupName: dameokja-v3-dev-{{ $.Values.name }}
+    targetGroupName: dameokja-v3-{{ $.Release.Namespace }}-{{ $.Values.name }}
     targetType: ip
     healthCheckConfig:
       healthCheckPath: {{ .healthCheckPath | quote }}
