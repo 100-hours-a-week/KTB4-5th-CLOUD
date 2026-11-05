@@ -9,11 +9,11 @@ on:
   workflow_call:
     inputs:
       env:
-        description: dev, stage, prod
+        description: stage, prod (dev는 종료되어 실행 시 차단)
         type: string
         default: dev
       service:
-        description: "dev: nginx, frontend, backend, redis, ai / stage·prod: app(나누는 중), backend, frontend, ai"
+        description: "stage·prod: app(나누는 중), backend, frontend, ai"
         type: string
         required: true
       container:
@@ -28,12 +28,12 @@ on:
   workflow_dispatch:
     inputs:
       env:
-        description: dev, stage
+        description: stage
         type: choice
-        options: [dev, stage]
+        options: [stage]
         default: stage
       service:
-        description: "dev: nginx, frontend, backend, redis, ai / stage: app(나누는 중), backend, frontend, ai"
+        description: "stage: app(나누는 중), backend, frontend, ai"
         type: string
         required: true
       container:
@@ -65,6 +65,11 @@ jobs:
       IMAGE: ${{ inputs.image }}
       ENV_NAME: ${{ inputs.env }}
     steps:
+      - name: 종료된 v2 dev 배포 차단
+        if: inputs.env == 'dev'
+        run: |
+          echo "::error::dev는 v3 EKS로 전환되어 v2 ECS 배포를 종료했습니다. v3-dev-image.yml을 사용하세요."
+          exit 1
       - uses: actions/checkout@v6
         with:
           repository: 100-hours-a-week/KTB4-5th-CLOUD
