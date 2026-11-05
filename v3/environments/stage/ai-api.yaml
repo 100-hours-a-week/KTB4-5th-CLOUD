@@ -1,0 +1,35 @@
+# stage 이미지는 dev에서 확인한 digest를 수동으로 올립니다(prod 승인 흐름 연결 전).
+# 설계는 2개지만, AI가 분석 결과를 메모리에 두므로 v2 stage처럼 1개로 시작합니다.
+name: ai-api
+port: 8000
+colors:
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-ai@sha256:2ccfbd395961ef965490b91ba7cd37563077388b5cf74c2a2fd7a823b2e59e86, replicas: 1}
+  green: {image: '', replicas: 0}
+secretName: ai-secrets
+iamRoleArn: arn:aws:iam::906462447513:role/dameokja-v3-stage-ai-api
+# 이미지에 USER가 없어(root) 일반 사용자로 띄웁니다. 쓰기는 /tmp만 합니다.
+runAsUser: 10001
+# v2 stage와 달라지는 값만 둡니다. 같은 키는 ai-secrets에서 뺍니다(seal-secrets.sh).
+env:
+  CALLBACK_URL: http://be.stage.svc.cluster.local:8080/api/v1/internal/image-analyses/callback
+  # Strimzi stage-kafka 내부 PLAINTEXT. 토픽 이름은 <KAFKA_ENV>.dameokja.* (stage-data 차트)
+  KAFKA_BOOTSTRAP_SERVERS: stage-kafka-kafka-bootstrap.stage.svc.cluster.local:9092
+  KAFKA_ENV: stage
+  # AI Kafka Consumer·Producer 시작(AI 기본값 false). 지금 이미지는 이 값을 읽지 않고, Kafka 코드가 main에 병합되면 바로 연결됩니다.
+  # 그 코드는 시작할 때 analysis requested·completed·feedback 토픽이 없으면 실패하므로 토픽을 먼저 만들어 둡니다(stage-data 차트에 있음).
+  KAFKA_ENABLED: 'true'
+  # 이미지의 /app은 root 소유라 로그는 /tmp(emptyDir)에 씁니다.
+  LOG_DIR: /tmp/ai-logs
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  # v2 stage AI 태스크 메모리(infra/v2/ecs/stage/ai.json)
+  limits: {cpu: '1', memory: 1536Mi}
+startupProbe: {httpGet: {path: /health/live, port: 8000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 18}
+# /health/ready는 RunPod Worker가 꺼져 있으면 503이고, AI는 Worker를 켜지 않습니다. v2 dev처럼 프로세스 생존만 봅니다.
+readinessProbe: {httpGet: {path: /health/live, port: 8000}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
+livenessProbe: {httpGet: {path: /health/live, port: 8000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}
+# stage-app Node(라벨·taint)에만 둡니다.
+nodeSelector:
+  dameokja.com/environment: stage
+tolerations:
+  - {key: dameokja.com/environment, operator: Equal, value: stage, effect: NoSchedule}

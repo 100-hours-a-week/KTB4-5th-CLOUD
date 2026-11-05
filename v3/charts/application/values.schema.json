@@ -10,6 +10,8 @@
     "secretName": {"type": "string", "minLength": 1},
     "extraSecretNames": {"type": "array", "items": {"type": "string"}},
     "runAsUser": {"type": "integer", "minimum": 1},
+    "nodeSelector": {"type": "object"},
+    "tolerations": {"type": "array"},
     "colors": {
       "type": "object",
       "additionalProperties": false,
@@ -20,7 +22,7 @@
   "definitions": {
     "color": {
       "type": "object", "additionalProperties": false, "required": ["image", "replicas"],
-      "properties": {"image": {"type": "string"}, "replicas": {"type": "integer", "minimum": 0, "maximum": 1}}
+      "properties": {"image": {"type": "string"}, "replicas": {"type": "integer", "minimum": 0, "maximum": 4}}
     }
   }
 }

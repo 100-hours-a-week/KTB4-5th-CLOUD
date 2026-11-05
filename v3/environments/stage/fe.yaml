@@ -1,0 +1,29 @@
+# stage 이미지는 dev에서 확인한 digest를 수동으로 올립니다(prod 승인 흐름 연결 전).
+name: fe
+port: 3000
+colors:
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-fe@sha256:4030c216bcf98e4eb938fe551b994cbbc8af26041fdc758424e78a9750294221, replicas: 2}
+  green: {image: '', replicas: 0}
+secretName: fe-secrets
+# 이미지 USER node
+runAsUser: 1000
+env:
+  # Next.js 서버가 /api 요청을 넘기는 BE 주소
+  BACKEND_ORIGIN: http://be.stage.svc.cluster.local:8080
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: '1', memory: 1Gi}
+# FE에는 헬스 엔드포인트가 없어 포트 연결로 확인합니다.
+startupProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 12}
+readinessProbe: {tcpSocket: {port: 3000}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
+livenessProbe: {tcpSocket: {port: 3000}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}
+route:
+  hostname: stage.dameokja.com
+  pathPrefixes: [/]
+  # /는 로그인 안 된 요청을 /login으로 307 redirect합니다(proxy.ts). manifest는 redirect 대상에서 빠지고 앱 프로세스가 응답합니다.
+  healthCheckPath: /manifest.webmanifest
+# stage-app Node(라벨·taint)에만 둡니다.
+nodeSelector:
+  dameokja.com/environment: stage
+tolerations:
+  - {key: dameokja.com/environment, operator: Equal, value: stage, effect: NoSchedule}
