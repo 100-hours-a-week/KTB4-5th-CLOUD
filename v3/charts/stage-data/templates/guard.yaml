@@ -1,0 +1,3 @@
+{{- if ne .Release.Namespace "stage" -}}
+{{- fail "stage-data Chart는 stage Namespace에만 설치합니다." -}}
+{{- end -}}
