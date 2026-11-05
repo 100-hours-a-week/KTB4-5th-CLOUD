@@ -1,0 +1,33 @@
+# stage 켜기·끄기(v3/environments/stage/power.sh)가 쓰는 권한입니다. stage-power 스택의 KubectlRole이 dameokja:stage-power 그룹으로 들어옵니다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stage-power
+  namespace: stage
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs: [get, patch, update]
+  # Kafka 조정 일시정지 annotation과 상태 확인
+  - apiGroups: [kafka.strimzi.io]
+    resources: [kafkas]
+    verbs: [get, list, patch]
+  - apiGroups: [core.strimzi.io]
+    resources: [strimzipodsets]
+    verbs: [get, list, delete]
+  # 새 Node에서 API 접속 실패로 재시작하는 브로커를 다시 만듭니다.
+  - apiGroups: ['']
+    resources: [pods]
+    verbs: [get, list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stage-power
+  namespace: stage
+subjects:
+  - {kind: Group, name: 'dameokja:stage-power', apiGroup: rbac.authorization.k8s.io}
+roleRef: {kind: Role, name: stage-power, apiGroup: rbac.authorization.k8s.io}

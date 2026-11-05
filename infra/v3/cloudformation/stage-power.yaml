@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 stage power (start/stop) roles
+# GitHub Actions(v3-stage-power.yml) → SSM Run Command → 시스템 Node가 KubectlRole로 kubectl을 실행합니다.
+# 러너는 사설 EKS API에 닿지 않기 때문입니다. kubectl 권한은 platform 차트의 stage Role(dameokja:stage-power 그룹)로 stage 안에서만 씁니다.
+
+Parameters:
+  EksStackName:
+    Type: String
+    Default: dameokja-v3-eks
+  ClusterName:
+    Type: String
+    Default: dameokja-v3
+
+Resources:
+  # 시스템 Node(인스턴스 역할)가 assume합니다. 같은 계정이라 신뢰 정책에 역할 ARN을 적으면 Node 역할 쪽 정책은 필요 없습니다.
+  KubectlRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-v3-stage-power-kubectl
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub
+                - arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${NodeRole}
+                - NodeRole: {'Fn::ImportValue': !Sub '${EksStackName}-SystemNodeRoleName'}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: describe-cluster
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: eks:DescribeCluster
+                Resource: !Sub arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
+
+  KubectlAccess:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: !Ref ClusterName
+      PrincipalArn: !GetAtt KubectlRole.Arn
+      Type: STANDARD
+      # 권한은 Kubernetes RBAC(stage Role)로만 줍니다. EKS 접근 정책은 붙이지 않습니다.
+      KubernetesGroups: [dameokja:stage-power]
+
+  GitHubRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dameokja-v3-stage-github-power
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:ref:refs/heads/main
+      Policies:
+        - PolicyName: stage-power
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Name 태그로 대상을 고릅니다(서버가 교체돼도 정책을 바꾸지 않음).
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                Condition:
+                  StringEquals: {aws:ResourceTag/Name: dameokja-v3-system}
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+              - Effect: Allow
+                Action: [ec2:StartInstances, ec2:StopInstances]
+                Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                Condition:
+                  StringEquals: {aws:ResourceTag/Name: dameokja-v3-stage-db}
+              - Effect: Allow
+                Action: [ssm:GetCommandInvocation, ec2:DescribeInstances, ec2:DescribeInstanceStatus]
+                Resource: '*'
+
+Outputs:
+  GitHubRoleArn:
+    Value: !GetAtt GitHubRole.Arn
+  KubectlRoleArn:
+    Value: !GetAtt KubectlRole.Arn
