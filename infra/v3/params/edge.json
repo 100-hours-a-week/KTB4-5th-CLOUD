@@ -1,8 +1,9 @@
 [
   {"ParameterKey": "GatewayAlbArn", "ParameterValue": "arn:aws:elasticloadbalancing:ap-northeast-2:906462447513:loadbalancer/app/dameokja-v3-gateway/8962e1254b6eac31"},
   {"ParameterKey": "GatewayAlbDnsName", "ParameterValue": "internal-dameokja-v3-gateway-1604859489.ap-northeast-2.elb.amazonaws.com"},
-  {"ParameterKey": "CertificateArn", "ParameterValue": "arn:aws:acm:us-east-1:906462447513:certificate/187486db-ac30-404c-857c-b529154d09e1"},
+  {"ParameterKey": "CertificateArn", "ParameterValue": "arn:aws:acm:us-east-1:906462447513:certificate/21a63b02-1720-403c-9c1c-caa5d9156258"},
   {"ParameterKey": "DomainName", "ParameterValue": "dev.dameokja.com"},
+  {"ParameterKey": "StageDomainName", "ParameterValue": "stage.dameokja.com"},
   {"ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9"},
   {"ParameterKey": "DnsWeight", "ParameterValue": "100"}
 ]
