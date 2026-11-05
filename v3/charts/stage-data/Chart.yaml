@@ -1,0 +1,5 @@
+apiVersion: v2
+name: dameokja-stage-data
+description: stage Redis와 브로커 3개 Strimzi Kafka
+type: application
+version: 0.1.0

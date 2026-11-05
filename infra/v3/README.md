@@ -128,6 +128,27 @@ sudo -u postgres psql -c '\password receipt_ai'
 
 MySQL의 BE 계정도 v3 앱 Subnet(10.20.32.0/255.255.240.0) host로 같은 권한·비밀번호를 한 번 추가합니다. 없으면 BE가 1130(Host is not allowed)으로 시작하지 못합니다.
 
+## stage 데이터 계층
+
+stage-pod-sg·stage-db 스택과 platform 차트(stage-app NodePool·stage NetworkPolicy), Strimzi의 stage 감시 뒤에 설치합니다. Kafka 브로커 3개가 서로 다른 stage Node에 놓이므로 stage Node(m7i.large) 3대가 새로 생깁니다.
+
+```bash
+kubectl $K -n stage create secret generic cloud-secrets --from-literal=REDIS_PASSWORD="$(openssl rand -hex 24)"
+helm $K upgrade --install stage-data v3/charts/stage-data -n stage --wait --timeout 15m
+kubectl $K -n stage wait kafka/stage-kafka --for=condition=Ready --timeout=900s
+helm $K upgrade stage-data v3/charts/stage-data -n stage --set topics.enabled=true --wait
+kubectl $K -n stage wait kafkatopic --all --for=condition=Ready --timeout=300s
+```
+
+| 대상 | 구성 | 주소 |
+|---|---|---|
+| Redis | StatefulSet 1, AOF everysec, maxmemory 512mb, redis-gp3 10Gi | redis.stage.svc.cluster.local:6379 |
+| Kafka | Strimzi Kafka 4.2.2 broker·controller 3 Pod(Node마다 1), kafka-gp3 10Gi씩, 복제 3·min.insync 2 | stage-kafka-kafka-bootstrap.stage.svc.cluster.local:9092 |
+| 토픽 | stage.dameokja.* 9개, partitions 3·replicas 3, 30일 보존 | |
+| MySQL·PostgreSQL | stage DB EC2(stage-db 스택) | 10.20.38.0:3306, 10.20.38.0:5432 |
+
+브로커 1개가 내려가도 쓰기(acks=all)와 읽기는 계속됩니다. 단일 AZ(2b)라 AZ 장애는 대비하지 않습니다.
+
 ## dev 앱 배포
 
 FE·BE·AI는 `v3/charts/application` 하나로 배포하고 환경 값은 `v3/environments/dev/<앱>.yaml`에 둡니다. 이미지는 v2 dev가 쓰던 digest이며 태그는 받지 않습니다. 색(blue·green)마다 Deployment를 두고 Service `<앱>`이 activeColor를 가리킵니다. FE(/)·BE(/api, Swagger)는 HTTPRoute로 tool Gateway에 붙고, Target Group은 Pod IP 대상입니다.
