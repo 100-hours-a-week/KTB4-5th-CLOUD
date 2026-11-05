@@ -19,6 +19,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 9 | dameokja-v3-dev-app-iam | cloudformation/dev-app-iam.yaml | dev BE·AI IRSA 역할(S3 image/ 접두사) |
 | 10 | dameokja-v3-observability | cloudformation/observability.yaml | 관측 EC2(Prometheus·Loki·Grafana), Association 성공 |
 | 11 | dameokja-v3-stage-pod-sg | cloudformation/stage-pod-sg.yaml | stage FE·BE·AI·Redis·Kafka Pod SG, Kafka 브로커 사이 9090·9091, Gateway ALB→stage FE·BE(dev-pod-sg의 ALB SG Export를 먼저 apply) |
+| 12 | dameokja-v3-stage-db | cloudformation/stage-db.yaml | stage DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공(stage-pod-sg 뒤, 비밀번호는 prod SSM `/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD`·`/dameokja-v2-prod-ai/POSTGRES_PASSWORD`와 같은 값) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
