@@ -14,6 +14,9 @@ env:
   # Strimzi dev-kafka 내부 PLAINTEXT. 토픽 이름은 <KAFKA_ENV>.dameokja.* (dev-data 차트)
   KAFKA_BOOTSTRAP_SERVERS: dev-kafka-kafka-bootstrap.dev.svc.cluster.local:9092
   KAFKA_ENV: dev
+  # AI Kafka Consumer·Producer 시작(AI 기본값 false). 지금 이미지는 이 값을 읽지 않고, Kafka 코드가 main에 병합되면 바로 연결됩니다.
+  # 그 코드는 시작할 때 analysis requested·completed·feedback 토픽이 없으면 실패하므로 토픽을 먼저 만들어 둡니다(dev-data 차트에 있음).
+  KAFKA_ENABLED: 'true'
   # 이미지의 /app은 root 소유라 로그는 /tmp(emptyDir)에 씁니다.
   LOG_DIR: /tmp/ai-logs
 resources:
