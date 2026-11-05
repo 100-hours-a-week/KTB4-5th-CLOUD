@@ -51,7 +51,8 @@ Resources:
       SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
       Tags: [{Key: Name, Value: dameokja-v3-dev-kafka}]
 
-  # Gateway ALB(LBC가 만드는 internal ALB에 붙입니다). 지금은 dev만 쓰므로 여기에 둡니다.
+  # Gateway ALB(LBC가 만드는 internal ALB에 붙입니다). dev가 먼저 만들어 여기에 두고, stage 방향 규칙은 stage-pod-sg가 따로 더합니다.
+  # 아래 인라인 Egress를 고칠 때 stage-pod-sg가 더한 규칙이 남아 있는지 plan에서 확인합니다.
   # CloudFront VPC Origin만 80으로 들어오고, 나가는 곳은 FE·BE Pod뿐입니다.
   GatewayAlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -150,8 +151,11 @@ Resources:
     Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
 
 Outputs:
+  # stage-pod-sg가 이 SG에 stage FE·BE로 나가는 규칙을 더합니다.
   GatewayAlbSecurityGroupId:
     Value: !Ref GatewayAlbSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-GatewayAlbSecurityGroupId
   FePodSecurityGroupId:
     Value: !Ref FePodSecurityGroup
   BePodSecurityGroupId:
