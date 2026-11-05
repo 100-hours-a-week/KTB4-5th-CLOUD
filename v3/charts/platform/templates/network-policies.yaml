@@ -1,9 +1,12 @@
-# dev는 기본 차단입니다.
+{{- range $env, $cfg := .Values.environments }}
+{{- $kafka := printf "%s-kafka" $env }}
+---
+# {{ $env }}는 기본 차단입니다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
@@ -12,7 +15,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: dns
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector: {}
   policyTypes: [Egress]
@@ -31,7 +34,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: redis
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: redis}
@@ -43,16 +46,16 @@ spec:
       ports:
         - {protocol: TCP, port: 6379}
 ---
-# Kafka 브로커(1대): BE·AI → 9092, Strimzi Cluster Operator → 9091(복제 리스너)·8443(Kafka Agent), Topic Operator → 9091
+# Kafka 브로커: BE·AI → 9092, Strimzi Cluster Operator → 9091(복제 리스너)·8443(Kafka Agent), Topic Operator → 9091
 # 브로커는 시작할 때 Kubernetes API(443)에서 자기 설정 Secret을 읽습니다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: kafka
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
-    matchLabels: {strimzi.io/name: dev-kafka-kafka}
+    matchLabels: {strimzi.io/name: {{ $kafka }}-kafka}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -72,12 +75,29 @@ spec:
         - {protocol: TCP, port: 8443}
     - from:
         - podSelector:
-            matchLabels: {strimzi.io/name: dev-kafka-entity-operator}
+            matchLabels: {strimzi.io/name: {{ $kafka }}-entity-operator}
       ports:
         - {protocol: TCP, port: 9091}
+    {{- if gt (int $cfg.kafkaBrokers) 1 }}
+    # 브로커·컨트롤러 겸용 여러 대: 서로 9090(KRaft 컨트롤러)·9091(복제)
+    - from:
+        - podSelector:
+            matchLabels: {strimzi.io/name: {{ $kafka }}-kafka}
+      ports:
+        - {protocol: TCP, port: 9090}
+        - {protocol: TCP, port: 9091}
+    {{- end }}
   egress:
+    {{- if gt (int $cfg.kafkaBrokers) 1 }}
     - to:
-        {{- range .Values.network.apiEndpointCidrs }}
+        - podSelector:
+            matchLabels: {strimzi.io/name: {{ $kafka }}-kafka}
+      ports:
+        - {protocol: TCP, port: 9090}
+        - {protocol: TCP, port: 9091}
+    {{- end }}
+    - to:
+        {{- range $.Values.network.apiEndpointCidrs }}
         - ipBlock: {cidr: {{ . }}}
         {{- end }}
       ports:
@@ -88,19 +108,19 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: kafka-entity-operator
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
-    matchLabels: {strimzi.io/name: dev-kafka-entity-operator}
+    matchLabels: {strimzi.io/name: {{ $kafka }}-entity-operator}
   policyTypes: [Egress]
   egress:
     - to:
         - podSelector:
-            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+            matchLabels: {strimzi.io/name: {{ $kafka }}-kafka}
       ports:
         - {protocol: TCP, port: 9091}
     - to:
-        - ipBlock: {cidr: {{ .Values.network.apiServiceIp }}}
+        - ipBlock: {cidr: {{ $.Values.network.apiServiceIp }}}
       ports:
         - {protocol: TCP, port: 443}
 ---
@@ -109,7 +129,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: be-ingress
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: be}
@@ -124,7 +144,7 @@ spec:
         - {protocol: TCP, port: 8080}
     # Gateway ALB(/api 등)
     - from:
-        {{- include "platform.albSources" . | nindent 8 }}
+        {{- include "platform.albSources" $ | nindent 8 }}
       ports:
         - {protocol: TCP, port: 8080}
     # 관측: tool의 Alloy가 /actuator/prometheus를 긁습니다(SG는 Alloy가 쓰는 Node SG를 BeProbe 규칙으로 이미 허용).
@@ -141,14 +161,14 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: fe-ingress
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: fe}
   policyTypes: [Ingress]
   ingress:
     - from:
-        {{- include "platform.albSources" . | nindent 8 }}
+        {{- include "platform.albSources" $ | nindent 8 }}
       ports:
         - {protocol: TCP, port: 3000}
 ---
@@ -157,7 +177,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: ai-api-ingress
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: ai-api}
@@ -174,7 +194,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: fe-egress
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: fe}
@@ -186,16 +206,16 @@ spec:
       ports:
         - {protocol: TCP, port: 8080}
     - to:
-        - ipBlock: {{ include "platform.internet" . }}
+        - ipBlock: {{ include "platform.internet" $ }}
       ports:
         - {protocol: TCP, port: 443}
 ---
-# BE 송신: Redis, Kafka, dev MySQL, AI 8000, 외부 HTTPS(Kakao·Sentry·S3)
+# BE 송신: Redis, Kafka, 환경 MySQL, AI 8000, 외부 HTTPS(Kakao·Sentry·S3)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: be-egress
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: be}
@@ -208,11 +228,11 @@ spec:
         - {protocol: TCP, port: 6379}
     - to:
         - podSelector:
-            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+            matchLabels: {strimzi.io/name: {{ $kafka }}-kafka}
       ports:
         - {protocol: TCP, port: 9092}
     - to:
-        - ipBlock: {cidr: {{ .Values.network.devDbCidr }}}
+        - ipBlock: {cidr: {{ $cfg.dbCidr }}}
       ports:
         - {protocol: TCP, port: 3306}
     - to:
@@ -221,16 +241,16 @@ spec:
       ports:
         - {protocol: TCP, port: 8000}
     - to:
-        - ipBlock: {{ include "platform.internet" . }}
+        - ipBlock: {{ include "platform.internet" $ }}
       ports:
         - {protocol: TCP, port: 443}
 ---
-# AI 송신: Kafka, dev PostgreSQL, BE 콜백 8080, 외부 HTTPS(RunPod·Tavily·S3)
+# AI 송신: Kafka, 환경 PostgreSQL, BE 콜백 8080, 외부 HTTPS(RunPod·Tavily·S3)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: ai-api-egress
-  namespace: dev
+  namespace: {{ $env }}
 spec:
   podSelector:
     matchLabels: {app.kubernetes.io/name: ai-api}
@@ -238,11 +258,11 @@ spec:
   egress:
     - to:
         - podSelector:
-            matchLabels: {strimzi.io/name: dev-kafka-kafka}
+            matchLabels: {strimzi.io/name: {{ $kafka }}-kafka}
       ports:
         - {protocol: TCP, port: 9092}
     - to:
-        - ipBlock: {cidr: {{ .Values.network.devDbCidr }}}
+        - ipBlock: {cidr: {{ $cfg.dbCidr }}}
       ports:
         - {protocol: TCP, port: 5432}
     - to:
@@ -251,6 +271,7 @@ spec:
       ports:
         - {protocol: TCP, port: 8080}
     - to:
-        - ipBlock: {{ include "platform.internet" . }}
+        - ipBlock: {{ include "platform.internet" $ }}
       ports:
         - {protocol: TCP, port: 443}
+{{- end }}

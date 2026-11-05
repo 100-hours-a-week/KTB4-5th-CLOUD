@@ -89,12 +89,19 @@ helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set gatewayAlbSecurityGroupId=$(out dameokja-v3-dev-pod-sg GatewayAlbSecurityGroupId) \
   --set appNodeRoleName=$(out dameokja-v3-eks AppNodeRoleName) \
   --set workerSecurityGroupId=$(out dameokja-v3-eks WorkerSecurityGroupId) \
-  --set podSecurityGroups.fe=$(out dameokja-v3-dev-pod-sg FePodSecurityGroupId) \
-  --set podSecurityGroups.be=$(out dameokja-v3-dev-pod-sg BePodSecurityGroupId) \
-  --set podSecurityGroups.ai-api=$(out dameokja-v3-dev-pod-sg AiPodSecurityGroupId) \
-  --set podSecurityGroups.redis=$(out dameokja-v3-dev-pod-sg RedisPodSecurityGroupId) \
-  --set podSecurityGroups.kafka=$(out dameokja-v3-dev-pod-sg KafkaPodSecurityGroupId)
+  --set environments.dev.podSecurityGroups.fe=$(out dameokja-v3-dev-pod-sg FePodSecurityGroupId) \
+  --set environments.dev.podSecurityGroups.be=$(out dameokja-v3-dev-pod-sg BePodSecurityGroupId) \
+  --set environments.dev.podSecurityGroups.ai-api=$(out dameokja-v3-dev-pod-sg AiPodSecurityGroupId) \
+  --set environments.dev.podSecurityGroups.redis=$(out dameokja-v3-dev-pod-sg RedisPodSecurityGroupId) \
+  --set environments.dev.podSecurityGroups.kafka=$(out dameokja-v3-dev-pod-sg KafkaPodSecurityGroupId) \
+  --set environments.stage.podSecurityGroups.fe=$(out dameokja-v3-stage-pod-sg FePodSecurityGroupId) \
+  --set environments.stage.podSecurityGroups.be=$(out dameokja-v3-stage-pod-sg BePodSecurityGroupId) \
+  --set environments.stage.podSecurityGroups.ai-api=$(out dameokja-v3-stage-pod-sg AiPodSecurityGroupId) \
+  --set environments.stage.podSecurityGroups.redis=$(out dameokja-v3-stage-pod-sg RedisPodSecurityGroupId) \
+  --set environments.stage.podSecurityGroups.kafka=$(out dameokja-v3-stage-pod-sg KafkaPodSecurityGroupId)
 ```
+
+stage-app NodePool은 dev-app과 같은 사양이지만 `dameokja.com/environment=stage` 라벨·NoSchedule taint가 있어 stage Pod(같은 nodeSelector·toleration)만 받습니다. stage Pod를 0개로 줄이면 5분 뒤 stage Node도 0대가 됩니다. stage Kafka는 브로커 3개라 NetworkPolicy·Pod SG에서 브로커끼리 9090·9091을 엽니다.
 
 NodePool은 Pending Pod가 있을 때만 앱 Node(m7i.large·2b·On-Demand)를 만들고, 빈 Node는 5분 뒤 정리합니다. redis-gp3·kafka-gp3는 Retain이라 PVC를 지워도 EBS가 남습니다. platform 차트는 dev Pod에 Pod SG를 붙이고 dev를 기본 차단한 뒤 DNS·Redis·Kafka·DB만 허용합니다. platform 차트는 tool에 공용 Gateway(internal ALB, HTTP 80)도 만듭니다. LBC는 ALB만 만들고 SG는 dev-pod-sg의 Gateway ALB SG를 그대로 씁니다(SG 생성·Pod SG 규칙 변경 권한 없음). Gateway에는 `dameokja.com/gateway-access: 'true'` 라벨이 있는 Namespace의 HTTPRoute만 붙습니다.
 
