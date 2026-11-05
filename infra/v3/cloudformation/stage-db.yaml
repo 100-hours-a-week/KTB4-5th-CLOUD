@@ -2,9 +2,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: dameokja v3 stage DB EC2 (MySQL for BE, PostgreSQL for AI)
 # v2 stage DB와 같은 구성(MySQL 8.4 GTID + PostgreSQL 16)을 EKS VPC 안에 새로 둡니다.
 # stage BE·AI Pod SG만 접근합니다. 쓰지 않을 때는 EC2를 중지합니다.
-# 비밀번호는 apply 전에 SSM SecureString으로 만들고 서버 안에서 읽습니다(명령 기록에 남기지 않음).
-#   /dameokja-v3-stage/MYSQL_PASSWORD     BE 계정 dameokja
-#   /dameokja-v3-stage/POSTGRES_PASSWORD  AI 계정 receipt_ai
+# 비밀번호는 prod와 같은 값을 쓰도록 prod SSM을 서버 안에서 읽습니다(명령 기록에 남기지 않음).
+#   MySqlPasswordParameter     BE 계정 dameokja
+#   PostgresPasswordParameter  AI 계정 receipt_ai
 
 Parameters:
   VpcId:
@@ -26,6 +26,12 @@ Parameters:
   PodSgStackName:
     Type: String
     Default: dameokja-v3-stage-pod-sg
+  MySqlPasswordParameter:
+    Type: String
+    Default: /dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD
+  PostgresPasswordParameter:
+    Type: String
+    Default: /dameokja-v2-prod-ai/POSTGRES_PASSWORD
 
 Resources:
   DbSecurityGroup:
@@ -56,8 +62,8 @@ Resources:
           - Effect: Allow
             Action: ssm:GetParameter
             Resource:
-            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-stage/MYSQL_PASSWORD
-            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-stage/POSTGRES_PASSWORD
+            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${MySqlPasswordParameter}
+            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PostgresPasswordParameter}
   DbInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -92,7 +98,6 @@ Resources:
 
   # MySQL: RPM의 /etc/my.cnf가 my.cnf.d를 읽도록 하고 GTID·시간대를 적용합니다. 설정이 바뀐 경우에만 재시작합니다.
   # root는 설치 직후 임시 비밀번호 상태라 처음 한 번 OS root 접속(auth_socket)으로 바꿉니다(prod는 수동 적용).
-  # validate_password가 켜져 있어 SSM의 BE 비밀번호도 대소문자·숫자·특수문자를 섞어야 합니다.
   MySqlAssociation:
     Type: AWS::SSM::Association
     Properties:
@@ -117,7 +122,7 @@ Resources:
             mysql -uroot -p"$TMP" --connect-expired-password -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$NEW';"
             mysql -uroot -p"$NEW" -e "INSTALL PLUGIN auth_socket SONAME 'auth_socket.so'; ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;"
           fi
-        - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v3-stage/MYSQL_PASSWORD --with-decryption --query Parameter.Value --output text)
+        - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name ${MySqlPasswordParameter} --with-decryption --query Parameter.Value --output text)
         - !Sub mysql -uroot -e "CREATE DATABASE IF NOT EXISTS app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs; CREATE USER IF NOT EXISTS 'dameokja'@'${AppSubnetMySqlHost}' IDENTIFIED BY '$PW'; ALTER USER 'dameokja'@'${AppSubnetMySqlHost}' IDENTIFIED BY '$PW'; GRANT ALL PRIVILEGES ON app.* TO 'dameokja'@'${AppSubnetMySqlHost}';"
 
   # PostgreSQL: v2 stage와 같은 설정(shared_buffers 512MB, scram). pg_hba는 앱 Subnet만 허용하고 SG가 AI Pod SG로 한 번 더 좁힙니다.
@@ -139,7 +144,7 @@ Resources:
         - cmp -s /tmp/dameokja.conf $D/conf.d/dameokja.conf || { install -o postgres -g postgres -m 600 /tmp/dameokja.conf $D/conf.d/dameokja.conf; changed=1; }
         - !Sub "grep -q '^host receipt_ai receipt_ai ${AppSubnetCidr} scram-sha-256' $D/pg_hba.conf || { echo 'host receipt_ai receipt_ai ${AppSubnetCidr} scram-sha-256' >> $D/pg_hba.conf; changed=1; }"
         - systemctl enable postgresql; if systemctl is-active -q postgresql; then [ -z "$changed" ] || systemctl restart postgresql; else systemctl start postgresql; fi
-        - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v3-stage/POSTGRES_PASSWORD --with-decryption --query Parameter.Value --output text)
+        - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name ${PostgresPasswordParameter} --with-decryption --query Parameter.Value --output text)
         - sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='receipt_ai'" | grep -q 1 || sudo -u postgres psql -c "CREATE ROLE receipt_ai LOGIN"
         - echo "ALTER ROLE receipt_ai PASSWORD :'pw';" | sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" >/dev/null
         - sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='receipt_ai'" | grep -q 1 || sudo -u postgres createdb -O receipt_ai receipt_ai
