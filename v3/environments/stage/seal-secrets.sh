@@ -45,6 +45,10 @@ ssm ai-secrets /dameokja-v2-stage-ai \
   RUNPOD_API_KEY RUNPOD_POD_NAME_PREFIX RUNPOD_WORKER_PORT \
   REMOTE_INFERENCE_API_KEY REMOTE_INFERENCE_TIMEOUT_SECONDS CALLBACK_API_KEY
 ssm ai-secrets /dameokja-v2-prod-ai DATABASE_URL
+# v2 stage SSM은 BE의 AI_INTERNAL_API_KEY와 AI의 INTERNAL_API_KEY·CALLBACK_API_KEY가 서로 달라 BE→AI 호출이 401이었습니다.
+# dev·prod처럼 BE 값 하나를 세 키에 씁니다.
+cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY"
+cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/CALLBACK_API_KEY"
 ssm ai-secrets /dameokja-v2-dev-ai TAVILY_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
