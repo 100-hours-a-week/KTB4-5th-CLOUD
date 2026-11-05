@@ -9,39 +9,19 @@ on:
   workflow_call:
     inputs:
       env:
-        description: stage, prod (dev는 종료되어 실행 시 차단)
+        description: prod만 씁니다(dev는 종료, stage는 v3로 이전 #281)
         type: string
         default: dev
       service:
-        description: "stage·prod: app(나누는 중), backend, frontend, ai"
+        description: "prod: app(나누는 중), backend, frontend, ai"
         type: string
         required: true
       container:
-        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (stage·prod app은 frontend 또는 backend)
+        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (prod app은 frontend 또는 backend)
         type: string
         default: ""
       image:
         description: 배포할 이미지. 비우면 지금 돌고 있는 이미지 유지
-        type: string
-        default: ""
-  # CLOUD main에서 직접 실행. 앱 CI를 거치지 않고 특정 GHCR 이미지(예: 테스트용 BE 커밋)로 고정할 때 사용
-  workflow_dispatch:
-    inputs:
-      env:
-        description: stage
-        type: choice
-        options: [stage]
-        default: stage
-      service:
-        description: "stage: app(나누는 중), backend, frontend, ai"
-        type: string
-        required: true
-      container:
-        description: 이미지를 바꿀 컨테이너. 비우면 첫 번째 컨테이너 (stage app은 frontend 또는 backend)
-        type: string
-        default: ""
-      image:
-        description: 배포할 GHCR 이미지(태그 또는 digest). 비우면 지금 돌고 있는 이미지 유지
         type: string
         default: ""
 
@@ -65,10 +45,10 @@ jobs:
       IMAGE: ${{ inputs.image }}
       ENV_NAME: ${{ inputs.env }}
     steps:
-      - name: 종료된 v2 dev 배포 차단
-        if: inputs.env == 'dev'
+      - name: 종료된 v2 dev·stage 배포 차단
+        if: inputs.env == 'dev' || inputs.env == 'stage'
         run: |
-          echo "::error::dev는 v3 EKS로 전환되어 v2 ECS 배포를 종료했습니다. v3-dev-image.yml을 사용하세요."
+          echo "::error::${{ inputs.env }}는 v3 EKS로 전환되어 v2 ECS 배포를 종료했습니다. v3-${{ inputs.env }}-image.yml을 사용하세요."
           exit 1
       - uses: actions/checkout@v6
         with:

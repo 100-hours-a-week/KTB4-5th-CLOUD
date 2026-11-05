@@ -67,12 +67,11 @@ jobs:
           for ((i=0; i<60; i++)); do
             jobs=$(gh api --paginate "$source/attempts/$RUN_ATTEMPT/jobs?per_page=100" --slurp)
             # stage 확인: CLOUD의 v3 stage 이미지 반영(#277)이 같은 요청 실행·이미지로 성공했는지 봅니다.
-            # 앱 CI 전환 동안은 기존 v2 stage 배포 job 성공도 받습니다(v2 정리 때 지움).
             title="v3 stage $SOURCE_REPO $RUN_ID.$RUN_ATTEMPT $IMAGE"
             v3_stage=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/v3-stage-image.yml/runs?branch=main&per_page=50" |
               jq --arg t "$title" '[.workflow_runs[] | select(.display_title == $t and .conclusion == "success")] | length > 0')
             if jq -e --argjson requests "$requests" --argjson v3 "$v3_stage" '[.[].jobs[]] |
-              ($v3 or any(.name == "v2 stage 배포 / deploy" and .conclusion == "success")) and
+              $v3 and
               any(.name as $name | ($requests | index($name)) != null and .conclusion == "success")' <<< "$jobs"; then
               verified=true
               break
