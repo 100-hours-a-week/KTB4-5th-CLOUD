@@ -88,7 +88,8 @@ jobs:
 
   nat-off:
     needs: power
-    if: inputs.action == 'stop'
+    # power가 건너뛴 nat-on에 의존해 always() 없이는 이 job도 건너뜁니다(#262).
+    if: always() && needs.power.result == 'success' && inputs.action == 'stop'
     uses: ./.github/workflows/stage-power-stack.yml
     with:
       power: "off"
