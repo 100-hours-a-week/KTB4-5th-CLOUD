@@ -22,7 +22,10 @@ spec:
         volumeSize: 30Gi
         encrypted: true
         deleteOnTermination: true
+  # 이 태그는 Karpenter drift 해시에 들어가 바꾸면 앱 Node가 교체됩니다.
   tags:
+    # 없으면 Karpenter가 Node 이름(ip-...)을 EC2 Name으로 씁니다. 시스템 Node(dameokja-v3-system)와 같은 규칙입니다.
+    Name: dameokja-v3-dev-app
     Project: dameokja
     Generation: v3
 ---
