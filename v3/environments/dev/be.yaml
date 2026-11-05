@@ -23,7 +23,8 @@ env:
   # BE Kafka Consumer 시작(BE 기본값 false). v2 dev SSM도 같은 키를 둠
   KAFKA_LISTENER_ENABLED: 'true'
 resources:
-  requests: {cpu: 500m, memory: 1Gi}
+  # dev는 Node 1대에 모으려고 요청량을 낮춥니다(#279). limit은 그대로라 필요하면 더 씁니다.
+  requests: {cpu: 250m, memory: 1Gi}
   limits: {cpu: '1', memory: 2Gi}
 # Spring Boot는 Kubernetes 안에서 liveness·readiness 그룹을 스스로 켭니다.
 startupProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 30}
