@@ -472,15 +472,7 @@ Resources:
               - { TargetGroupArn: !Ref FrontendTargetGroupBlue, Weight: 100 }
               - { TargetGroupArn: !Ref FrontendTargetGroupGreen, Weight: 0 }
 
-  DnsRecord:
-    Type: AWS::Route53::RecordSet
-    Properties:
-      HostedZoneId: !Ref HostedZoneId
-      Name: !Sub "${DomainName}."
-      Type: A
-      AliasTarget:
-        DNSName: !GetAtt Alb.DNSName
-        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
+  # stage.dameokja.com은 v3 공용 CloudFront(infra/v3 edge 스택)가 가집니다(#269).
 
   # --- Redis: EC2 자체 구축 단일 노드, 이중화 없음 (v2 22번), AOF 영속화
   # AMI는 DB와 같은 고정 일반 AL2023, 역할도 DB와 같은 SSM 접속용
