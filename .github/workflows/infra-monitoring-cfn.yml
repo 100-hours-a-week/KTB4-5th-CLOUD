@@ -1,12 +1,10 @@
 name: 모니터링·Discord 알림 CloudFormation
 
-# stage·v2 prod 모니터링과 Discord 알림 스택. 인프라(infra-v2-cfn-stage.yml, infra-v2-cfn-prod.yml)와 같은 흐름
-# PR: change set 미리보기만, main 머지: GitHub Environments "stage"(stage·Discord) / "prod"(v2 prod) 승인 후 적용
+# v2 prod 모니터링과 Discord 알림 스택(v2 stage 모니터링은 #283에서 삭제). infra-v2-cfn-prod.yml과 같은 흐름
+# PR: change set 미리보기만, main 머지: GitHub Environments "stage"(Discord 알림) / "prod"(v2 prod) 승인 후 적용
 on:
   pull_request:
     paths:
-      - "infra/monitoring/cloudformation/slo-monitoring.stage.template.json"
-      - "infra/monitoring/params/stage.json"
       - "infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json"
       - "infra/monitoring/params/v2-prod.json"
       - "infra/discord-alerts/aws/cloudformation/discord-alerts.template.json"
@@ -15,8 +13,6 @@ on:
   push:
     branches: [main]
     paths:
-      - "infra/monitoring/cloudformation/slo-monitoring.stage.template.json"
-      - "infra/monitoring/params/stage.json"
       - "infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json"
       - "infra/monitoring/params/v2-prod.json"
       - "infra/discord-alerts/aws/cloudformation/discord-alerts.template.json"
@@ -38,7 +34,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
           - { stack: dameokja-v2-prod-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.v2-prod.template.json, params: infra/monitoring/params/v2-prod.json }
           - { stack: dameokja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
     steps:
@@ -87,7 +82,6 @@ jobs:
         include:
           # 알람이 SNS로 거부되지 않게 Discord(허용 목록·SNS 정책)를 먼저 적용
           - { stack: dameokja-v1-discord-alerts, template: infra/discord-alerts/aws/cloudformation/discord-alerts.template.json, params: infra/discord-alerts/aws/params/discord-alerts.json }
-          - { stack: dameokja-stage-monitoring, template: infra/monitoring/cloudformation/slo-monitoring.stage.template.json, params: infra/monitoring/params/stage.json }
     steps:
       - uses: actions/checkout@v6
       - uses: aws-actions/configure-aws-credentials@v4
