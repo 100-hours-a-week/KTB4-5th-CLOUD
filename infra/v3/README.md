@@ -207,7 +207,7 @@ BE는 `ddl-auto=validate`라 빈 DB에서 시작하지 못합니다. 앱 동기�
 Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실행합니다. 러너가 SSM으로 시스템 Node에서 `v3/environments/stage/power.sh`를 실행하고, 그 스크립트는 kubectl 역할(stage Namespace의 `stage-power` Role만)로 앱·Redis·Kafka를 조정합니다. DB EC2는 Workflow가 시작·중지합니다.
 
 - stop: 앱 0 → Kafka 조정 일시정지(`strimzi.io/pause-reconciliation`)·StrimziPodSet 삭제 → Redis 0 → DB 중지. PVC는 남고, 빈 stage Node는 Karpenter가 5분 뒤 지웁니다.
-- start: DB 시작 → Redis 1 → Kafka 조정 재개 → 앱 FE 2·BE 2·AI 1. 새 Node에서 처음 뜬 브로커가 API에 닿지 못해 재시작을 반복하면(원인 조사 중) 다시 만듭니다.
+- start: DB 시작 → Redis 1 → Kafka 조정 재개 → 앱 FE 2·BE 2·AI 1.
 - 꺼진 동안 Argo의 stage 앱은 OutOfSync로 보입니다(수동 sync라 되돌리지 않음). 켜진 상태에서만 sync합니다.
 
 ## dev 외부 진입점

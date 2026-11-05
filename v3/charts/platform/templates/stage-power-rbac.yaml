@@ -18,10 +18,10 @@ rules:
   - apiGroups: [core.strimzi.io]
     resources: [strimzipodsets]
     verbs: [get, list, delete]
-  # 새 Node에서 API 접속 실패로 재시작하는 브로커를 다시 만듭니다.
+  # 상태 확인용(켜기·끄기 결과 출력)
   - apiGroups: ['']
     resources: [pods]
-    verbs: [get, list, delete]
+    verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
