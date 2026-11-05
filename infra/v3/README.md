@@ -21,6 +21,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 11 | dameokja-v3-stage-pod-sg | cloudformation/stage-pod-sg.yaml | stage FE·BE·AI·Redis·Kafka Pod SG, Kafka 브로커 사이 9090·9091, Gateway ALB→stage FE·BE(dev-pod-sg의 ALB SG Export를 먼저 apply) |
 | 12 | dameokja-v3-stage-db | cloudformation/stage-db.yaml | stage DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공(stage-pod-sg 뒤, 비밀번호는 prod SSM `/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD`·`/dameokja-v2-prod-ai/POSTGRES_PASSWORD`와 같은 값) |
 | 13 | dameokja-v3-stage-app-iam | cloudformation/stage-app-iam.yaml | stage BE·AI IRSA 역할(S3 image/stage/ 접두사) |
+| 14 | dameokja-v3-stage-power | cloudformation/stage-power.yaml | stage 켜기·끄기용 GitHub OIDC 역할·kubectl 역할(Access Entry, 그룹 dameokja:stage-power) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -200,6 +201,14 @@ sync stage-secrets; for a in be ai-api fe; do sync stage-$a; done
 ```
 
 BE는 `ddl-auto=validate`라 빈 DB에서 시작하지 못합니다. 앱 동기화 전에 dev DB의 BE 스키마(데이터 제외)와 AI 스키마·기준 데이터를 stage DB에 한 번 넣습니다(v2 stage 데이터는 옮기지 않음, #266).
+
+## stage 켜기·끄기
+
+Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실행합니다. 러너가 SSM으로 시스템 Node에서 `v3/environments/stage/power.sh`를 실행하고, 그 스크립트는 kubectl 역할(stage Namespace의 `stage-power` Role만)로 앱·Redis·Kafka를 조정합니다. DB EC2는 Workflow가 시작·중지합니다.
+
+- stop: 앱 0 → Kafka 조정 일시정지(`strimzi.io/pause-reconciliation`)·StrimziPodSet 삭제 → Redis 0 → DB 중지. PVC는 남고, 빈 stage Node는 Karpenter가 5분 뒤 지웁니다.
+- start: DB 시작 → Redis 1 → Kafka 조정 재개 → 앱 FE 2·BE 2·AI 1. 새 Node에서 처음 뜬 브로커가 API에 닿지 못해 재시작을 반복하면(원인 조사 중) 다시 만듭니다.
+- 꺼진 동안 Argo의 stage 앱은 OutOfSync로 보입니다(수동 sync라 되돌리지 않음). 켜진 상태에서만 sync합니다.
 
 ## dev 외부 진입점
 

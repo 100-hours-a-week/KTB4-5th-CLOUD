@@ -1,0 +1,65 @@
+name: v3 stage 켜기·끄기
+
+# 쓸 때만 v3 stage(앱·Redis·Kafka, stage DB EC2)를 켭니다. 러너는 사설 EKS API에 닿지 않아
+# SSM으로 시스템 Node에서 v3/environments/stage/power.sh를 실행합니다(권한은 stage-power 스택·stage Role).
+# 켜기: DB 시작 → power.sh start. 끄기: power.sh stop → DB 중지. stage Node는 Karpenter가 만들고 지웁니다.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: start 또는 stop
+        type: choice
+        options: [start, stop]
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: v3-stage-power
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  power:
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::906462447513:role/dameokja-v3-stage-github-power
+          aws-region: ${{ env.AWS_REGION }}
+      - name: 대상 찾기
+        run: |
+          id() { aws ec2 describe-instances --filters "Name=tag:Name,Values=$1" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text; }
+          node=$(id dameokja-v3-system); db=$(id dameokja-v3-stage-db)
+          [[ $node =~ ^i-[0-9a-f]+$ && $db =~ ^i-[0-9a-f]+$ ]] || { echo "인스턴스를 하나씩 찾지 못했습니다: node=$node db=$db"; exit 1; }
+          echo "NODE=$node" >> "$GITHUB_ENV"; echo "DB=$db" >> "$GITHUB_ENV"
+      - name: DB 시작
+        if: inputs.action == 'start'
+        run: |
+          aws ec2 start-instances --instance-ids "$DB" > /dev/null
+          aws ec2 wait instance-status-ok --instance-ids "$DB"
+      - name: stage ${{ inputs.action }}
+        run: |
+          script=$(base64 -w0 v3/environments/stage/power.sh)
+          cmd=$(aws ssm send-command --instance-ids "$NODE" --document-name AWS-RunShellScript \
+            --parameters "{\"commands\":[\"echo $script | base64 -d > /tmp/stage-power.sh && bash /tmp/stage-power.sh ${{ inputs.action }}; rc=\$?; rm -f /tmp/stage-power.sh; exit \$rc\"],\"executionTimeout\":[\"3000\"]}" \
+            --query Command.CommandId --output text)
+          for i in $(seq 1 330); do
+            st=$(aws ssm get-command-invocation --command-id "$cmd" --instance-id "$NODE" --query Status --output text 2>/dev/null || echo Pending)
+            case $st in Pending|InProgress|Delayed) sleep 10 ;; *) break ;; esac
+          done
+          aws ssm get-command-invocation --command-id "$cmd" --instance-id "$NODE" --query '[StandardOutputContent,StandardErrorContent]' --output text
+          [[ $st == Success ]] || { echo "실행 결과: $st"; exit 1; }
+      - name: DB 중지
+        if: inputs.action == 'stop'
+        run: |
+          aws ec2 stop-instances --instance-ids "$DB" > /dev/null
+          aws ec2 wait instance-stopped --instance-ids "$DB"
