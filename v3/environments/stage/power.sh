@@ -47,8 +47,10 @@ k annotate kafka stage-kafka strimzi.io/pause-reconciliation-
 for i in $(seq 1 90); do
   st=$(k get kafka stage-kafka -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
   [[ $st == True ]] && break
-  for p in $(k get pods -l strimzi.io/name=stage-kafka-kafka -o jsonpath='{range .items[*]}{.metadata.name}={.status.containerStatuses[0].restartCount}{"\n"}{end}'); do
-    [[ ${p#*=} -ge 3 ]] && { echo "재생성: ${p%%=*}"; k delete pod "${p%%=*}" --wait=false; }
+  # 이미 지우는 중(deletionTimestamp 있음)인 Pod는 건너뜁니다.
+  for p in $(k get pods -l strimzi.io/name=stage-kafka-kafka -o jsonpath='{range .items[*]}{.metadata.name}={.status.containerStatuses[0].restartCount}={.metadata.deletionTimestamp}{"\n"}{end}'); do
+    IFS== read -r name count deleting <<<"$p"
+    [[ -z $deleting && ${count:-0} -ge 3 ]] && { echo "재생성: $name"; k delete pod "$name" --wait=false; }
   done
   sleep 20
 done
