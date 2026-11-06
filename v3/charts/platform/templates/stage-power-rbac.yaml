@@ -5,6 +5,11 @@ metadata:
   name: stage-power
   namespace: stage
 rules:
+  # 시험용 HPA만 삭제할 수 있으며, 만들거나 다른 HPA를 바꿀 수는 없습니다.
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    resourceNames: [be-load-test]
+    verbs: [get, delete]
   - apiGroups: [apps]
     resources: [deployments, statefulsets]
     verbs: [get, list]

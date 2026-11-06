@@ -1,0 +1,23 @@
+{
+  "baseUrl": "https://stage.dameokja.com",
+  "namespace": "stage",
+  "deployment": "be-blue",
+  "smoke": {"vus": 2, "iterations": 1, "maxDuration": "1m"},
+  "hpa": {
+    "startRate": 2,
+    "preAllocatedVUs": 20,
+    "maxVUs": 20,
+    "stages": [
+      {"name": "warmup", "duration": "5m", "target": 2},
+      {"name": "ramp-5", "duration": "30s", "target": 5},
+      {"name": "hold-5", "duration": "3m", "target": 5},
+      {"name": "ramp-10", "duration": "30s", "target": 10},
+      {"name": "hold-10", "duration": "3m", "target": 10},
+      {"name": "ramp-20", "duration": "30s", "target": 20},
+      {"name": "hold-20", "duration": "5m", "target": 20},
+      {"name": "ramp-down", "duration": "30s", "target": 2},
+      {"name": "recovery", "duration": "5m", "target": 2}
+    ]
+  },
+  "thresholds": {"p95Ms": 500, "p99Ms": 1000, "errorRate": 0.01, "abortErrorRate": 0.05}
+}

@@ -1,0 +1,57 @@
+name: stage 부하시험 준비 검증
+
+# 설정 렌더링과 구문 검사만 실행합니다. AWS 인증·배포·k6 run은 없습니다.
+on:
+  pull_request:
+    paths:
+      - tests/stage/**
+      - v3/platform/values/alloy*.yaml
+      - v3/platform/values/kube-state-metrics.yaml
+      - v3/environments/stage/**
+      - v3/charts/platform/templates/stage-power-rbac.yaml
+      - infra/v3/cloudformation/observability.yaml
+      - .github/workflows/stage-load-test-validate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: azure/setup-helm@v4.3.1
+        with:
+          version: v3.19.0
+      - name: 검증 도구 준비
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r tests/stage/requirements-validation.txt
+          mkdir -p tests/stage/.cache
+          cd tests/stage/.cache
+          curl -fsSLO https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz
+          curl -fsSLO https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-checksums.txt
+          sha256sum --check --ignore-missing k6-v2.3.0-checksums.txt
+          tar -xzf k6-v2.3.0-linux-amd64.tar.gz
+          curl -fsSLO https://github.com/grafana/alloy/releases/download/v1.21.3/alloy-linux-amd64.zip
+          curl -fsSLO https://github.com/grafana/alloy/releases/download/v1.21.3/SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          unzip -q alloy-linux-amd64.zip
+          chmod +x alloy-linux-amd64
+          helm pull alloy --repo https://grafana.github.io/helm-charts --version 1.15.0
+          helm pull kube-state-metrics --repo https://prometheus-community.github.io/helm-charts --version 9.0.0
+      - name: 오프라인 설정·실행 경계 검증
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests/stage -p test_preparation.py -v
+          python tests/stage/validate.py \
+            --alloy "$PWD/tests/stage/.cache/alloy-linux-amd64" \
+            --k6 "$PWD/tests/stage/.cache/k6-v2.3.0-linux-amd64/k6"
+          bash -n v3/environments/stage/power.sh

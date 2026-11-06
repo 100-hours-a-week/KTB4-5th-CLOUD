@@ -295,16 +295,608 @@ Resources:
                 {"id": 6, "type": "timeseries", "title": "BE 요청률·5xx(req/s, actuator 제외)", "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
                  "datasource": {"type": "prometheus", "uid": "${prom}"},
                  "targets": [
-                   {"refId": "A", "legendFormat": "전체", "expr": "sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[5m]))"},
-                   {"refId": "B", "legendFormat": "5xx", "expr": "sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\",status=~\"5..\"}[5m]))"}]},
+                   {"refId": "A", "legendFormat": "전체", "expr": "sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",namespace=\"dev\",cluster=\"dameokja-v3\",uri!~\"/actuator.*\"}[5m]))"},
+                   {"refId": "B", "legendFormat": "5xx", "expr": "sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",namespace=\"dev\",cluster=\"dameokja-v3\",uri!~\"/actuator.*\",status=~\"5..\"}[5m]))"}]},
                 {"id": 7, "type": "timeseries", "title": "BE 응답 시간(평균·최대, actuator 제외)", "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
                  "datasource": {"type": "prometheus", "uid": "${prom}"}, "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
                  "targets": [
-                   {"refId": "A", "legendFormat": "평균", "expr": "sum(rate(http_server_requests_seconds_sum{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[5m]))"},
-                   {"refId": "B", "legendFormat": "최대", "expr": "max(http_server_requests_seconds_max{job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"})"}]},
+                   {"refId": "A", "legendFormat": "평균", "expr": "sum(rate(http_server_requests_seconds_sum{job=\"prometheus.scrape.be\",namespace=\"dev\",cluster=\"dameokja-v3\",uri!~\"/actuator.*\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"prometheus.scrape.be\",namespace=\"dev\",cluster=\"dameokja-v3\",uri!~\"/actuator.*\"}[5m]))"},
+                   {"refId": "B", "legendFormat": "최대", "expr": "max(http_server_requests_seconds_max{job=\"prometheus.scrape.be\",namespace=\"dev\",cluster=\"dameokja-v3\",uri!~\"/actuator.*\"})"}]},
                 {"id": 8, "type": "logs", "title": "dev 로그", "gridPos": {"x": 0, "y": 20, "w": 24, "h": 10},
                  "datasource": {"type": "loki", "uid": "${loki}"},
                  "targets": [{"refId": "A", "expr": "{cluster=\"dameokja-v3\", namespace=\"dev\"}"}]}
+              ]
+            }
+            EOF
+          # stage 부하·확장 관측. namespace로 dev와 분리하고 UTC로 표시합니다.
+          - |
+            cat > /opt/observability.new/dashboards/stage-load-test.json <<'EOF'
+            {
+              "uid": "dameokja-v3-stage-load-test",
+              "title": "v3 stage 부하·확장 관측",
+              "schemaVersion": 41,
+              "timezone": "utc",
+              "refresh": "5s",
+              "time": {
+                "from": "now-30m",
+                "to": "now"
+              },
+              "templating": {
+                "list": [
+                  {
+                    "name": "prom",
+                    "type": "datasource",
+                    "query": "prometheus"
+                  },
+                  {
+                    "name": "loki",
+                    "type": "datasource",
+                    "query": "loki"
+                  },
+                  {
+                    "name": "cluster",
+                    "type": "constant",
+                    "query": "dameokja-v3",
+                    "hide": 2
+                  },
+                  {
+                    "name": "namespace",
+                    "type": "custom",
+                    "query": "stage,dev",
+                    "current": {
+                      "text": "stage",
+                      "value": "stage"
+                    }
+                  }
+                ]
+              },
+              "panels": [
+                {
+                  "id": 1,
+                  "title": "BE 요청량·5xx",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "reqps"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum(rate(http_server_requests_seconds_count{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[1m]))",
+                      "legendFormat": "전체"
+                    },
+                    {
+                      "refId": "B",
+                      "expr": "sum(rate(http_server_requests_seconds_count{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\",status=~\"5..\"}[1m]))",
+                      "legendFormat": "5xx"
+                    }
+                  ]
+                },
+                {
+                  "id": 2,
+                  "title": "BE 5xx 비율",
+                  "type": "timeseries",
+                  "description": "서버에 도달한 요청 기준입니다. ALB·네트워크 실패는 k6 결과와 함께 확인합니다.",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 0,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "(sum(rate(http_server_requests_seconds_count{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\",status=~\"5..\"}[1m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[1m])), 0.000001)",
+                      "legendFormat": "5xx / 전체"
+                    }
+                  ]
+                },
+                {
+                  "id": 3,
+                  "title": "BE 평균·p95·p99 응답시간",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 8,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "s"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum(rate(http_server_requests_seconds_sum{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[1m])),0.000001)",
+                      "legendFormat": "평균"
+                    },
+                    {
+                      "refId": "B",
+                      "expr": "histogram_quantile(0.95,sum by(le)(rate(http_server_requests_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[1m])))",
+                      "legendFormat": "p95"
+                    },
+                    {
+                      "refId": "C",
+                      "expr": "histogram_quantile(0.99,sum by(le)(rate(http_server_requests_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[1m])))",
+                      "legendFormat": "p99"
+                    }
+                  ]
+                },
+                {
+                  "id": 4,
+                  "title": "Pod별 성공 요청률",
+                  "type": "timeseries",
+                  "description": "새 Pod의 트래픽 처리를 15초 수집 간격으로 확인합니다. 최초 성공 요청의 정확한 시각은 아닙니다.",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 8,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "reqps"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum by(pod)(rate(http_server_requests_seconds_count{cluster=\"$cluster\",namespace=\"$namespace\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\",status=~\"2..\"}[1m]))",
+                      "legendFormat": "{{pod}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 5,
+                  "title": "Pod CPU",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 16,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "cores"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum by(pod) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\",namespace=\"$namespace\",container!=\"\",container!=\"POD\"}[1m]))",
+                      "legendFormat": "{{pod}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 6,
+                  "title": "Pod 메모리 working set",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 16,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "bytes"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum by(pod) (container_memory_working_set_bytes{cluster=\"$cluster\",namespace=\"$namespace\",container!=\"\",container!=\"POD\"})",
+                      "legendFormat": "{{pod}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 7,
+                  "title": "Pod CPU / requests",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 24,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum by(pod) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\",namespace=\"$namespace\",container!=\"\",container!=\"POD\"}[1m])) / (sum by(pod) (kube_pod_container_resource_requests{cluster=\"$cluster\",namespace=\"$namespace\",resource=\"cpu\"}) > 0)",
+                      "legendFormat": "{{pod}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 8,
+                  "title": "Pod 메모리 / requests",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 24,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum by(pod) (container_memory_working_set_bytes{cluster=\"$cluster\",namespace=\"$namespace\",container!=\"\",container!=\"POD\"}) / (sum by(pod) (kube_pod_container_resource_requests{cluster=\"$cluster\",namespace=\"$namespace\",resource=\"memory\"}) > 0)",
+                      "legendFormat": "{{pod}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 9,
+                  "title": "Node CPU",
+                  "type": "timeseries",
+                  "description": "이 환경의 Pod가 배치된 Node입니다. 전체 Node 사용량이므로 공유 Node의 다른 환경 사용량도 포함합니다.",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 32,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "cores"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "label_replace(sum by(instance) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\",id=\"/\"}[1m])),\"node\",\"$1\",\"instance\",\"(.+)\") * on(node) group_left() max by(node) (kube_pod_info{cluster=\"$cluster\",namespace=\"$namespace\"})",
+                      "legendFormat": "{{node}} cores"
+                    }
+                  ]
+                },
+                {
+                  "id": 10,
+                  "title": "Node 메모리 working set",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 32,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "bytes"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "label_replace(container_memory_working_set_bytes{cluster=\"$cluster\",id=\"/\"},\"node\",\"$1\",\"instance\",\"(.+)\") * on(node) group_left() max by(node) (kube_pod_info{cluster=\"$cluster\",namespace=\"$namespace\"})",
+                      "legendFormat": "{{node}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 11,
+                  "title": "Node CPU / 전체 Pod requests",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 40,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "(label_replace(sum by(instance) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\",id=\"/\"}[1m])),\"node\",\"$1\",\"instance\",\"(.+)\") * on(node) group_left() max by(node) (kube_pod_info{cluster=\"$cluster\",namespace=\"$namespace\"})) / on(node) (sum by(node)(kube_pod_container_resource_requests{cluster=\"$cluster\",resource=\"cpu\"}) > 0)",
+                      "legendFormat": "{{node}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 12,
+                  "title": "Node 메모리 / 전체 Pod requests",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 40,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "(label_replace(container_memory_working_set_bytes{cluster=\"$cluster\",id=\"/\"},\"node\",\"$1\",\"instance\",\"(.+)\") * on(node) group_left() max by(node) (kube_pod_info{cluster=\"$cluster\",namespace=\"$namespace\"})) / on(node) (sum by(node)(kube_pod_container_resource_requests{cluster=\"$cluster\",resource=\"memory\"}) > 0)",
+                      "legendFormat": "{{node}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 13,
+                  "title": "HPA current·desired·max",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 48,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "kube_horizontalpodautoscaler_status_current_replicas{cluster=\"$cluster\",namespace=\"$namespace\",horizontalpodautoscaler=\"be-load-test\"}",
+                      "legendFormat": "current"
+                    },
+                    {
+                      "refId": "B",
+                      "expr": "kube_horizontalpodautoscaler_status_desired_replicas{cluster=\"$cluster\",namespace=\"$namespace\",horizontalpodautoscaler=\"be-load-test\"}",
+                      "legendFormat": "desired"
+                    },
+                    {
+                      "refId": "C",
+                      "expr": "kube_horizontalpodautoscaler_spec_max_replicas{cluster=\"$cluster\",namespace=\"$namespace\",horizontalpodautoscaler=\"be-load-test\"}",
+                      "legendFormat": "max"
+                    }
+                  ]
+                },
+                {
+                  "id": 14,
+                  "title": "HPA 조건",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 48,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "kube_horizontalpodautoscaler_status_condition{cluster=\"$cluster\",namespace=\"$namespace\",horizontalpodautoscaler=\"be-load-test\",status=\"true\"}",
+                      "legendFormat": "{{condition}}"
+                    }
+                  ]
+                },
+                {
+                  "id": 15,
+                  "title": "Pod Pending·Ready",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 56,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "sum(kube_pod_status_phase{cluster=\"$cluster\",namespace=\"$namespace\",phase=\"Pending\"})",
+                      "legendFormat": "Pending"
+                    },
+                    {
+                      "refId": "B",
+                      "expr": "sum(kube_pod_status_ready{cluster=\"$cluster\",namespace=\"$namespace\",condition=\"true\"})",
+                      "legendFormat": "Ready"
+                    }
+                  ]
+                },
+                {
+                  "id": 16,
+                  "title": "Pod 생성·스케줄링·Ready 시각",
+                  "type": "timeseries",
+                  "description": "",
+                  "gridPos": {
+                    "x": 12,
+                    "y": 56,
+                    "w": 12,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${prom}"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "dateTimeAsIso"
+                    },
+                    "overrides": []
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "kube_pod_created{cluster=\"$cluster\",namespace=\"$namespace\"} * 1000",
+                      "legendFormat": "{{pod}} 생성"
+                    },
+                    {
+                      "refId": "B",
+                      "expr": "kube_pod_status_scheduled_time{cluster=\"$cluster\",namespace=\"$namespace\"} * 1000",
+                      "legendFormat": "{{pod}} Scheduled"
+                    },
+                    {
+                      "refId": "C",
+                      "expr": "kube_pod_status_ready_time{cluster=\"$cluster\",namespace=\"$namespace\"} * 1000",
+                      "legendFormat": "{{pod}} Ready"
+                    }
+                  ]
+                },
+                {
+                  "id": 17,
+                  "title": "환경 Pod 로그",
+                  "type": "logs",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 64,
+                    "w": 24,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "${loki}"
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "{cluster=\"$cluster\",namespace=\"$namespace\",source!=\"kubernetes-events\"}"
+                    }
+                  ]
+                },
+                {
+                  "id": 18,
+                  "title": "환경 Kubernetes 이벤트",
+                  "type": "logs",
+                  "gridPos": {
+                    "x": 0,
+                    "y": 72,
+                    "w": 24,
+                    "h": 8
+                  },
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "${loki}"
+                  },
+                  "targets": [
+                    {
+                      "refId": "A",
+                      "expr": "{cluster=\"$cluster\",namespace=\"$namespace\",source=\"kubernetes-events\"} | json"
+                    }
+                  ]
+                }
               ]
             }
             EOF

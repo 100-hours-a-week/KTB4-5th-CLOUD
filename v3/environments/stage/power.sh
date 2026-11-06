@@ -25,6 +25,8 @@ k() { "$work/kubectl" -n stage "$@"; }
 ready() { k get "$1" -o jsonpath='{.status.readyReplicas}' 2>/dev/null; }
 
 if [[ $action == stop ]]; then
+  # 시험용 HPA를 먼저 지워 stage 종료 중 replica가 되살아나지 않게 합니다.
+  k delete hpa be-load-test --ignore-not-found
   for a in $APPS; do k scale deploy "${a%%=*}" --replicas=0; done
   # 조정을 멈춰야 Operator가 브로커를 다시 만들지 않습니다. PVC·cluster ID는 남습니다.
   k annotate kafka stage-kafka strimzi.io/pause-reconciliation=true --overwrite
