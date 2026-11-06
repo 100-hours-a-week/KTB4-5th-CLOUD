@@ -11,6 +11,9 @@ Parameters:
     Type: String
   S3UploadPrefix:
     Type: String
+  TeamGroupName:
+    Type: String
+    Default: dameokja-iam
 
 Resources:
   # BE: 이미지 업로드 경로 읽기·쓰기, 프로필 기본 이미지 한 파일 읽기
@@ -55,6 +58,32 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*
+
+  # 팀원(IAM 그룹 dameokja-iam)이 dev 설정값(SSM /dameokja-v2-dev*)을 관리합니다. v3 dev Secret(seal-secrets.sh)의 원본입니다.
+  # v2 dev 스택의 dameokja-v2-dev-ssm-team과 같은 권한이며, 그 스택을 지우기 전에 옮겼습니다(#285).
+  TeamSsmPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: dameokja-v3-dev-ssm-team
+      Groups: [!Ref TeamGroupName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath, ssm:GetParameterHistory, ssm:PutParameter,
+              ssm:DeleteParameter, ssm:DeleteParameters, ssm:AddTagsToResource, ssm:ListTagsForResource]
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev/*
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev-*
+          - Effect: Allow
+            Action: ssm:DescribeParameters
+            Resource: '*'
+          - Effect: Allow
+            Action: [ssm:TerminateSession, ssm:ResumeSession]
+            Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${!aws:username}-*'
+          - Effect: Allow
+            Action: [ssm:DescribeInstanceInformation, ssm:DescribeSessions, ssm:GetConnectionStatus]
+            Resource: '*'
 
 Outputs:
   BeRoleArn:
