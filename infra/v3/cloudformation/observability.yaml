@@ -150,9 +150,10 @@ Resources:
             mkdir -p /data/prometheus /data/loki /data/grafana
             chown 65534:65534 /data/prometheus; chown 10001:10001 /data/loki; chown 472:472 /data/grafana
           - mkdir -p /opt/observability.new
-          # GitHub OAuth App 값은 사용자가 SSM에 넣습니다(client-secret은 SecureString). 파일은 root만 읽습니다.
+          # GitHub OAuth App 값은 사용자가 SSM에 넣습니다(client-secret은 SecureString). 이 파일만 root가 읽습니다.
+          # umask를 쓰면 뒤 명령의 설정 파일까지 600이 되어 컨테이너가 읽지 못하므로, 파일을 600으로 먼저 만듭니다.
           - |
-            umask 077
+            install -m 600 /dev/null /opt/observability.new/grafana.env
             aws ssm get-parameters --region $REGION --with-decryption \
               --names /dameokja-v3-observability/grafana-github-client-id /dameokja-v3-observability/grafana-github-client-secret \
               --query 'Parameters[].[Name,Value]' --output text | awk '
@@ -312,6 +313,8 @@ Resources:
             else
               rm -rf /opt/observability; mv /opt/observability.new /opt/observability; RECREATE=--force-recreate
             fi
+            # diff는 권한을 비교하지 않으므로 매번 권한을 맞춥니다(컨테이너가 설정을 읽고, grafana.env만 root 전용).
+            chmod -R go+rX /opt/observability; chmod 600 /opt/observability/grafana.env
             docker compose -f /opt/observability/compose.yaml up -d $RECREATE
 
 Outputs:
