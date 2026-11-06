@@ -232,9 +232,9 @@ CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 8
 2. 클러스터 쪽은 "관리 도구 설치"의 kube-state-metrics·Alloy Helm 명령으로 설치합니다. Alloy는 Node마다 1개로, 자기 Node의 Pod 로그(/var/log/pods)를 Loki로, 자기 Node의 kubelet·cAdvisor와 같은 Node의 kube-state-metrics·dev BE(/actuator/prometheus) 메트릭을 Prometheus remote-write로 보냅니다. 송신 주소는 Output ObservabilityPrivateIp(10.20.32.213)이고 `v3/platform/values/alloy.yaml`에 적혀 있습니다. 로그 읽기 위치는 Node의 /var/lib/alloy(hostPath)에 남습니다.
    - dev BE는 NetworkPolicy가 tool의 Alloy에서 8080만 추가로 허용합니다(platform 차트). Alloy는 Pod SG 없이 Node SG로 나가므로 관측 SG와 BE Pod SG(BeProbe)를 그대로 통과합니다.
 3. Grafana는 https://grafana.dameokja.com (CloudFront → VPC Origin → 관측 EC2 3000)으로 접속합니다. 관측 SG는 CloudFront Prefix List만 3000으로 들여보냅니다.
-   - 로그인은 GitHub만 됩니다(비밀번호 로그인·API Basic 인증 끔). 자동 가입이 없어 admin이 미리 만든 사용자만 들어오고, 사용자는 GitHub 주 이메일로 찾습니다. 역할은 화면에서 정한 값이 유지됩니다.
-   - GitHub OAuth App(Callback `https://grafana.dameokja.com/login/github`)의 값은 SSM `/dameokja-v3-observability/grafana-github-client-id`(String)·`grafana-github-client-secret`(SecureString)에 넣고 observability를 apply합니다. 값이 없으면 Association이 실패합니다.
-   - 사용자 추가: Administration → Users → New user에서 이메일을 GitHub 주 이메일로 만듭니다.
+   - 로그인은 GitHub만 됩니다(비밀번호 로그인·API Basic 인증 끔). observability.yaml의 `GF_AUTH_GITHUB_ROLE_ATTRIBUTE_PATH`에 있는 GitHub 아이디만 첫 로그인 때 자동 가입되고, 목록에 없는 아이디는 거절됩니다(`ROLE_ATTRIBUTE_STRICT`). 역할(GrafanaAdmin·Editor)은 로그인할 때마다 목록대로 맞춰지므로 화면에서 바꾸지 않습니다.
+   - GitHub 앱(Callback `https://grafana.dameokja.com/login/github`)의 값은 SSM `/dameokja-v3-observability/grafana-github-client-id`(String)·`grafana-github-client-secret`(SecureString)에 넣고 observability를 apply합니다. 값이 없으면 Association이 실패합니다. GitHub App이면 Account permissions → Email addresses: Read-only를 주고 Make public(Any account)으로 둡니다. 안 그러면 이메일 403, 다른 사용자는 GitHub 404가 납니다.
+   - 사용자 추가·삭제: 위 목록의 GitHub 아이디를 고쳐 PR → observability apply. 목록에서 뺀 사람은 다음 로그인부터 거절되며, 이미 있는 계정은 Administration → Users에서 지웁니다.
    - 비밀번호 로그인이 꺼져 있어 첫 관리자는 이 변경 전에 SSM 포트 포워딩으로 만들어 둡니다. 잠겼을 때는 SSM으로 EC2에 들어가 `docker exec $(docker ps -qf name=grafana) grafana cli admin reset-admin-password <새 비밀번호>` 뒤 임시로 로그인 폼을 켭니다.
 
 ```bash

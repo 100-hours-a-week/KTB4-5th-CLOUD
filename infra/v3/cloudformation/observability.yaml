@@ -198,12 +198,14 @@ Resources:
                   - GF_AUTH_BASIC_ENABLED=false
                   - GF_AUTH_GITHUB_ENABLED=true
                   - GF_AUTH_GITHUB_SCOPES=user:email
-                  # 자동 가입 없이, admin이 미리 만든 사용자(GitHub 주 이메일)만 로그인합니다.
-                  - GF_AUTH_GITHUB_ALLOW_SIGN_UP=false
-                  # 미리 만든 사용자를 이메일로 찾습니다. GitHub 연동은 확인된 주 이메일만 넘깁니다.
-                  - GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP=true
-                  # 역할은 admin이 화면에서 정하고, 로그인 때 Viewer로 덮어쓰지 않습니다.
-                  - GF_AUTH_GITHUB_SKIP_ORG_ROLE_SYNC=true
+                  # 허용 목록(아래 ROLE_ATTRIBUTE_PATH)에 있는 GitHub 아이디만 첫 로그인 때 자동 가입합니다.
+                  - GF_AUTH_GITHUB_ALLOW_SIGN_UP=true
+                  # 목록에 없는 아이디는 역할이 나오지 않아 로그인이 거절됩니다.
+                  # 역할 동기화 건너뛰기(SKIP_ORG_ROLE_SYNC)를 켜면 이 검사도 건너뛰어 아무나 가입되므로 켜지 않습니다.
+                  - GF_AUTH_GITHUB_ROLE_ATTRIBUTE_STRICT=true
+                  - GF_AUTH_GITHUB_ALLOW_ASSIGN_GRAFANA_ADMIN=true
+                  # 사람 추가·삭제는 이 목록을 고쳐 apply합니다. 역할은 로그인할 때마다 목록대로 맞춰집니다(화면에서 바꾼 역할은 되돌아감).
+                  - "GF_AUTH_GITHUB_ROLE_ATTRIBUTE_PATH=contains(['joongsunYoon'], login) && 'GrafanaAdmin' || contains(['1sanguk','dlawnsdnjs','2sg','startupcodekr','iey704','jung-min-ju'], login) && 'Editor'"
                 env_file: [/opt/observability/grafana.env]
                 volumes:
                   - /opt/observability/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
