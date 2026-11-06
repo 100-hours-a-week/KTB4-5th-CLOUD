@@ -22,6 +22,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 12 | dameokja-v3-stage-db | cloudformation/stage-db.yaml | stage DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공(stage-pod-sg 뒤, 비밀번호는 prod SSM `/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD`·`/dameokja-v2-prod-ai/POSTGRES_PASSWORD`와 같은 값) |
 | 13 | dameokja-v3-stage-app-iam | cloudformation/stage-app-iam.yaml | stage BE·AI IRSA 역할(S3 image/stage/ 접두사) |
 | 14 | dameokja-v3-stage-power | cloudformation/stage-power.yaml | stage 켜기·끄기용 GitHub OIDC 역할·kubectl 역할(Access Entry, 그룹 dameokja:stage-power) |
+| 15 | dameokja-v3-grafana-edge | cloudformation/grafana-edge.yaml | us-east-1. Grafana 인증서·CloudFront·VPC Origin(관측 EC2 3000)·grafana.dameokja.com 레코드(observability 뒤) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -230,7 +231,11 @@ CloudFront(dev.dameokja.com, TLS) → VPC Origin → internal Gateway ALB(HTTP 8
 1. observability plan → apply. 설정은 State Manager Association(dameokja-v3-observability)이 적용하고, 템플릿의 설정을 바꾸면 다시 실행됩니다.
 2. 클러스터 쪽은 "관리 도구 설치"의 kube-state-metrics·Alloy Helm 명령으로 설치합니다. Alloy는 Node마다 1개로, 자기 Node의 Pod 로그(/var/log/pods)를 Loki로, 자기 Node의 kubelet·cAdvisor와 같은 Node의 kube-state-metrics·dev BE(/actuator/prometheus) 메트릭을 Prometheus remote-write로 보냅니다. 송신 주소는 Output ObservabilityPrivateIp(10.20.32.213)이고 `v3/platform/values/alloy.yaml`에 적혀 있습니다. 로그 읽기 위치는 Node의 /var/lib/alloy(hostPath)에 남습니다.
    - dev BE는 NetworkPolicy가 tool의 Alloy에서 8080만 추가로 허용합니다(platform 차트). Alloy는 Pod SG 없이 Node SG로 나가므로 관측 SG와 BE Pod SG(BeProbe)를 그대로 통과합니다.
-3. Grafana는 인스턴스 내부(127.0.0.1:3000)에만 열려 있어 SSM 포트 포워딩으로 접속합니다. 첫 로그인은 admin/admin이고 바로 비밀번호를 바꿉니다.
+3. Grafana는 https://grafana.dameokja.com (CloudFront → VPC Origin → 관측 EC2 3000)으로 접속합니다. 관측 SG는 CloudFront Prefix List만 3000으로 들여보냅니다.
+   - 로그인은 GitHub만 됩니다(비밀번호 로그인·API Basic 인증 끔). 자동 가입이 없어 admin이 미리 만든 사용자만 들어오고, 사용자는 GitHub 주 이메일로 찾습니다. 역할은 화면에서 정한 값이 유지됩니다.
+   - GitHub OAuth App(Callback `https://grafana.dameokja.com/login/github`)의 값은 SSM `/dameokja-v3-observability/grafana-github-client-id`(String)·`grafana-github-client-secret`(SecureString)에 넣고 observability를 apply합니다. 값이 없으면 Association이 실패합니다.
+   - 사용자 추가: Administration → Users → New user에서 이메일을 GitHub 주 이메일로 만듭니다.
+   - 비밀번호 로그인이 꺼져 있어 첫 관리자는 이 변경 전에 SSM 포트 포워딩으로 만들어 둡니다. 잠겼을 때는 SSM으로 EC2에 들어가 `docker exec $(docker ps -qf name=grafana) grafana cli admin reset-admin-password <새 비밀번호>` 뒤 임시로 로그인 폼을 켭니다.
 
 ```bash
 aws ssm start-session --target <ObservabilityInstanceId> --document-name AWS-StartPortForwardingSession --parameters "portNumber=3000,localPortNumber=3000" --profile dameokja-aws-cli --region ap-northeast-2
