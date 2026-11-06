@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: dameokja v3 dev observability EC2 (Prometheus, Loki, Grafana)
 # 클러스터 안 Alloy가 로그는 Loki(3100)로, 메트릭은 Prometheus remote-write(9090)로 보냅니다.
 # Prometheus가 클러스터를 직접 긁지 않으므로 EC2에 클러스터 자격 증명을 두지 않고, Node SG에 10250·8080 수신도 열지 않습니다.
-# Grafana는 127.0.0.1에만 열고 SSM 포트 포워딩으로만 접속합니다.
+# Grafana는 grafana-edge 스택의 CloudFront(VPC Origin)로만 들어오고, 로그인은 미리 등록한 GitHub 계정만 됩니다.
 
 Parameters:
   VpcId:
@@ -16,6 +16,11 @@ Parameters:
   EksStackName:
     Type: String
     Default: dameokja-v3-eks
+  # CloudFront origin-facing 관리형 Prefix List(ap-northeast-2)
+  CloudFrontOriginPrefixListId:
+    Type: String
+  GrafanaDomainName:
+    Type: String
 
 Resources:
   ObservabilitySecurityGroup:
@@ -27,11 +32,13 @@ Resources:
         # Alloy는 Pod SG 없이 Node SG(Worker)로 나갑니다.
         - {IpProtocol: tcp, FromPort: 3100, ToPort: 3100, SourceSecurityGroupId: {'Fn::ImportValue': !Sub '${EksStackName}-WorkerSecurityGroupId'}, Description: Alloy logs to Loki}
         - {IpProtocol: tcp, FromPort: 9090, ToPort: 9090, SourceSecurityGroupId: {'Fn::ImportValue': !Sub '${EksStackName}-WorkerSecurityGroupId'}, Description: Alloy remote-write to Prometheus}
+        # CloudFront VPC Origin → Grafana
+        - {IpProtocol: tcp, FromPort: 3000, ToPort: 3000, SourcePrefixListId: !Ref CloudFrontOriginPrefixListId, Description: CloudFront to Grafana}
       # 패키지·이미지 설치와 SSM 연결에 NAT 송신이 필요합니다.
       SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
       Tags: [{Key: Name, Value: dameokja-v3-observability}]
 
-  # SSM 관리(접속·Run Command)용 권한만 둡니다.
+  # SSM 관리(접속·Run Command)와 Grafana GitHub OAuth 값 읽기 권한만 둡니다.
   ObservabilityRole:
     Type: AWS::IAM::Role
     Properties:
@@ -41,6 +48,14 @@ Resources:
           - {Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: sts:AssumeRole}
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: grafana-github-oauth
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-observability/grafana-github-*
   ObservabilityInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -107,6 +122,8 @@ Resources:
         commands:
           - set -euo pipefail
           - !Sub VOL=${DataVolume}
+          - !Sub GRAFANA_DOMAIN=${GrafanaDomainName}
+          - !Sub REGION=${AWS::Region}
           - rpm -q docker >/dev/null || dnf install -y docker
           # 컨테이너 로그가 루트 디스크를 채우지 않게 크기를 제한합니다.
           - mkdir -p /etc/docker; echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' > /etc/docker/daemon.json
@@ -133,6 +150,16 @@ Resources:
             mkdir -p /data/prometheus /data/loki /data/grafana
             chown 65534:65534 /data/prometheus; chown 10001:10001 /data/loki; chown 472:472 /data/grafana
           - mkdir -p /opt/observability.new
+          # GitHub OAuth App 값은 사용자가 SSM에 넣습니다(client-secret은 SecureString). 파일은 root만 읽습니다.
+          - |
+            umask 077
+            aws ssm get-parameters --region $REGION --with-decryption \
+              --names /dameokja-v3-observability/grafana-github-client-id /dameokja-v3-observability/grafana-github-client-secret \
+              --query 'Parameters[].[Name,Value]' --output text | awk '
+              /client-id/ {print "GF_AUTH_GITHUB_CLIENT_ID=" $2}
+              /client-secret/ {print "GF_AUTH_GITHUB_CLIENT_SECRET=" $2}' > /opt/observability.new/grafana.env
+            [ "$(wc -l < /opt/observability.new/grafana.env)" = 2 ]
+            echo "GF_SERVER_ROOT_URL=https://$GRAFANA_DOMAIN" >> /opt/observability.new/grafana.env
           - |
             cat > /opt/observability.new/compose.yaml <<'EOF'
             services:
@@ -164,12 +191,25 @@ Resources:
                 environment:
                   - GF_AUTH_ANONYMOUS_ENABLED=false
                   - GF_USERS_ALLOW_SIGN_UP=false
+                  - GF_SECURITY_COOKIE_SECURE=true
+                  # 비밀번호 로그인(화면·API)은 끄고 GitHub 로그인만 둡니다. 복구는 EC2에서 grafana cli로 합니다.
+                  - GF_AUTH_DISABLE_LOGIN_FORM=true
+                  - GF_AUTH_BASIC_ENABLED=false
+                  - GF_AUTH_GITHUB_ENABLED=true
+                  - GF_AUTH_GITHUB_SCOPES=user:email
+                  # 자동 가입 없이, admin이 미리 만든 사용자(GitHub 주 이메일)만 로그인합니다.
+                  - GF_AUTH_GITHUB_ALLOW_SIGN_UP=false
+                  # 미리 만든 사용자를 이메일로 찾습니다. GitHub 연동은 확인된 주 이메일만 넘깁니다.
+                  - GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP=true
+                  # 역할은 admin이 화면에서 정하고, 로그인 때 Viewer로 덮어쓰지 않습니다.
+                  - GF_AUTH_GITHUB_SKIP_ORG_ROLE_SYNC=true
+                env_file: [/opt/observability/grafana.env]
                 volumes:
                   - /opt/observability/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
                   - /opt/observability/dashboards:/etc/grafana/provisioning/dashboards:ro
                   - /data/grafana:/var/lib/grafana
-                # SSM 포트 포워딩으로만 접속하도록 인스턴스 내부에만 엽니다.
-                ports: ["127.0.0.1:3000:3000"]
+                # SG가 CloudFront만 3000으로 들여보냅니다. SSM 포트 포워딩도 그대로 됩니다.
+                ports: ["3000:3000"]
                 restart: unless-stopped
             EOF
           - |

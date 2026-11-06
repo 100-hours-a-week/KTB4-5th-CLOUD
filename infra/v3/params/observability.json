@@ -1,5 +1,7 @@
 [
   {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"},
   {"ParameterKey": "SubnetId", "ParameterValue": "subnet-0778204ce3b43756e"},
-  {"ParameterKey": "AmiId", "ParameterValue": "ami-05becc39a92b78fa5"}
+  {"ParameterKey": "AmiId", "ParameterValue": "ami-05becc39a92b78fa5"},
+  {"ParameterKey": "CloudFrontOriginPrefixListId", "ParameterValue": "pl-22a6434b"},
+  {"ParameterKey": "GrafanaDomainName", "ParameterValue": "grafana.dameokja.com"}
 ]

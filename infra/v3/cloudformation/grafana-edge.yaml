@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 Grafana edge (CloudFront + VPC Origin to observability EC2)
+# 인증서가 us-east-1에만 있어야 하므로 인증서와 배포를 한 스택으로 us-east-1에 둡니다(edge-cert처럼 Workflow가 리전을 바꿈).
+# dev·stage 공용 배포(edge)와 나눠, Grafana 변경이 서비스 경로에 영향을 주지 않게 합니다.
+# CloudFront → VPC Origin(HTTP 3000) → 관측 EC2의 Grafana. 접근 제한은 Grafana GitHub 로그인(미리 등록한 계정만)입니다.
+Parameters:
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  DomainName:
+    Type: String
+  # observability 스택의 인스턴스 ID와 사설 DNS 이름(인스턴스가 교체되면 함께 바꿉니다)
+  ObservabilityInstanceId:
+    Type: String
+  ObservabilityPrivateDnsName:
+    Type: String
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions: [{DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId}]
+      Tags: [{Key: Name, Value: dameokja-v3-grafana}]
+  GrafanaOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: dameokja-v3-grafana
+        Arn: !Sub arn:${AWS::Partition}:ec2:ap-northeast-2:${AWS::AccountId}:instance/${ObservabilityInstanceId}
+        HTTPPort: 3000
+        HTTPSPort: 443
+        OriginProtocolPolicy: http-only
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: dameokja v3 Grafana
+        Aliases: [!Ref DomainName]
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: grafana
+            # EC2 VPC Origin은 인스턴스의 사설 DNS 이름을 씁니다.
+            DomainName: !Ref ObservabilityPrivateDnsName
+            VpcOriginConfig: {VpcOriginId: !Ref GrafanaOrigin}
+        DefaultCacheBehavior:
+          TargetOriginId: grafana
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          # Managed-CachingDisabled
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # Managed-AllViewer
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+  DomainRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub '${DomainName}.'
+      Type: A
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false}
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
