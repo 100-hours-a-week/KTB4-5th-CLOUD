@@ -22,6 +22,3 @@ collectors:
   - pods
   - replicasets
   - statefulsets
-# Node별 사용량과 stage Node를 연결하는 데 필요한 라벨만 내보냅니다.
-metricLabelsAllowlist:
-  - nodes=[dameokja.com/environment,dameokja.com/node-role]

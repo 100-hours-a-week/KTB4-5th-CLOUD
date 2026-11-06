@@ -12,7 +12,6 @@ import sys
 import time
 import uuid
 
-from build_dashboard import dashboard
 from common import api, kube_args, now
 from preflight import inspect, require
 
@@ -48,17 +47,14 @@ def save(path, data):
 
 def export_metrics(url, start, end, path):
     output = {'start': start, 'end': end, 'stepSeconds': 15, 'queries': []}
-    for panel in dashboard()['panels']:
-        if panel['type'] == 'logs':
-            continue
-        for target in panel['targets']:
-            expression = target['expr'].replace('$cluster', 'dameokja-v3').replace('$namespace', 'stage')
-            item = {'panel': panel['title'], 'expr': expression}
-            try:
-                item['data'] = api(url, '/api/v1/query_range', {'query': expression, 'start': start, 'end': end, 'step': 15})
-            except Exception as error:
-                item['error'] = str(error)
-            output['queries'].append(item)
+    queries = json.loads((ROOT / 'metric-queries.json').read_text(encoding='utf-8'))
+    for name, expression in queries.items():
+        item = {'name': name, 'expr': expression}
+        try:
+            item['data'] = api(url, '/api/v1/query_range', {'query': expression, 'start': start, 'end': end, 'step': 15})
+        except Exception as error:
+            item['error'] = str(error)
+        output['queries'].append(item)
     save(path, output)
     return not any('error' in item for item in output['queries'])
 
