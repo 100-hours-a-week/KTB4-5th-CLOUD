@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: dameokja v2 DB 마이그레이션 테스트 (원본 = dev1, 대상 = stage DB. dev·stage VPC 연결과 부하·전환 실행 서버)
+
+# stage 스택(dameokja-stage)과 dev1 서버는 이 스택으로 수정하지 않는다. 이 스택만 지우면 아래 연결·규칙·서버가 함께 정리된다
+# - dev VPC(172.31) ↔ stage VPC(10.10) Peering, 양쪽 경로는 dev1 주소와 stage private 서브넷 A로만 한정
+# - dev1 보안그룹: stage DB(복제)·실행 서버(덤프·부하·검사)에서 오는 3306 인바운드
+# - stage DB 보안그룹: 실행 서버에서 오는 3306 인바운드
+# 복제·관리 계정(migadmin·repl)은 dev1·stage DB에 SSM SecureString(/dameokja-migtest/*) 비밀번호로 별도로 만든다
+Parameters:
+  StageVpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: stage VPC (10.10.0.0/16)
+  StageSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: stage private 서브넷 A (stage DB와 같은 서브넷)
+  StageSubnetCidr:
+    Type: String
+    Default: 10.10.32.0/20
+  StagePrivateRouteTableId:
+    Type: String
+    Description: stage PrivateRouteTable
+  StageDbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: stage DbSecurityGroup (dameokja-stage-db)
+  DevVpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: dev VPC (172.31.0.0/16)
+  DevRouteTableId:
+    Type: String
+    Description: dev1 서브넷이 쓰는 dev VPC 경로 테이블
+  DevDbIp:
+    Type: String
+    Default: 172.31.4.192
+  DevDbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: dev1 보안그룹 (dameokja-v1-dev-DB)
+  # stage와 같은 고정 일반 AL2023 x86_64 AMI (params/stage.json의 DbAmiId)
+  AmiId:
+    Type: AWS::EC2::Image::Id
+  # DB 직접 부하(쓰기 100·읽기 200/초)에서 CPU 10% 미만이라 작은 크기로 충분 (2026-10-16 측정)
+  RunnerInstanceType:
+    Type: String
+    Default: t3.small
+  # dev1·stage DB와 같은 클라이언트 버전
+  MysqlVersion:
+    Type: String
+    Default: 8.4.11
+
+Resources:
+  # --- dev ↔ stage 연결 (같은 계정·리전이라 수락 절차 없이 바로 활성화)
+  Peering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !Ref StageVpcId
+      PeerVpcId: !Ref DevVpcId
+      Tags:
+        - { Key: Name, Value: dameokja-migtest-dev-stage }
+  StageToDevDbRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref StagePrivateRouteTableId
+      DestinationCidrBlock: !Sub "${DevDbIp}/32"
+      VpcPeeringConnectionId: !Ref Peering
+  DevToStageRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DevRouteTableId
+      DestinationCidrBlock: !Ref StageSubnetCidr
+      VpcPeeringConnectionId: !Ref Peering
+
+  RunnerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: dameokja migtest runner (no inbound)
+      VpcId: !Ref StageVpcId
+      Tags:
+        - { Key: Name, Value: dameokja-migtest-runner }
+
+  # Peering된 VPC의 보안그룹은 ID로 참조 가능
+  DevDbFromStageDbIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DevDbSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref StageDbSecurityGroupId
+      Description: migtest stage DB replication
+  DevDbFromRunnerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DevDbSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref RunnerSecurityGroup
+      Description: migtest runner
+  StageDbFromRunnerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref StageDbSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref RunnerSecurityGroup
+      Description: migtest runner
+
+  # Session Manager 접속, CloudWatch Agent 지표, 테스트 계정 비밀번호 읽기
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: migtest-parameters
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-migtest/*"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref Role]
+
+  # CPU·메모리·디스크 60초 수집. 네임스페이스를 분리해 기존 대시보드와 섞지 않음
+  CloudWatchAgentConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dameokja-migtest/cloudwatch-agent
+      Type: String
+      Value: |
+        {"metrics":{"namespace":"dameokja/migtest","append_dimensions":{"InstanceId":"${aws:InstanceId}"},
+         "metrics_collected":{"cpu":{"measurement":["usage_active","usage_iowait"],"totalcpu":true,"metrics_collection_interval":60},
+          "mem":{"measurement":["used_percent","available"],"metrics_collection_interval":60},
+          "disk":{"measurement":["used_percent","used","free","total"],"resources":["/"],"metrics_collection_interval":60}}}}
+
+  # 실행 서버: mysql 클라이언트·mysqldump, Percona Toolkit, Python(PyMySQL)
+  RunnerInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: CloudWatchAgentConfig
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref RunnerInstanceType
+      SubnetId: !Ref StageSubnetId
+      SecurityGroupIds: [!Ref RunnerSecurityGroup]
+      IamInstanceProfile: !Ref InstanceProfile
+      MetadataOptions: { HttpTokens: required }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm amazon-cloudwatch-agent
+          # pt-table-checksum은 perl 기본 모듈(Sys::Hostname 등)이 필요해 perl 전체 묶음을 설치
+          dnf install -y mysql-community-client-${MysqlVersion} perl perl-Sys-Hostname perl-DBI perl-DBD-MySQL \
+            perl-IO-Socket-SSL python3-pip diffutils
+          # Percona Toolkit 버전 고정 (MySQL 8.4의 SHOW REPLICA STATUS 지원)
+          curl -fsSL -o /tmp/pt.tgz https://downloads.percona.com/downloads/percona-toolkit/3.7.0/source/tarball/percona-toolkit-3.7.0.tar.gz
+          tar -xzf /tmp/pt.tgz -C /opt && ln -sf /opt/percona-toolkit-3.7.0/bin/pt-table-checksum /usr/local/bin/
+          pip3 install PyMySQL==1.1.1
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:/dameokja-migtest/cloudwatch-agent
+      Tags:
+        - { Key: Name, Value: dameokja-migtest-runner }
+
+Outputs:
+  RunnerInstanceId:
+    Value: !Ref RunnerInstance
+  PeeringId:
+    Value: !Ref Peering
