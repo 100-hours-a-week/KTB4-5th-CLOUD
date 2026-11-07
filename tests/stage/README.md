@@ -5,7 +5,7 @@
 | 파일 | 실행 시 역할 |
 |---|---|
 | `stage-read.js`, `plan.json` | stage 전용 k6 smoke·HPA 부하 계획 |
-| `run.py`, `preflight.py`, `common.py` | 준비 상태 확인·실행·중단·결과 저장 |
+| `run.py`, `preflight.py` | 준비 상태 확인·실행·중단·결과 저장 |
 | `observe.py`, `metric-queries.json` | HPA·Pod·Node·NodeClaim·EC2·ALB 시간축 및 Prometheus 구간 수집 |
 | `be-hpa.yaml` | 시험 중에만 적용하는 BE 2~6개·CPU 60% HPA |
 | `accounts.example.json` | stage 전용 계정 파일 형식 |

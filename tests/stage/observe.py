@@ -6,7 +6,7 @@ from pathlib import Path
 import threading
 import time
 
-from common import ACCOUNT, Kube, aws, kube_args, now, query
+from preflight import ACCOUNT, Kube, aws, kube_args, now, query
 
 
 def compact(item, fallback_kind=None):

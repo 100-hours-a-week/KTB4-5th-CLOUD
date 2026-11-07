@@ -12,8 +12,7 @@ import sys
 import time
 import uuid
 
-from common import api, kube_args, now
-from preflight import inspect, require
+from preflight import api, inspect, kube_args, now, require
 
 ROOT = Path(__file__).resolve().parent
 
