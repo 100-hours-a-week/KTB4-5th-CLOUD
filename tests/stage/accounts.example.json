@@ -1,7 +1,0 @@
-{
-  "baseUrl": "https://stage.dameokja.com",
-  "accounts": [
-    {"loginId": "REPLACE_STAGE_TEST_001", "password": "REPLACE", "refrigeratorId": "REPLACE"},
-    {"loginId": "REPLACE_STAGE_TEST_002", "password": "REPLACE", "refrigeratorId": "REPLACE"}
-  ]
-}
