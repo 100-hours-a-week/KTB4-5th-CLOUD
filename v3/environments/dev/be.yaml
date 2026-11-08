@@ -23,6 +23,7 @@ env:
   # BE Kafka Consumer 시작(BE 기본값 false). v2 dev SSM도 같은 키를 둠
   KAFKA_LISTENER_ENABLED: 'true'
   COOKING_KAFKA_PUBLISH_ENABLED: 'true'
+  NOTIFICATION_EXPIRATION_KAFKA_ENABLED: 'true'
 resources:
   # dev는 Node 1대에 모으려고 요청량을 낮춥니다(#279). limit은 그대로라 필요하면 더 씁니다.
   requests: {cpu: 250m, memory: 1Gi}
