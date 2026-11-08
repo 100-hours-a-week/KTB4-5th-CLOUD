@@ -3,7 +3,7 @@
 name: ai-api
 port: 8000
 colors:
-  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-ai@sha256:c03f18a7181f703cf6717d966e0731bd52ea19c2d97b585b810ce0e26dafc7c9, replicas: 1}
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-ai@sha256:4ef82acdb83aefc9f77e1b0686710c534c59f1d7995f953395d7d45bef4ec8b1, replicas: 1}
   green: {image: '', replicas: 0}
 secretName: ai-secrets
 iamRoleArn: arn:aws:iam::906462447513:role/dameokja-v3-stage-ai-api
