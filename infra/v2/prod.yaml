@@ -67,6 +67,15 @@ Parameters:
   S3UploadPrefix:
     Type: String
     Default: image/prod/
+  # off면 앱 Task·앱 서버를 0으로 줄임(비용, #300). 데이터·ALB·VPC는 그대로 두고 on으로 되돌림
+  # DB·Redis EC2는 CloudFormation으로 중지할 수 없어 따로 중지·시작함
+  Power:
+    Type: String
+    Default: "on"
+    AllowedValues: ["on", "off"]
+
+Conditions:
+  PowerOn: !Equals [!Ref Power, "on"]
 
 Resources:
   Vpc:
@@ -748,7 +757,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
-      MinSize: !Ref MinSize
+      MinSize: !If [PowerOn, !Ref MinSize, 0]
       MaxSize: !Ref MaxSize
       # 아래 ManagedTerminationProtection의 전제. 새 서버는 축소 보호 상태로 뜨고, ECS가 Task가 없을 때만 보호를 풂 (#187)
       NewInstancesProtectedFromScaleIn: true
@@ -1185,7 +1194,7 @@ Resources:
       ServiceName: dameokja-prod-backend
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-prod-backend
-      DesiredCount: 2
+      DesiredCount: !If [PowerOn, 2, 0]
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       PlacementStrategies:
@@ -1218,7 +1227,7 @@ Resources:
       ServiceName: dameokja-prod-frontend
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-prod-frontend
-      DesiredCount: 2
+      DesiredCount: !If [PowerOn, 2, 0]
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       PlacementStrategies:
@@ -1252,7 +1261,7 @@ Resources:
       ServiceName: dameokja-prod-ai
       Cluster: !Ref Cluster
       TaskDefinition: dameokja-prod-ai
-      DesiredCount: 1
+      DesiredCount: !If [PowerOn, 1, 0]
       CapacityProviderStrategy:
         - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
       PlacementStrategies:
@@ -1276,8 +1285,8 @@ Resources:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${BackendService.Name}"
-      MinCapacity: 2
-      MaxCapacity: 4
+      MinCapacity: !If [PowerOn, 2, 0]
+      MaxCapacity: !If [PowerOn, 4, 0]
 
   BackendCpuScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
@@ -1296,8 +1305,8 @@ Resources:
       ServiceNamespace: ecs
       ScalableDimension: ecs:service:DesiredCount
       ResourceId: !Sub "service/${Cluster}/${FrontendService.Name}"
-      MinCapacity: 2
-      MaxCapacity: 4
+      MinCapacity: !If [PowerOn, 2, 0]
+      MaxCapacity: !If [PowerOn, 4, 0]
 
   FrontendCpuScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
