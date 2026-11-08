@@ -20,3 +20,4 @@ topics:
     - analysis.completed.v1.dlt
     - recommendation.completed.v1.dlt
     - cooking.applied.v1
+    - inventory.expiration-check.requested.v1
