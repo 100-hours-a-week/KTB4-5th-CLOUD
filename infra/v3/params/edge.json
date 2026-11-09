@@ -7,5 +7,5 @@
   {"ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9"},
   {"ParameterKey": "DnsWeight", "ParameterValue": "100"},
   {"ParameterKey": "ProdDomainName", "ParameterValue": "dameokja.com"},
-  {"ParameterKey": "ProdDnsWeight", "ParameterValue": "0"}
+  {"ParameterKey": "ProdDnsWeight", "ParameterValue": "100"}
 ]
