@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: dameokja v3 shared edge (CloudFront + VPC Origin) for dev and stage
+Description: dameokja v3 shared edge (CloudFront + VPC Origin) for dev, stage and prod
 # CloudFront → VPC Origin → internal Gateway ALB(LBC가 만듦, 이 스택은 ARN만 받음) → FE·BE Pod.
-# 공용 배포 하나가 dev·stage 도메인을 받고, Host로 환경별 HTTPRoute가 나뉩니다.
+# 공용 배포 하나가 dev·stage·prod 도메인을 받고, Host로 환경별 HTTPRoute가 나뉩니다.
 # TLS는 CloudFront에서 끝나고 Origin 구간은 HTTP 80입니다.
 # 캐시는 끄고(Managed-CachingDisabled) Host·쿠키·Authorization·쿼리를 모두 넘깁니다(Managed-AllViewer).
 # 이미지는 BE가 발급한 S3 presigned URL로 브라우저가 S3에 직접 올리고 받으므로 S3 Origin은 두지 않습니다.
@@ -21,6 +21,16 @@ Parameters:
   # dev.dameokja.com 가중치 레코드(v2 dev 스택의 SetIdentifier v2와 같은 이름 집합). 전환 때 v2와 함께 바꿉니다.
   DnsWeight:
     Type: Number
+  # v3 prod(dameokja.com). 비우면 배포에 붙이지 않습니다. 붙일 때는 CertificateArn을 edge-cert의 ProdSharedCertificateArn으로 함께 바꿉니다.
+  ProdDomainName:
+    Type: String
+    Default: ''
+  # dameokja.com 가중치 레코드(v1·v2와 같은 이름 집합, SetIdentifier v3). 0이면 사용자 트래픽은 v2로 갑니다. 전환 때 v2와 함께 바꿉니다.
+  ProdDnsWeight:
+    Type: Number
+    Default: 0
+Conditions:
+  HasProd: !Not [!Equals [!Ref ProdDomainName, '']]
 Resources:
   GatewayOrigin:
     Type: AWS::CloudFront::VpcOrigin
@@ -36,8 +46,8 @@ Resources:
     Properties:
       DistributionConfig:
         Enabled: true
-        Comment: dameokja v3 shared (dev, stage)
-        Aliases: [!Ref DomainName, !Ref StageDomainName]
+        Comment: dameokja v3 shared (dev, stage, prod)
+        Aliases: !If [HasProd, [!Ref DomainName, !Ref StageDomainName, !Ref ProdDomainName], [!Ref DomainName, !Ref StageDomainName]]
         HttpVersion: http2
         # 한국을 포함하는 가장 작은 등급
         PriceClass: PriceClass_200
@@ -75,6 +85,16 @@ Resources:
       HostedZoneId: !Ref HostedZoneId
       Name: !Sub '${StageDomainName}.'
       Type: A
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false}
+  ProdDomainV3Record:
+    Type: AWS::Route53::RecordSet
+    Condition: HasProd
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub '${ProdDomainName}.'
+      Type: A
+      SetIdentifier: v3
+      Weight: !Ref ProdDnsWeight
       AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false}
 Outputs:
   DistributionId:

@@ -1,5 +1,6 @@
 [
   {"ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9"},
   {"ParameterKey": "DomainName", "ParameterValue": "dev.dameokja.com"},
-  {"ParameterKey": "StageDomainName", "ParameterValue": "stage.dameokja.com"}
+  {"ParameterKey": "StageDomainName", "ParameterValue": "stage.dameokja.com"},
+  {"ParameterKey": "ProdDomainName", "ParameterValue": "dameokja.com"}
 ]

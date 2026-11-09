@@ -5,5 +5,7 @@
   {"ParameterKey": "DomainName", "ParameterValue": "dev.dameokja.com"},
   {"ParameterKey": "StageDomainName", "ParameterValue": "stage.dameokja.com"},
   {"ParameterKey": "HostedZoneId", "ParameterValue": "Z08470472LJSW357027J9"},
-  {"ParameterKey": "DnsWeight", "ParameterValue": "100"}
+  {"ParameterKey": "DnsWeight", "ParameterValue": "100"},
+  {"ParameterKey": "ProdDomainName", "ParameterValue": ""},
+  {"ParameterKey": "ProdDnsWeight", "ParameterValue": "0"}
 ]
