@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: v3 stage BE·AI S3 IRSA roles
+Description: v3 stage BE·AI S3 IRSA roles and team SSM policy
 # 권한 범위는 v2 stage 태스크 역할(infra/v2/stage.yaml BackendTaskRole·AiTaskRole)과 같습니다.
 # 앱 values(v3/environments/stage)의 ServiceAccount 주석이 ARN을 적으므로 역할 이름을 고정합니다.
 
@@ -11,6 +11,9 @@ Parameters:
     Type: String
   S3UploadPrefix:
     Type: String
+  TeamGroupName:
+    Type: String
+    Default: dameokja-iam
 
 Resources:
   # BE: 이미지 업로드 경로 읽기·쓰기, 프로필 기본 이미지 한 파일 읽기
@@ -55,6 +58,26 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*
+
+  # 팀원(IAM 그룹 dameokja-iam)이 stage 설정값(SSM /dameokja-v3-stage*)을 관리합니다. v3 stage Secret(seal-secrets.sh)의 원본입니다.
+  # v2 stage 스택의 dameokja-v2-stage-ssm-team이 스택 삭제(#283)로 사라져 dev(#285)와 같은 권한으로 다시 둡니다.
+  TeamSsmPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: dameokja-v3-stage-ssm-team
+      Groups: [!Ref TeamGroupName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath, ssm:GetParameterHistory, ssm:PutParameter,
+              ssm:DeleteParameter, ssm:DeleteParameters, ssm:AddTagsToResource, ssm:ListTagsForResource]
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-stage/*
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-stage-*
+          - Effect: Allow
+            Action: ssm:DescribeParameters
+            Resource: '*'
 
 Outputs:
   BeRoleArn:

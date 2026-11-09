@@ -20,7 +20,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 10 | dameokja-v3-observability | cloudformation/observability.yaml | 관측 EC2(Prometheus·Loki·Grafana), Association 성공 |
 | 11 | dameokja-v3-stage-pod-sg | cloudformation/stage-pod-sg.yaml | stage FE·BE·AI·Redis·Kafka Pod SG, Kafka 브로커 사이 9090·9091, Gateway ALB→stage FE·BE(dev-pod-sg의 ALB SG Export를 먼저 apply) |
 | 12 | dameokja-v3-stage-db | cloudformation/stage-db.yaml | stage DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공(stage-pod-sg 뒤, 비밀번호는 prod SSM `/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD`·`/dameokja-v2-prod-ai/POSTGRES_PASSWORD`와 같은 값) |
-| 13 | dameokja-v3-stage-app-iam | cloudformation/stage-app-iam.yaml | stage BE·AI IRSA 역할(S3 image/stage/ 접두사) |
+| 13 | dameokja-v3-stage-app-iam | cloudformation/stage-app-iam.yaml | stage BE·AI IRSA 역할(S3 image/stage/ 접두사), 팀 그룹 dameokja-iam의 stage SSM(`/dameokja-v3-stage*`) 관리 정책 |
 | 14 | dameokja-v3-stage-power | cloudformation/stage-power.yaml | stage 켜기·끄기용 GitHub OIDC 역할·kubectl 역할(Access Entry, 그룹 dameokja:stage-power) |
 | 15 | dameokja-v3-grafana-edge | cloudformation/grafana-edge.yaml | us-east-1. Grafana 인증서·CloudFront·VPC Origin(관측 EC2 3000)·grafana.dameokja.com 레코드(observability 뒤) |
 
@@ -191,7 +191,16 @@ NetworkPolicy는 FE→BE, BE↔AI(요청·콜백), BE→Redis·Kafka·MySQL, AI�
 
 dev와 같은 `v3/charts/application`을 쓰고 값은 `v3/environments/stage/<앱>.yaml`입니다. FE·BE는 2개, AI는 분석 결과를 메모리에 두므로 v2 stage처럼 1개입니다. 모두 stage-app Node(라벨·taint)에만 놓입니다. 이미지는 dev에서 확인한 digest를 수동으로 올립니다.
 
-Secret은 v2 stage SSM에서 옮기고, DB 계정·비밀번호는 prod SSM과 같은 값, DB 주소는 stage DB EC2입니다. v2 stage에 없던 SENTRY_DSN·TAVILY_API_KEY는 dev 값을 씁니다.
+Secret은 stage SSM(`/dameokja-v3-stage`, `-ai`, `-fe`)에서 옮기고, DB 계정·비밀번호는 prod SSM과 같은 값, DB 주소는 stage DB EC2입니다. stage SSM에 없는 SENTRY_DSN·TAVILY_API_KEY는 dev 값을 씁니다. 팀원은 IAM 그룹 dameokja-iam(정책 `dameokja-v3-stage-ssm-team`)으로 이 경로 값을 바꿀 수 있습니다. 값을 바꾼 뒤에는 관리자가 아래 스크립트로 Secret을 다시 만들어 커밋합니다.
+
+stage SSM 경로는 v2 이름(`/dameokja-v2-stage*`)에서 옮겼습니다. 처음 한 번 관리자가 값을 복사합니다(값은 출력하지 않고, 이미 있는 이름은 덮어쓰지 않습니다).
+
+```bash
+AWS_PROFILE=dameokja-aws-cli v3/environments/stage/copy-ssm-from-v2.sh           # 복사할 이름만 출력
+AWS_PROFILE=dameokja-aws-cli v3/environments/stage/copy-ssm-from-v2.sh --apply   # 복사
+```
+
+v3 stage Secret을 다시 만들어 동작을 확인한 뒤 v2 경로 값은 지웁니다(스크립트가 마지막에 명령을 보여 줍니다).
 
 ```bash
 AWS_PROFILE=dameokja-aws-cli v3/environments/stage/seal-secrets.sh
