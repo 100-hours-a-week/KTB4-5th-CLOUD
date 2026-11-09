@@ -12,6 +12,17 @@
     "runAsUser": {"type": "integer", "minimum": 1},
     "nodeSelector": {"type": "object"},
     "tolerations": {"type": "array"},
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "fromColor": {"enum": ["", "blue", "green"]},
+        "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60},
+        "resources": {"type": "object"}
+      }
+    },
     "colors": {
       "type": "object",
       "additionalProperties": false,

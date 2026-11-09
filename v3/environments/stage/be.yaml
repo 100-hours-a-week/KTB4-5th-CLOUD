@@ -42,3 +42,6 @@ nodeSelector:
   dameokja.com/environment: stage
 tolerations:
   - {key: dameokja.com/environment, operator: Equal, value: stage, effect: NoSchedule}
+# DB 마이그레이션 PreSync Job(#310). Flyway 진입점이 들어간 BE 이미지로 바뀐 뒤 true로 켭니다.
+migration:
+  enabled: false

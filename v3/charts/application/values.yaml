@@ -22,6 +22,23 @@ resources: {}
 startupProbe: {}
 readinessProbe: {}
 livenessProbe: {}
+# BE DB 마이그레이션 PreSync Job(#310). BE 이미지에 Flyway 진입점이 들어간 뒤 환경별로 켭니다.
+migration:
+  enabled: false
+  # 마이그레이션에 쓸 이미지의 색상. 비우면 activeColor. blue/green 전환 때는 새 이미지를 올린 색상으로 둡니다.
+  fromColor: ''
+  # Spring 컨텍스트 없이 Flyway만 실행하는 BE 진입점
+  command:
+    - java
+    - -Duser.timezone=Asia/Seoul
+    - -Dloader.main=com.dameokja.backend.migration.MigrationRunner
+    - -cp
+    - /app/app.jar
+    - org.springframework.boot.loader.launch.PropertiesLauncher
+  activeDeadlineSeconds: 600
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: 500m, memory: 512Mi}
 # tool Gateway에 붙일 경로. 비우면 HTTPRoute를 만들지 않습니다(AI는 BE 내부 연결만 사용).
 route:
   hostname: ''

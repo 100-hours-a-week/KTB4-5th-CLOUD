@@ -182,7 +182,7 @@ AWS_PROFILE=dameokja-aws-cli v3/environments/dev/copy-ssm-from-v2.sh           #
 AWS_PROFILE=dameokja-aws-cli v3/environments/dev/copy-ssm-from-v2.sh --apply   # 복사
 ```
 
-Argo CD 정의는 `v3/argocd/`에 있고 dev-apps 프로젝트는 dev Namespace의 Deployment·Service·ConfigMap·ServiceAccount·SealedSecret만 허용합니다. 3단계에서 직접 만든 cloud-secrets는 SealedSecret이 넘겨받도록 표시한 뒤 동기화합니다. 동기화는 수동이며 secrets를 먼저 합니다.
+Argo CD 정의는 `v3/argocd/`에 있고 dev-apps 프로젝트는 dev Namespace의 Deployment·Service·ConfigMap·ServiceAccount·SealedSecret과 BE DB 마이그레이션 Job만 허용합니다. 3단계에서 직접 만든 cloud-secrets는 SealedSecret이 넘겨받도록 표시한 뒤 동기화합니다. 동기화는 수동이며 secrets를 먼저 합니다.
 
 ```bash
 kubectl $K -n dev annotate secret cloud-secrets sealedsecrets.bitnami.com/managed=true
@@ -218,6 +218,25 @@ sync stage-secrets; for a in be ai-api fe; do sync stage-$a; done
 ```
 
 BE는 `ddl-auto=validate`라 빈 DB에서 시작하지 못합니다. 앱 동기화 전에 dev DB의 BE 스키마(데이터 제외)와 AI 스키마·기준 데이터를 stage DB에 한 번 넣습니다(v2 stage 데이터는 옮기지 않음, #266).
+
+BE DB 마이그레이션 Job을 켠 뒤에는 BE 스키마·필수 데이터를 덤프로 넣지 않습니다. 아래 "BE DB 마이그레이션"이 적용합니다.
+
+## BE DB 마이그레이션
+
+스키마만 덤프해 옮기면 필수 행(예: `analysis_dispatch_gates`의 `gate_id=1`)이 빠지므로, BE의 Flyway 마이그레이션(스키마+필수 데이터)을 배포 전에 적용합니다(#310). application 차트의 `migration.enabled`가 true인 BE에만 Argo CD PreSync Job `be-db-migration`이 생깁니다.
+
+- 순서: sync → PreSync Job(Flyway migrate) 성공 → Deployment 등 반영. Job이 실패하면 sync가 멈추고 앱은 이전 버전 그대로입니다. 실패한 Job은 다음 sync 직전까지 남습니다(`kubectl $K -n <env> logs job/be-db-migration`).
+- 이미지: `migration.fromColor`(기본 activeColor) 색상의 BE digest를 그대로 써서 앱과 마이그레이션 버전이 같습니다. blue/green 전환 때는 새 이미지를 올린 색상으로 둡니다. 마이그레이션은 이전 버전 앱과도 호환되게 확장 → 정리 순서로 나눕니다.
+- 접근: Pod 라벨 `app.kubernetes.io/name: be`로 BE와 같은 Pod SG·NetworkPolicy(DB 3306)를 받고, DB 접속 정보는 `be-secrets`의 `SPRING_DATASOURCE_URL`·`USERNAME`·`PASSWORD`를 읽습니다. ConfigMap·앱 ServiceAccount보다 먼저 실행될 수 있어 둘 다 쓰지 않습니다.
+- 실행 명령: BE jar의 `com.dameokja.backend.migration.MigrationRunner`(Spring 컨텍스트 없이 Flyway만 실행, `values.yaml`의 `migration.command`). BE 쪽에서 정할 계약은 다음과 같습니다.
+  - 위치 `classpath:db/migration`, `V1__baseline.sql`(현재 `schema.sql`), `V2__`부터 필수 데이터·변경분
+  - 이력 테이블이 없는 기존 DB는 V1로 baseline(`baselineOnMigrate`, `baselineVersion=1`) 뒤 V2부터 적용, 빈 DB는 V1부터 적용
+  - 성공 시 종료 코드 0, 실패 시 0이 아닌 값
+- 켜기: Flyway 진입점이 들어간 BE 이미지가 해당 환경에 올라간 뒤 `v3/environments/<env>/be.yaml`의 `migration.enabled`를 true로 바꿉니다. 그 전에 켜면 Job이 실패해 BE sync가 막힙니다. 처음 켜기 전에 DB 볼륨 스냅샷을 만들고, AppProject를 다시 적용합니다(Job 허용 추가).
+
+```bash
+kubectl $K apply -f v3/argocd/dev-apps-project.yaml -f v3/argocd/stage-apps-project.yaml
+```
 
 ## stage 켜기·끄기
 

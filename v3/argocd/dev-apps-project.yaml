@@ -13,6 +13,8 @@ spec:
   clusterResourceWhitelist: []
   namespaceResourceWhitelist:
   - {group: apps, kind: Deployment}
+  # BE DB 마이그레이션 PreSync Job(#310)
+  - {group: batch, kind: Job}
   - {group: '', kind: Service}
   - {group: '', kind: ConfigMap}
   - {group: '', kind: ServiceAccount}
