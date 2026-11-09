@@ -85,16 +85,14 @@ jobs:
             printf -- '- 이미지: `%s`\n' "$IMAGE"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # 배포 단계는 stage와 같은 ecs-deploy.yml. prod 승인(GitHub Environments "prod")은 그 안의 job에서 받음
+  # v3 prod(EKS) 배포: GitHub Environments "prod" 승인은 v3-prod-image.yml의 job에서 받습니다.
+  # 승인 뒤 v3/environments/prod/<앱>.yaml 이미지를 main에 커밋하고 Argo가 배포합니다. v2 ECS 배포(ecs-deploy.yml)는 v2 prod를 끄면서 쓰지 않습니다(#300).
   deploy:
-    name: CLOUD prod 승인 및 ECS 배포
+    name: CLOUD prod 승인 및 v3 이미지 반영
     needs: validate
     permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/ecs-deploy.yml
+      contents: write
+    uses: ./.github/workflows/v3-prod-image.yml
     with:
-      env: prod
-      service: ${{ inputs.repository == 'KTB4-5th-AI' && 'ai' || 'app' }}
-      container: ${{ inputs.repository == 'KTB4-5th-FE' && 'frontend' || (inputs.repository == 'KTB4-5th-BE' && 'backend' || 'ai') }}
+      app: ${{ inputs.repository == 'KTB4-5th-AI' && 'ai-api' || (inputs.repository == 'KTB4-5th-BE' && 'be' || 'fe') }}
       image: ${{ inputs.image }}
