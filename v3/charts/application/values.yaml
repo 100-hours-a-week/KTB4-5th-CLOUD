@@ -13,7 +13,7 @@ extraSecretNames: []
 imagePullSecret: ghcr-pull
 iamRoleArn: ''
 runAsUser: 10001
-# 앱 Node 배치. stage·prod는 각 환경 앱 Node(stage-app·prod-app)의 라벨·taint에 맞춥니다.
+# 앱 Node 배치. stage는 stage-app Node의 라벨·taint에 맞춥니다.
 nodeSelector:
   dameokja.com/node-role: app
 tolerations: []
