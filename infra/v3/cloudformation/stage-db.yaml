@@ -109,8 +109,12 @@ Resources:
         executionTimeout: ['1800']
         commands:
         - set -e; changed=
-        - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
-        - systemctl is-enabled mysqld >/dev/null 2>&1 || { echo 'MySQL 설치가 끝나지 않음'; exit 1; }
+        # enable --now는 enable이 먼저 끝나 is-enabled가 곧 참이 됩니다. 첫 기동(--initialize) 중에 아래 restart가 겹치면
+        # 데이터 디렉터리가 반쯤 초기화된 채 남습니다(2026-11-09 prod-db). 기동이 끝나 응답할 때까지 기다립니다.
+        # mysqladmin ping은 서버가 응답하면 인증 실패여도 0을 돌려줍니다.
+        - for i in $(seq 1 90); do systemctl is-active -q mysqld && mysqladmin ping --silent >/dev/null 2>&1 && break; sleep 10; done
+        - systemctl is-active -q mysqld && mysqladmin ping --silent >/dev/null 2>&1 || { echo 'MySQL 첫 기동(초기화)이 끝나지 않음'; exit 1; }
+        - test -d /var/lib/mysql/sys || { echo 'MySQL 초기화가 중간에 끊김(sys 스키마 없음). 비어 있으면 /var/lib/mysql을 비우고 mysqld를 다시 시작하세요'; exit 1; }
         - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
         - printf "[mysqld]\nserver_id=1\nlog_bin=binlog\ngtid_mode=ON\nenforce_gtid_consistency=ON\ndefault_time_zone='+09:00'\n" > /tmp/dameokja.cnf
         - cmp -s /tmp/dameokja.cnf /etc/my.cnf.d/dameokja.cnf || { mv /tmp/dameokja.cnf /etc/my.cnf.d/dameokja.cnf; changed=1; }
