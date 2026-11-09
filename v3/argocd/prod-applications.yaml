@@ -1,0 +1,94 @@
+# prod secrets는 수동 동기화, 앱(FE·BE·AI)은 자동 동기화입니다.
+# 앱 이미지는 prod 승인(GitHub Environment "prod") 뒤 v3-prod-image.yml이 main의 v3/environments/prod/<앱>.yaml에 커밋하고,
+# Argo가 그 커밋을 받아 배포합니다(GitHub 러너는 사설 EKS API에 닿지 않음). prune·selfHeal은 끕니다.
+# 처음에는 DB 이전(migrate-db.sh)과 secrets 동기화를 마친 뒤 이 파일을 적용합니다(README "prod 전환").
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-secrets
+  namespace: tool
+spec:
+  project: prod-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/environments/prod/secrets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  syncPolicy:
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-fe
+  namespace: tool
+spec:
+  project: prod-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/charts/application
+    helm:
+      releaseName: fe
+      valueFiles:
+      - ../../environments/prod/fe.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  syncPolicy:
+    automated: {prune: false, selfHeal: false}
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-be
+  namespace: tool
+spec:
+  project: prod-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/charts/application
+    helm:
+      releaseName: be
+      valueFiles:
+      - ../../environments/prod/be.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  syncPolicy:
+    automated: {prune: false, selfHeal: false}
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-ai-api
+  namespace: tool
+spec:
+  project: prod-apps
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-5th-CLOUD.git
+    targetRevision: main
+    path: v3/charts/application
+    helm:
+      releaseName: ai-api
+      valueFiles:
+      - ../../environments/prod/ai-api.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+  syncPolicy:
+    automated: {prune: false, selfHeal: false}
+    syncOptions:
+    # 다른 Application이나 Helm이 만든 자원을 덮어쓰지 않습니다.
+    - FailOnSharedResource=true
