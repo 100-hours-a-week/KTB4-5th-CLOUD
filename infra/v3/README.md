@@ -212,6 +212,12 @@ sync stage-secrets; for a in be ai-api fe; do sync stage-$a; done
 
 BE는 `ddl-auto=validate`라 빈 DB에서 시작하지 못합니다. 앱 동기화 전에 dev DB의 BE 스키마(데이터 제외)와 AI 스키마·기준 데이터를 stage DB에 한 번 넣습니다(v2 stage 데이터는 옮기지 않음, #266).
 
+카테부 냉장고(BE `KTB_REFRIGERATOR_ID`, 초대 코드 만료 예외)는 stage에서 새로 만들고 dev 재고만 한 번 옮깁니다. 구성원·회원·초대 코드는 옮기지 않습니다.
+
+1. stage 앱에서 카테부 전용 계정으로 회원가입합니다. 가입 응답의 냉장고 ID가 카테부 냉장고가 됩니다(OWNER는 이 계정).
+2. `AWS_PROFILE=dameokja-aws-cli v3/environments/stage/copy-ktb-ingredients.sh <냉장고 ID>`로 확인하고 `--apply`로 복사합니다. 원본은 dev SSM `/dameokja-v2-dev/KTB_REFRIGERATOR_ID`입니다. 재고 등록자는 이 계정, 재고 사진 키는 비우며(dev S3 경로), 냉장고 이름은 dev 값으로 바꿉니다. 대상에 재고가 있으면 멈춥니다.
+3. `/dameokja-v3-stage/KTB_REFRIGERATOR_ID`를 그 ID로 바꾸고 `seal-secrets.sh` → be-secrets 커밋 → stage-be 동기화. 팀원은 초대 코드로 이 냉장고에 가입합니다.
+
 ## stage 켜기·끄기
 
 Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실행합니다. 러너가 SSM으로 시스템 Node에서 `v3/environments/stage/power.sh`를 실행하고, 그 스크립트는 kubectl 역할(stage Namespace의 `stage-power` Role만)로 앱·Redis·Kafka를 조정합니다. DB EC2는 Workflow가 시작·중지합니다.
