@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v2 stage SSM 값으로 stage SealedSecret을 만듭니다. 관리자 PC Git Bash에서 실행합니다(dev/seal-secrets.sh와 같은 방식).
+# stage SSM 값(/dameokja-v3-stage*)으로 stage SealedSecret을 만듭니다. 관리자 PC Git Bash에서 실행합니다(dev/seal-secrets.sh와 같은 방식).
 # 값은 화면에 출력하지 않고, 평문 임시 폴더(Git 제외 private/ 아래)는 끝나면 지웁니다. 암호문(secrets/*.yaml)만 Git에 올립니다.
 # DB는 v3 stage DB EC2(stage-db 스택)이고 비밀번호는 prod와 같은 값이라 계정·비밀번호는 prod SSM에서 읽습니다.
 set -euo pipefail
@@ -22,7 +22,7 @@ seal() {
 }
 
 # BE: AI_BASE_URL·SPRING_DATA_REDIS_*는 ConfigMap이 정합니다.
-ssm be-secrets /dameokja-v2-stage \
+ssm be-secrets /dameokja-v3-stage \
   KTB_REFRIGERATOR_ID SERVER_PORT SERVER_FORWARD_HEADERS_STRATEGY SPRING_DATASOURCE_URL \
   SPRING_JPA_HIBERNATE_DDL_AUTO JWT_SECRET AUTH_COOKIE_SECURE PUSH_AUTH_ENCRYPTION_KEY \
   PUSH_AUTH_ENCRYPTION_KEY_VERSION PUSH_VAPID_PRIVATE_KEY PUSH_VAPID_PUBLIC_KEY \
@@ -32,20 +32,20 @@ ssm be-secrets /dameokja-v2-stage \
   AI_CONNECT_TIMEOUT AI_READ_TIMEOUT ANALYSIS_JOB_TTL KAKAO_REST_API_KEY KAKAO_CLIENT_SECRET \
   KAKAO_REDIRECT_URI OAUTH_FRONTEND_BASE_URL
 ssm be-secrets /dameokja-v2-prod SPRING_DATASOURCE_USERNAME SPRING_DATASOURCE_PASSWORD DB_USERNAME DB_PASSWORD
-# v2 stage에 없던 키는 dev 값을 씁니다(SENTRY_ENVIRONMENT로 환경을 나눔).
+# stage SSM에 없는 키는 dev 값을 씁니다(SENTRY_ENVIRONMENT로 환경을 나눔).
 ssm be-secrets /dameokja-v2-dev SENTRY_DSN
 sed -i -E "s#jdbc:mysql://[^:/]+:3306/#jdbc:mysql://$DB_HOST:3306/#" "$tmp/be-secrets/SPRING_DATASOURCE_URL"
 grep -q "jdbc:mysql://$DB_HOST:3306/" "$tmp/be-secrets/SPRING_DATASOURCE_URL" || { echo "SPRING_DATASOURCE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
 # AI: CALLBACK_URL·LOG_DIR은 ConfigMap이 정합니다. DATABASE_URL은 prod 값(같은 비밀번호)에서 호스트만 바꿉니다.
-ssm ai-secrets /dameokja-v2-stage-ai \
+ssm ai-secrets /dameokja-v3-stage-ai \
   APP_ENV INTERNAL_API_KEY LOG_LEVEL LOG_RETENTION_DAYS ANALYSIS_QUEUE_MAXSIZE \
   ANALYSIS_RESULT_TTL_SECONDS ANALYSIS_RESULT_MAX_ENTRIES IMAGE_SOURCE S3_REGION \
   S3_ALLOWED_PREFIX OLLAMA_MODEL CALLBACK_TIMEOUT_SECONDS CALLBACK_MAX_ATTEMPTS S3_BUCKET \
   RUNPOD_API_KEY RUNPOD_POD_NAME_PREFIX RUNPOD_WORKER_PORT \
   REMOTE_INFERENCE_API_KEY REMOTE_INFERENCE_TIMEOUT_SECONDS CALLBACK_API_KEY
 ssm ai-secrets /dameokja-v2-prod-ai DATABASE_URL
-# v2 stage SSM은 BE의 AI_INTERNAL_API_KEY와 AI의 INTERNAL_API_KEY·CALLBACK_API_KEY가 서로 달라 BE→AI 호출이 401이었습니다.
+# stage SSM은 BE의 AI_INTERNAL_API_KEY와 AI의 INTERNAL_API_KEY·CALLBACK_API_KEY가 서로 달라(v2에서 옮긴 값) BE→AI 호출이 401이었습니다.
 # dev·prod처럼 BE 값 하나를 세 키에 씁니다.
 cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY"
 cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/CALLBACK_API_KEY"
@@ -53,7 +53,7 @@ ssm ai-secrets /dameokja-v2-dev-ai TAVILY_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
-ssm fe-secrets /dameokja-v2-stage-fe DISCORD_BUG_REPORT_WEBHOOK_URL
+ssm fe-secrets /dameokja-v3-stage-fe DISCORD_BUG_REPORT_WEBHOOK_URL
 # Redis 비밀번호는 stage-data 설치 때 클러스터에 직접 만든 값을 그대로 옮깁니다.
 mkdir -p "$tmp/cloud-secrets"
 kubectl "${K[@]}" -n stage get secret cloud-secrets -o jsonpath='{.data.REDIS_PASSWORD}' | base64 -d > "$tmp/cloud-secrets/REDIS_PASSWORD"
