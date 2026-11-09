@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 prod Pod security groups
+# SecurityGroupPolicy로 prod Pod에 붙입니다. 규칙 방향은 stage-pod-sg와 같습니다(stage와 같은 구성).
+# 수신은 AWS 계층(SG)과 Kubernetes 계층(NetworkPolicy)에 같은 규칙을 둡니다. 한쪽을 바꾸면 다른 쪽도 맞춥니다.
+# 송신은 SG에서 모두 열고 NetworkPolicy로 제한합니다.
+# Gateway ALB SG는 dev-pod-sg가 소유하고, 여기서는 prod FE·BE로 나가는 규칙만 더합니다.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  EksStackName:
+    Type: String
+    Default: dameokja-v3-eks
+  DevPodSgStackName:
+    Type: String
+    Default: dameokja-v3-dev-pod-sg
+
+Resources:
+  FePodSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 prod FE Pods
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-prod-fe}]
+  BePodSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 prod BE Pods
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-prod-be}]
+  AiPodSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 prod AI Pods
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-prod-ai}]
+  RedisPodSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 prod Redis Pods
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-prod-redis}]
+  KafkaPodSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 prod Kafka Pods
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-prod-kafka}]
+
+  # Gateway ALB → prod FE·BE (ALB SG의 송신과 Pod SG의 수신을 같이 엽니다)
+  AlbEgressToFe:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !ImportValue {'Fn::Sub': '${DevPodSgStackName}-GatewayAlbSecurityGroupId'}
+      DestinationSecurityGroupId: !Ref FePodSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      Description: v3 prod FE Pods
+  AlbEgressToBe:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !ImportValue {'Fn::Sub': '${DevPodSgStackName}-GatewayAlbSecurityGroupId'}
+      DestinationSecurityGroupId: !Ref BePodSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      Description: v3 prod BE Pods
+  AlbToFe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref FePodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${DevPodSgStackName}-GatewayAlbSecurityGroupId'}, IpProtocol: tcp, FromPort: 3000, ToPort: 3000}
+  AlbToBe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref BePodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${DevPodSgStackName}-GatewayAlbSecurityGroupId'}, IpProtocol: tcp, FromPort: 8080, ToPort: 8080}
+
+  # 서비스 간 수신
+  FeToBe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref BePodSecurityGroup, SourceSecurityGroupId: !Ref FePodSecurityGroup, IpProtocol: tcp, FromPort: 8080, ToPort: 8080}
+  BeToAi:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref AiPodSecurityGroup, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: tcp, FromPort: 8000, ToPort: 8000}
+  # AI 분석 결과 콜백(CALLBACK_URL)
+  AiToBe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref BePodSecurityGroup, SourceSecurityGroupId: !Ref AiPodSecurityGroup, IpProtocol: tcp, FromPort: 8080, ToPort: 8080}
+  BeToRedis:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref RedisPodSecurityGroup, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: tcp, FromPort: 6379, ToPort: 6379}
+  BeToKafka:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: tcp, FromPort: 9092, ToPort: 9092}
+  AiToKafka:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !Ref AiPodSecurityGroup, IpProtocol: tcp, FromPort: 9092, ToPort: 9092}
+
+  # prod Kafka도 stage처럼 브로커·컨트롤러 겸용 3개입니다. 서로 9090(KRaft 컨트롤러)·9091(복제)로 통신합니다.
+  # dev는 1개라 이 규칙이 없습니다.
+  KafkaPeer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 9090, ToPort: 9091}
+
+  # Strimzi Cluster Operator·Topic Operator → Kafka 9091·8443(Kafka Agent). 두 Operator는 Node SG(Worker)로 나갑니다.
+  KafkaFromOperator:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 9091, ToPort: 9091}
+  KafkaAgentFromOperator:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref KafkaPodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 8443, ToPort: 8443}
+
+  # Kafka 브로커는 시작할 때 Kubernetes API에서 자기 설정 Secret을 읽습니다(dev-pod-sg와 같은 이유).
+  KafkaToApi:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-ControlPlaneSecurityGroupId'}, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 443, ToPort: 443}
+
+  # kubelet HTTP Probe와 Alloy 수집(BE 8080). Redis·Kafka는 exec Probe라 필요 없음
+  FeProbe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref FePodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 3000, ToPort: 3000}
+  BeProbe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref BePodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 8080, ToPort: 8080}
+  AiProbe:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !Ref AiPodSecurityGroup, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, IpProtocol: tcp, FromPort: 8000, ToPort: 8000}
+
+  # Pod SG → Worker SG의 CoreDNS
+  FeDnsUdp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref FePodSecurityGroup, IpProtocol: udp, FromPort: 53, ToPort: 53}
+  FeDnsTcp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref FePodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
+  BeDnsUdp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: udp, FromPort: 53, ToPort: 53}
+  BeDnsTcp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref BePodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
+  AiDnsUdp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref AiPodSecurityGroup, IpProtocol: udp, FromPort: 53, ToPort: 53}
+  AiDnsTcp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref AiPodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
+  RedisDnsUdp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref RedisPodSecurityGroup, IpProtocol: udp, FromPort: 53, ToPort: 53}
+  RedisDnsTcp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref RedisPodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
+  KafkaDnsUdp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: udp, FromPort: 53, ToPort: 53}
+  KafkaDnsTcp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: {GroupId: !ImportValue {'Fn::Sub': '${EksStackName}-WorkerSecurityGroupId'}, SourceSecurityGroupId: !Ref KafkaPodSecurityGroup, IpProtocol: tcp, FromPort: 53, ToPort: 53}
+
+Outputs:
+  FePodSecurityGroupId:
+    Value: !Ref FePodSecurityGroup
+  BePodSecurityGroupId:
+    Value: !Ref BePodSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-BePodSecurityGroupId
+  AiPodSecurityGroupId:
+    Value: !Ref AiPodSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-AiPodSecurityGroupId
+  RedisPodSecurityGroupId:
+    Value: !Ref RedisPodSecurityGroup
+  KafkaPodSecurityGroupId:
+    Value: !Ref KafkaPodSecurityGroup

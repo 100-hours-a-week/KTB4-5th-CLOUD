@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: dameokja v3 prod DB EC2 (MySQL for BE, PostgreSQL for AI)
+# stage-db와 같은 구성(MySQL 8.4 GTID + PostgreSQL 16)을 prod용으로 하나 더 둡니다. v2 prod DB(t3.medium)와 같은 크기입니다.
+# prod BE·AI Pod SG만 접근합니다. stage와 달리 켜고 끄지 않습니다.
+# 비밀번호는 v2 prod와 같은 값을 prod SSM에서 서버 안에서 읽습니다(명령 기록에 남기지 않음).
+# 데이터는 전환 때 v2 prod DB에서 한 번 옮깁니다(v3/environments/prod/migrate-db.sh). 그동안만 SourceDbSecurityGroupId로 v2 DB 접근을 엽니다.
+#   MySqlPasswordParameter     BE 계정 dameokja
+#   PostgresPasswordParameter  AI 계정 receipt_ai
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  # EKS 앱 Subnet. DB 계정의 접속 허용 host와 pg_hba에 씁니다. 실제 출처 제한은 SG가 맡습니다.
+  AppSubnetCidr:
+    Type: String
+  # MySQL 계정 host는 CIDR 대신 주소/마스크 형식입니다(같은 Subnet).
+  AppSubnetMySqlHost:
+    Type: String
+  # AMI를 바꾸면 DB 서버가 교체되므로 고정 ID로 둡니다.
+  AmiId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+    Default: t3.medium
+  PodSgStackName:
+    Type: String
+    Default: dameokja-v3-prod-pod-sg
+  MySqlPasswordParameter:
+    Type: String
+    Default: /dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD
+  PostgresPasswordParameter:
+    Type: String
+    Default: /dameokja-v2-prod-ai/POSTGRES_PASSWORD
+  # v2 prod DB SG(dameokja-prod-db). 값이 있으면 이 DB 서버 → v2 DB 3306·5432를 엽니다(데이터 이전 동안만).
+  # 이전이 끝나면 빈 값으로 다시 apply해 규칙을 지웁니다.
+  SourceDbSecurityGroupId:
+    Type: String
+    Default: ''
+
+Conditions:
+  AllowMigration: !Not [!Equals [!Ref SourceDbSecurityGroupId, '']]
+
+Resources:
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: v3 prod DB
+      SecurityGroupIngress:
+      - {IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${PodSgStackName}-BePodSecurityGroupId'}, Description: v3 prod BE Pods}
+      - {IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !ImportValue {'Fn::Sub': '${PodSgStackName}-AiPodSecurityGroupId'}, Description: v3 prod AI Pods}
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: Name, Value: dameokja-v3-prod-db}]
+
+
+  # 데이터 이전: v2 prod DB가 이 서버에서 오는 mysqldump·pg_dump 접속을 받습니다.
+  # v2 MySQL 계정(dameokja@10.20.32.0/255.255.224.0)과 pg_hba(10.20.32.0/20)는 이 Subnet을 이미 허용합니다.
+  MigrationMySqlFromProdDb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: AllowMigration
+    Properties: {GroupId: !Ref SourceDbSecurityGroupId, SourceSecurityGroupId: !Ref DbSecurityGroup, IpProtocol: tcp, FromPort: 3306, ToPort: 3306, Description: v3 prod DB migration}
+  MigrationPostgresFromProdDb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: AllowMigration
+    Properties: {GroupId: !Ref SourceDbSecurityGroupId, SourceSecurityGroupId: !Ref DbSecurityGroup, IpProtocol: tcp, FromPort: 5432, ToPort: 5432, Description: v3 prod DB migration}
+
+  DbRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: sts:AssumeRole}
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+      - PolicyName: read-db-passwords
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: ssm:GetParameter
+            Resource:
+            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${MySqlPasswordParameter}
+            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PostgresPasswordParameter}
+  DbInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref DbRole]
+
+  # 스택을 지워도 서버와 디스크는 남깁니다(데이터 보호). 다시 쓰지 않으면 직접 정리합니다.
+  DbInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: [!Ref DbSecurityGroup]
+      IamInstanceProfile: !Ref DbInstanceProfile
+      DisableApiTermination: true
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings:
+      - DeviceName: /dev/xvda
+        Ebs: {VolumeSize: 30, VolumeType: gp3, Encrypted: true, DeleteOnTermination: false}
+      # 설치만 합니다. 설정은 Association이 맡습니다(UserData를 바꾸면 서버가 교체될 수 있음).
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          timedatectl set-timezone Asia/Seoul
+          dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm
+          dnf install -y mysql-community-server postgresql16-server postgresql16-contrib
+          systemctl enable --now mysqld
+      Tags: [{Key: Name, Value: dameokja-v3-prod-db}]
+
+  # MySQL: RPM의 /etc/my.cnf가 my.cnf.d를 읽도록 하고 GTID·시간대를 적용합니다. 설정이 바뀐 경우에만 재시작합니다.
+  # root는 설치 직후 임시 비밀번호 상태라 처음 한 번 OS root 접속(auth_socket)으로 바꿉니다(v2 prod는 수동으로 했던 단계).
+  MySqlAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: dameokja-v3-prod-db-mysql
+      Name: AWS-RunShellScript
+      Targets:
+      - {Key: InstanceIds, Values: [!Ref DbInstance]}
+      Parameters:
+        executionTimeout: ['1800']
+        commands:
+        - set -e; changed=
+        - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
+        - systemctl is-enabled mysqld >/dev/null 2>&1 || { echo 'MySQL 설치가 끝나지 않음'; exit 1; }
+        - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
+        - printf "[mysqld]\nserver_id=1\nlog_bin=binlog\ngtid_mode=ON\nenforce_gtid_consistency=ON\ndefault_time_zone='+09:00'\n" > /tmp/dameokja.cnf
+        - cmp -s /tmp/dameokja.cnf /etc/my.cnf.d/dameokja.cnf || { mv /tmp/dameokja.cnf /etc/my.cnf.d/dameokja.cnf; changed=1; }
+        - if [ -n "$changed" ]; then systemctl restart mysqld; fi
+        - |
+          if ! mysql -uroot -e 'SELECT 1' >/dev/null 2>&1; then
+            TMP=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}')
+            NEW="$(openssl rand -hex 16)Aa1!"
+            mysql -uroot -p"$TMP" --connect-expired-password -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$NEW';"
+            mysql -uroot -p"$NEW" -e "INSTALL PLUGIN auth_socket SONAME 'auth_socket.so'; ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;"
+          fi
+        - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name ${MySqlPasswordParameter} --with-decryption --query Parameter.Value --output text)
+        - !Sub mysql -uroot -e "CREATE DATABASE IF NOT EXISTS app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs; CREATE USER IF NOT EXISTS 'dameokja'@'${AppSubnetMySqlHost}' IDENTIFIED BY '$PW'; ALTER USER 'dameokja'@'${AppSubnetMySqlHost}' IDENTIFIED BY '$PW'; GRANT ALL PRIVILEGES ON app.* TO 'dameokja'@'${AppSubnetMySqlHost}';"
+
+  # PostgreSQL: v2 prod와 같은 설정(shared_buffers 512MB, scram). pg_hba는 앱 Subnet만 허용하고 SG가 AI Pod SG로 한 번 더 좁힙니다.
+  PostgresAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: dameokja-v3-prod-db-postgres
+      Name: AWS-RunShellScript
+      Targets:
+      - {Key: InstanceIds, Values: [!Ref DbInstance]}
+      Parameters:
+        executionTimeout: ['1800']
+        commands:
+        - set -e; changed=
+        - for i in $(seq 1 90); do rpm -q postgresql16-server >/dev/null 2>&1 && break; sleep 10; done
+        - D=/var/lib/pgsql/data; [ -f $D/PG_VERSION ] || postgresql-setup --initdb
+        - echo "listen_addresses = '*'" > /tmp/dameokja.conf; echo "shared_buffers = 512MB" >> /tmp/dameokja.conf; echo "password_encryption = scram-sha-256" >> /tmp/dameokja.conf
+        - mkdir -p $D/conf.d && chown postgres:postgres $D/conf.d; grep -q "^include_dir = 'conf.d'" $D/postgresql.conf || { echo "include_dir = 'conf.d'" >> $D/postgresql.conf; changed=1; }
+        - cmp -s /tmp/dameokja.conf $D/conf.d/dameokja.conf || { install -o postgres -g postgres -m 600 /tmp/dameokja.conf $D/conf.d/dameokja.conf; changed=1; }
+        - !Sub "grep -q '^host receipt_ai receipt_ai ${AppSubnetCidr} scram-sha-256' $D/pg_hba.conf || { echo 'host receipt_ai receipt_ai ${AppSubnetCidr} scram-sha-256' >> $D/pg_hba.conf; changed=1; }"
+        - systemctl enable postgresql; if systemctl is-active -q postgresql; then [ -z "$changed" ] || systemctl restart postgresql; else systemctl start postgresql; fi
+        - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name ${PostgresPasswordParameter} --with-decryption --query Parameter.Value --output text)
+        - sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='receipt_ai'" | grep -q 1 || sudo -u postgres psql -c "CREATE ROLE receipt_ai LOGIN"
+        - echo "ALTER ROLE receipt_ai PASSWORD :'pw';" | sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" >/dev/null
+        - sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='receipt_ai'" | grep -q 1 || sudo -u postgres createdb -O receipt_ai receipt_ai
+        - sudo -u postgres psql -d receipt_ai -c "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+
+Outputs:
+  DbSecurityGroupId:
+    Value: !Ref DbSecurityGroup
+  DbInstanceId:
+    Value: !Ref DbInstance
+  DbPrivateIp:
+    Value: !GetAtt DbInstance.PrivateIp
