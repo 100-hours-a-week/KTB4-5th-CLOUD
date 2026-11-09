@@ -1,8 +1,9 @@
-# dev·stage를 감시합니다. Kafka 접근 정책은 platform 차트의 NetworkPolicy에서 관리합니다.
+# dev·stage·prod를 감시합니다. Kafka 접근 정책은 platform 차트의 NetworkPolicy에서 관리합니다.
 replicas: 1
 watchNamespaces:
 - dev
 - stage
+- prod
 watchAnyNamespace: false
 generateNetworkPolicy: false
 nodeSelector:

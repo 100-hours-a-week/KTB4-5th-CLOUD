@@ -1,4 +1,4 @@
-# Node마다 1개. 자기 Node의 Pod 로그를 Loki로, 자기 Node의 kubelet·cAdvisor와 이 Node에 있는 kube-state-metrics·dev/stage BE 메트릭을
+# Node마다 1개. 자기 Node의 Pod 로그를 Loki로, 자기 Node의 kubelet·cAdvisor와 이 Node에 있는 kube-state-metrics·dev/stage/prod BE 메트릭을
 # 관측 EC2 Prometheus로 remote_write합니다. Node별로 나눠 긁어 같은 대상을 여러 Alloy가 중복 수집하지 않습니다.
 # 관측 EC2 주소 10.20.32.213은 dameokja-v3-observability 스택 Output(PrivateIp)입니다. Alloy는 Pod SG 없이 Node SG로 나가 관측 SG를 통과합니다.
 alloy:
@@ -105,12 +105,12 @@ alloy:
         forward_to = [prometheus.remote_write.observability.receiver]
       }
 
-      // dev·stage BE(Spring Actuator). 환경별 NetworkPolicy가 tool의 Alloy에서 8080을 허용합니다.
+      // dev·stage·prod BE(Spring Actuator). 환경별 NetworkPolicy가 tool의 Alloy에서 8080을 허용합니다.
       discovery.relabel "be" {
         targets = discovery.kubernetes.pods.targets
         rule {
           source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
-          regex         = "(dev|stage);be;8080"
+          regex         = "(dev|stage|prod);be;8080"
           action        = "keep"
         }
         rule {
@@ -171,6 +171,7 @@ controller:
   tolerations:
     - {key: dameokja.com/system, operator: Equal, value: 'true', effect: NoSchedule}
     - {key: dameokja.com/environment, operator: Equal, value: stage, effect: NoSchedule}
+    - {key: dameokja.com/environment, operator: Equal, value: prod, effect: NoSchedule}
 
 # 위 설정이 쓰는 것만 허용합니다(차트 기본값의 configmaps·secrets 등 읽기는 뺍니다).
 rbac:

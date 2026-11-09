@@ -1,0 +1,3 @@
+{{- if ne .Release.Namespace "prod" -}}
+{{- fail "prod-data Chart는 prod Namespace에만 설치합니다." -}}
+{{- end -}}

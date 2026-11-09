@@ -18,9 +18,18 @@ environments:
     kafkaBrokers: 3
     # stage-pod-sg 스택 Output. 5개 모두 필요합니다.
     podSecurityGroups: {fe: '', be: '', ai-api: '', redis: '', kafka: ''}
+  prod:
+    # prod-db 스택 Output(DbPrivateIp)/32. apply 뒤 실제 값으로 바꿔 커밋합니다(비어 있으면 설치가 실패합니다).
+    dbCidr: ''
+    kafkaBrokers: 3
+    # prod-pod-sg 스택 Output. 5개 모두 필요합니다.
+    podSecurityGroups: {fe: '', be: '', ai-api: '', redis: '', kafka: ''}
 # stage 앱 Node. stage Pod만 올라가도록 라벨·taint를 붙이고, stage Pod가 없으면 5분 뒤 0대가 됩니다.
 stageNodePool:
   # stage 평시 FE·BE·AI 각 2와 Redis 1, Kafka 3(Node마다 1)을 넣고 HTTP Blue/Green 여유를 둔 상한입니다.
+  limits: {cpu: '16', memory: 64Gi}
+# prod 앱 Node. stage와 같은 사양·상한이며 prod Pod만 받습니다. stage와 달리 평시에 끄지 않습니다.
+prodNodePool:
   limits: {cpu: '16', memory: 64Gi}
 network:
   # EKS API ENI가 놓이는 Private Subnet 2개. ENI 주소는 EKS가 바꿀 수 있어 Subnet 단위로 엽니다.
