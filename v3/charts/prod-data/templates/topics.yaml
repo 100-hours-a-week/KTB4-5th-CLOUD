@@ -1,0 +1,22 @@
+{{- if .Values.topics.enabled }}
+{{- range .Values.topics.suffixes }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ printf "prod-dameokja-%s" . | replace "." "-" }}
+  namespace: prod
+  labels:
+    strimzi.io/cluster: {{ $.Values.kafka.name }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  topicName: {{ printf "prod.dameokja.%s" . | quote }}
+  # BE·AI가 2개씩 떠서 함께 소비하도록 파티션을 브로커 수만큼 둡니다. 파티션은 늘릴 수만 있습니다.
+  partitions: {{ $.Values.topics.partitions }}
+  replicas: {{ $.Values.kafka.replicas }}
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+{{- end }}
+{{- end }}

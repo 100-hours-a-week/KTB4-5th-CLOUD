@@ -1,4 +1,4 @@
-{{- if not (has .Release.Namespace (list "dev" "stage")) }}{{ fail "application Chart는 dev·stage Namespace에만 설치합니다." }}{{ end }}
+{{- if not (has .Release.Namespace (list "dev" "stage" "prod")) }}{{ fail "application Chart는 dev·stage·prod Namespace에만 설치합니다." }}{{ end }}
 {{- if and (ne .Values.name "fe") (not .Values.iamRoleArn) }}{{ fail "BE·AI는 S3용 IRSA 역할 ARN이 필요합니다(<환경>-app-iam 스택)." }}{{ end }}
 {{- if and (ne .Values.name "fe") (gt (int .Values.colors.blue.replicas) 0) (gt (int .Values.colors.green.replicas) 0) (not .Values.allowConcurrentConsumers) }}{{ fail "BE·AI 두 색상 동시 실행은 중복 처리 검증 후 allowConcurrentConsumers로 엽니다." }}{{ end }}
 {{- $active := index .Values.colors .Values.activeColor }}

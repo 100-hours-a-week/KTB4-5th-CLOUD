@@ -1,0 +1,91 @@
+# broker·controller 겸용 3 Pod(KRaft). 3개는 서로 다른 prod Node에 둡니다. PVC는 Kafka를 지워도 남습니다.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: prod
+  labels:
+    strimzi.io/cluster: {{ .Values.kafka.name }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  replicas: {{ .Values.kafka.replicas }}
+  roles: [broker, controller]
+  resources:
+    requests: {cpu: 500m, memory: 2Gi}
+    limits: {cpu: "2", memory: 2Gi}
+  # 힙은 컨테이너 메모리의 절반 이하로 두고 나머지는 페이지 캐시에 씁니다.
+  jvmOptions:
+    -Xms: 512m
+    -Xmx: 1g
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        class: kafka-gp3
+        size: 10Gi
+        kraftMetadata: shared
+        deleteClaim: false
+  template:
+    pod:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: dameokja.com/environment, operator: In, values: [prod]}
+        # Node 하나가 죽어도 브로커는 1개만 잃습니다(단일 AZ라 AZ 장애는 대비하지 않음).
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: {strimzi.io/name: {{ .Values.kafka.name }}-kafka}
+      tolerations:
+        - {key: dameokja.com/environment, operator: Equal, value: prod, effect: NoSchedule}
+      terminationGracePeriodSeconds: 120
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: {{ .Values.kafka.name }}
+  namespace: prod
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  kafka:
+    version: {{ .Values.kafka.version | quote }}
+    image: {{ .Values.kafka.image | quote }}
+    # 내부 PLAINTEXT만 엽니다. 외부 listener는 없습니다.
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      auto.create.topics.enable: false
+      # 복제 3·min.insync 2: 브로커 1개가 내려가도 acks=all 쓰기가 계속됩니다.
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      default.replication.factor: 3
+      min.insync.replicas: 2
+  entityOperator:
+    topicOperator:
+      watchedNamespace: prod
+      resources:
+        requests: {cpu: 50m, memory: 128Mi}
+        limits: {cpu: 250m, memory: 256Mi}
+      jvmOptions:
+        -Xms: 64m
+        -Xmx: 128m
+    template:
+      pod:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - {key: dameokja.com/node-role, operator: In, values: [system]}
+        tolerations:
+          - {key: dameokja.com/system, operator: Equal, value: "true", effect: NoSchedule}

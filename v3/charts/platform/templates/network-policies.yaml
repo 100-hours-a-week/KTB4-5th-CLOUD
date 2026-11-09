@@ -1,5 +1,6 @@
 {{- range $env, $cfg := .Values.environments }}
 {{- $kafka := printf "%s-kafka" $env }}
+{{- $dbCidr := required (printf "%s DB 주소(environments.%s.dbCidr)가 필요합니다." $env $env) $cfg.dbCidr }}
 ---
 # {{ $env }}는 기본 차단입니다.
 apiVersion: networking.k8s.io/v1
@@ -233,7 +234,7 @@ spec:
       ports:
         - {protocol: TCP, port: 9092}
     - to:
-        - ipBlock: {cidr: {{ $cfg.dbCidr }}}
+        - ipBlock: {cidr: {{ $dbCidr }}}
       ports:
         - {protocol: TCP, port: 3306}
     - to:
@@ -263,7 +264,7 @@ spec:
       ports:
         - {protocol: TCP, port: 9092}
     - to:
-        - ipBlock: {cidr: {{ $cfg.dbCidr }}}
+        - ipBlock: {cidr: {{ $dbCidr }}}
       ports:
         - {protocol: TCP, port: 5432}
     - to:
