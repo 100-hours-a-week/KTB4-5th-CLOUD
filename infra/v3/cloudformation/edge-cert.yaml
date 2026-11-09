@@ -10,6 +10,9 @@ Parameters:
   # 공용 배포가 함께 받는 도메인(dev 외). 설계상 prod(dameokja.com)도 나중에 여기에 더합니다.
   StageDomainName:
     Type: String
+  # v3 prod(dameokja.com). 공용 배포가 dev·stage·prod를 함께 받습니다.
+  ProdDomainName:
+    Type: String
 Resources:
   Certificate:
     Type: AWS::CertificateManager::Certificate
@@ -30,9 +33,23 @@ Resources:
         - {DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId}
         - {DomainName: !Ref StageDomainName, HostedZoneId: !Ref HostedZoneId}
       Tags: [{Key: Name, Value: dameokja-v3-edge-shared}]
+  # dev·stage·prod를 함께 담는 인증서. 위 SharedCertificate는 edge가 옮겨 간 뒤에도 남겨 둡니다(같은 이유).
+  ProdSharedCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames: [!Ref StageDomainName, !Ref ProdDomainName]
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - {DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId}
+        - {DomainName: !Ref StageDomainName, HostedZoneId: !Ref HostedZoneId}
+        - {DomainName: !Ref ProdDomainName, HostedZoneId: !Ref HostedZoneId}
+      Tags: [{Key: Name, Value: dameokja-v3-edge-prod-shared}]
 Outputs:
   # 리전이 달라 Export로 넘길 수 없어 edge 파라미터에 적습니다.
   CertificateArn:
     Value: !Ref Certificate
   SharedCertificateArn:
     Value: !Ref SharedCertificate
+  ProdSharedCertificateArn:
+    Value: !Ref ProdSharedCertificate
