@@ -5,5 +5,5 @@
   {"ParameterKey": "AppSubnetMySqlHost", "ParameterValue": "10.20.32.0/255.255.240.0"},
   {"ParameterKey": "AmiId", "ParameterValue": "ami-05becc39a92b78fa5"},
   {"ParameterKey": "InstanceType", "ParameterValue": "t3.medium"},
-  {"ParameterKey": "SourceDbSecurityGroupId", "ParameterValue": ""}
+  {"ParameterKey": "SourceDbSecurityGroupId", "ParameterValue": "sg-058cf8b2c520e1ebd"}
 ]
