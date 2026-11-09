@@ -17,8 +17,6 @@ env:
   SPRING_APPLICATION_JSON: '{"management":{"metrics":{"distribution":{"percentiles-histogram":{"http.server.requests":true},"slo":{"http.server.requests":"100ms,200ms,500ms,1s,2s,5s"}}}}}'
   CORS_ALLOWED_ORIGINS: https://dameokja.com
   SERVER_TOMCAT_MBEANREGISTRY_ENABLED: 'true'
-  # v2 prod Task 환경 변수(infra/v2/ecs/prod/backend.json)와 같음
-  SPRING_JPA_SHOWSQL: 'false'
   SPRING_DATA_REDIS_HOST: redis.prod.svc.cluster.local
   SPRING_DATA_REDIS_PORT: '6379'
   AI_BASE_URL: http://ai-api.prod.svc.cluster.local:8000
