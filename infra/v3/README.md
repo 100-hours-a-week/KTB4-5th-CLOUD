@@ -263,7 +263,7 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
 |---|---|---|
 | 도메인 | stage.dameokja.com | dameokja.com (공용 CloudFront, 가중치 레코드 SetIdentifier v3) |
 | Node | stage-app NodePool(라벨·taint stage) | prod-app NodePool(라벨·taint prod), 같은 사양·상한 |
-| DB | stage-db, 빈 스키마로 시작 | prod-db, v2 prod DB 데이터를 한 번 옮김(`v3/environments/prod/migrate-db.sh`) |
+| DB | stage-db, 빈 스키마로 시작 | prod-db, v2 prod DB 데이터를 한 번 옮긴 뒤(`migrate-db.sh`) BE 스키마로 올림(`migrate-schema.sh`) |
 | Secret | v2 stage SSM | v2 prod SSM(`v3/environments/prod/seal-secrets.sh`), BE DB URL은 v2 Task 환경 변수에서 호스트만 바꿈 |
 | Kafka·Redis | stage-data(브로커 3) | prod-data(브로커 3), 토픽 prod.dameokja.* |
 | 켜기·끄기 | v3-stage-power | 없음(항상 켬) |
@@ -294,6 +294,16 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
    v3/environments/prod/migrate-db.sh run     # 대상이 비어 있을 때만 복원, 표별 행 수 대조
    ```
    v2 Redis(세션 등)는 옮기지 않습니다. 전환 뒤 사용자가 다시 로그인해야 할 수 있습니다.
+
+   이어서 **스키마 마이그레이션**을 합니다. v2 prod 스키마(표 18개)는 BE main이 기대하는 스키마(표 30개)보다 뒤처져 있어,
+   그대로 6단계로 가면 BE(ddl-auto=validate)가 뜨지 않습니다. 6단계는 Argo 자동 동기화로 BE가 바로 배포되므로 반드시 그 전에 합니다.
+   BE 저장소(기본 `../KTB4-5th-BE`)를 `git fetch origin dev`로 받아 둡니다(SQL은 BE dev `ade4bcf`로 고정).
+   ```bash
+   v3/environments/prod/migrate-schema.sh check   # 읽기만: app ↔ BE db/schema.sql 차이 출력
+   v3/environments/prod/migrate-schema.sh run     # BE DDL → prod 보완(ingredients.owner_id) → BE DML, 끝에 차이 0·DML OK 확인
+   ```
+   DDL은 되돌릴 수 없습니다. run이 실패하면 다시 실행하지 말고, 대상 DB를 비운 뒤 `migrate-db.sh run`부터 다시 합니다.
+   DDL이 `analysis_feedbacks.item_id`를 지우므로 원본은 위 v2 DB 스냅샷으로 보관합니다.
 6. **Secret·앱**: `AWS_PROFILE=dameokja-aws-cli v3/environments/prod/seal-secrets.sh` → secrets PR merge →
    ```bash
    kubectl $K -n prod annotate secret cloud-secrets sealedsecrets.bitnami.com/managed=true
@@ -304,7 +314,10 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
    BE가 Secret을 찾지 못해 처음 한 번 재시작할 수 있습니다. FE 2·BE 2·AI 1 Ready와 Target Group healthy를 확인합니다.
 7. **edge apply**(2단계 값): DnsWeight 0이라 사용자 트래픽은 아직 바뀌지 않습니다. CloudFront로 사전 시험합니다.
    `curl --connect-to dameokja.com:443:<배포>.cloudfront.net:443 https://dameokja.com/manifest.webmanifest`, 로그인(Kakao redirect)·업로드·SSE.
-8. **DNS 전환**: edge `ProdDnsWeight` 100(PR → apply)과 v2 가중치 레코드 0을 함께 바꿉니다(TTL 300).
+8. **DNS 전환**: 반드시 **v3를 먼저 100으로 올린 뒤** v2 가중치 레코드를 0으로 내립니다.
+   Route 53은 같은 이름의 가중치가 모두 0이면 모든 레코드에 균등 분배하므로, v2를 먼저 0으로 내리면 그 사이 트래픽이
+   남아 있는 v1 레코드(가중치 0, 43.203.168.253)로도 갑니다. 전환 전에 v1 레코드를 지우는 것을 권합니다.
+   v3·v2는 alias 레코드라 TTL은 대상(CloudFront·ALB)의 60초를 따릅니다.
    `aws route53 list-resource-record-sets --hosted-zone-id Z08470472LJSW357027J9 --query "ResourceRecordSets[?Name=='dameokja.com.']"`
 9. **정리**: prod-db `SourceDbSecurityGroupId`를 비우고 apply(v2 DB 접근 닫기). v2 DB EC2는 확인 기간 뒤 중지합니다(스냅샷 보관).
 
