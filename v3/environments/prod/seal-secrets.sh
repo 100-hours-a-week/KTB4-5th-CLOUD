@@ -35,8 +35,8 @@ ssm be-secrets /dameokja-v2-prod \
   S3_PRESIGNED_URL_TTL S3_MAX_UPLOAD_BYTES S3_ALLOWED_CONTENT_TYPES AI_INTERNAL_API_KEY \
   AI_CONNECT_TIMEOUT AI_READ_TIMEOUT ANALYSIS_JOB_TTL KAKAO_REST_API_KEY KAKAO_CLIENT_SECRET \
   KAKAO_REDIRECT_URI OAUTH_FRONTEND_BASE_URL
-# v2 prod에 없던 키는 stage와 같이 dev 값을 씁니다(SENTRY_ENVIRONMENT로 환경을 나눔).
-ssm be-secrets /dameokja-v2-dev SENTRY_DSN
+# v2 prod에 없던 키는 dev 값을 씁니다(SENTRY_ENVIRONMENT로 환경을 나눔). dev SSM은 v3 경로로 옮겨졌습니다(#309).
+ssm be-secrets /dameokja-v3-dev SENTRY_DSN
 # v2 prod Task 환경 변수의 URL에서 호스트(db.prod.dameokja.internal)만 v3 prod DB로 바꿉니다.
 printf %s "jdbc:mysql://$DB_HOST:3306/app?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&connectTimeout=3000&socketTimeout=10000" > "$tmp/be-secrets/SPRING_DATASOURCE_URL"
 
@@ -51,7 +51,7 @@ ssm ai-secrets /dameokja-v2-prod-ai \
 cmp -s "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY" && cmp -s "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/CALLBACK_API_KEY" \
   || { echo "v2 prod SSM의 AI_INTERNAL_API_KEY·INTERNAL_API_KEY·CALLBACK_API_KEY가 서로 다릅니다" >&2; exit 1; }
 # v2 prod에 없던 키는 stage와 같이 dev 값을 씁니다.
-ssm ai-secrets /dameokja-v2-dev-ai TAVILY_API_KEY
+ssm ai-secrets /dameokja-v3-dev-ai TAVILY_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
