@@ -20,7 +20,7 @@ environments:
     podSecurityGroups: {fe: '', be: '', ai-api: '', redis: '', kafka: ''}
   prod:
     # prod-db 스택 Output(DbPrivateIp)/32. apply 뒤 실제 값으로 바꿔 커밋합니다(비어 있으면 설치가 실패합니다).
-    dbCidr: ''
+    dbCidr: 10.20.47.150/32
     kafkaBrokers: 3
     # prod-pod-sg 스택 Output. 5개 모두 필요합니다.
     podSecurityGroups: {fe: '', be: '', ai-api: '', redis: '', kafka: ''}
