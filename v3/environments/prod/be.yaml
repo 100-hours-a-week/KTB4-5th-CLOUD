@@ -1,0 +1,44 @@
+# 처음 이미지는 2026-11-09 stage와 같은 digest입니다. 이후에는 prod 승인 흐름(prod-approval.yml → v3-prod-image.yml)만 바꿉니다.
+name: be
+port: 8080
+colors:
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:562b7091382f24a50e4977e074eaad0a80ff5118bdd56d82ec34513501508f84, replicas: 2}
+  green: {image: '', replicas: 0}
+# v2 prod SSM 값(be-secrets)과 Redis 비밀번호(cloud-secrets의 REDIS_PASSWORD)
+secretName: be-secrets
+extraSecretNames: [cloud-secrets]
+iamRoleArn: arn:aws:iam::906462447513:role/dameokja-v3-prod-be
+# 이미지 USER app(10001)
+runAsUser: 10001
+# v2 prod와 주소가 달라지는 값만 둡니다. 같은 키는 be-secrets에서 뺍니다(seal-secrets.sh).
+env:
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,prometheus
+  # 점이 있는 메트릭 이름의 맵 키를 보존하려고 Spring JSON 설정을 사용합니다.
+  SPRING_APPLICATION_JSON: '{"management":{"metrics":{"distribution":{"percentiles-histogram":{"http.server.requests":true},"slo":{"http.server.requests":"100ms,200ms,500ms,1s,2s,5s"}}}}}'
+  CORS_ALLOWED_ORIGINS: https://dameokja.com
+  SERVER_TOMCAT_MBEANREGISTRY_ENABLED: 'true'
+  SPRING_DATA_REDIS_HOST: redis.prod.svc.cluster.local
+  SPRING_DATA_REDIS_PORT: '6379'
+  AI_BASE_URL: http://ai-api.prod.svc.cluster.local:8000
+  # Strimzi prod-kafka 내부 PLAINTEXT. 토픽 이름은 <KAFKA_ENV>.dameokja.* (prod-data 차트)
+  KAFKA_BOOTSTRAP_SERVERS: prod-kafka-kafka-bootstrap.prod.svc.cluster.local:9092
+  KAFKA_ENV: prod
+  # BE Kafka Consumer 시작(BE 기본값 false). v2 prod SSM에는 없는 키
+  KAFKA_LISTENER_ENABLED: 'true'
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {cpu: '1', memory: 2Gi}
+# Spring Boot는 Kubernetes 안에서 liveness·readiness 그룹을 스스로 켭니다.
+startupProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 30}
+readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
+livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}
+# v2 prod와 같은 경로(/api, Swagger)
+route:
+  hostname: dameokja.com
+  pathPrefixes: [/api, /swagger-ui, /v3/api-docs]
+  healthCheckPath: /actuator/health/readiness
+# prod-app Node(라벨·taint)에만 둡니다.
+nodeSelector:
+  dameokja.com/environment: prod
+tolerations:
+  - {key: dameokja.com/environment, operator: Equal, value: prod, effect: NoSchedule}
