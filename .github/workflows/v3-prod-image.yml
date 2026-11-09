@@ -1,0 +1,72 @@
+name: v3 prod 이미지 반영
+
+# prod-approval.yml이 stage 성공을 확인한 뒤 호출합니다. GitHub Environments "prod" 승인을 받은 뒤에만 실행됩니다.
+# v3/environments/prod/<앱>.yaml의 활성 색상 이미지를 바꿔 main에 커밋하고, Argo prod 앱(자동 동기화)이 그 커밋을 배포합니다.
+# v2 ECS 배포(ecs-deploy.yml)를 대신합니다. 값 바꾸기는 v3-stage-image.yml과 같은 방식입니다.
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: fe, be, ai-api
+        type: string
+        required: true
+      image:
+        description: stage에서 검증한 GHCR image@sha256 digest
+        type: string
+        required: true
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: prod
+    permissions:
+      contents: write
+    # prod 이미지 커밋은 하나씩 실행합니다. stage 이미지 반영과 겹치면 아래 pull --rebase로 맞춥니다.
+    # (같은 group을 쓰면 대기 중인 stage 실행이 취소될 수 있어 나눕니다.)
+    concurrency:
+      group: v3-prod-image
+      cancel-in-progress: false
+    env:
+      APP: ${{ inputs.app }}
+      IMAGE: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: 100-hours-a-week/KTB4-5th-CLOUD
+          ref: main
+      - name: 이미지 값 바꾸기
+        shell: python
+        run: |
+          import os, re, pathlib
+          app, image = os.environ["APP"], os.environ["IMAGE"]
+          if app not in ("fe", "be", "ai-api"):
+              raise SystemExit(f"알 수 없는 앱입니다: {app}")
+          repo = "ai" if app == "ai-api" else app
+          if not re.fullmatch(rf"ghcr\.io/100-hours-a-week/ktb4-5th-{repo}@sha256:[0-9a-f]{{64}}", image):
+              raise SystemExit(f"{app}의 GHCR digest가 아닙니다: {image}")
+          path = pathlib.Path(f"v3/environments/prod/{app}.yaml")
+          text = path.read_text(encoding="utf-8")
+          active = re.search(r"^activeColor: (\w+)$", text, re.M)
+          color = active.group(1) if active else "blue"
+          # 주석을 지키려고 YAML을 다시 쓰지 않고 활성 색상 줄의 image 값만 바꿉니다.
+          text, count = re.subn(rf"^(  {color}: \{{image: )[^,]+,", rf"\g<1>{image},", text, flags=re.M)
+          if count != 1:
+              raise SystemExit(f"{path}에서 {color} 이미지 줄을 찾지 못했습니다.")
+          path.write_text(text, encoding="utf-8")
+      - name: main에 커밋
+        run: |
+          if git diff --quiet; then echo "이미 같은 이미지입니다."; exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -am "chore(v3): prod $APP 이미지 갱신" -m "$IMAGE"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            sleep 5
+            [ "$i" = 3 ] && exit 1
+          done
+          {
+            echo '### v3 prod 이미지 반영'
+            printf -- '- 앱: `%s`\n- 이미지: `%s`\n' "$APP" "$IMAGE"
+            echo '- Argo prod 앱이 자동 동기화로 배포합니다(보통 3분 이내). Grafana·`kubectl -n prod get pods`로 확인합니다.'
+          } >> "$GITHUB_STEP_SUMMARY"
