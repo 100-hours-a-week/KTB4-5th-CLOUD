@@ -7,10 +7,10 @@ Parameters:
     Type: AWS::Route53::HostedZone::Id
   DomainName:
     Type: String
-  # 공용 배포가 함께 받는 도메인(dev 외). 설계상 prod(dameokja.com)도 나중에 여기에 더합니다.
+  # 공용 배포가 함께 받는 도메인(dev 외).
   StageDomainName:
     Type: String
-  # v3 prod(dameokja.com). 공용 배포가 dev·stage·prod를 함께 받습니다.
+  # v3 prod(dameokja.com). ProdSharedCertificate에만 들어갑니다.
   ProdDomainName:
     Type: String
 Resources:
