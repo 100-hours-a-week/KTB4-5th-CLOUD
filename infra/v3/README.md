@@ -320,6 +320,16 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
    ```
    DDL은 되돌릴 수 없습니다. run이 실패하면 다시 실행하지 말고, 대상 DB를 비운 뒤 `migrate-db.sh run`부터 다시 합니다.
    DDL이 `analysis_feedbacks.item_id`를 지우므로 원본은 위 v2 DB 스냅샷으로 보관합니다.
+
+   이어서 **AI(PostgreSQL) 마이그레이션**을 합니다. v2 prod `receipt_ai`에는 AI 저장소 `fastapi/database/migrations` 019까지만 있어,
+   그대로면 AI가 추천 요청마다 `recipe_ai.recommendation_results` 없음으로 실패합니다(2026-11-09 전환 때 발생).
+   stage와 같이 020(레시피 저장)·022(추천 결과)만 적용합니다. 021(pgvector 필요)·023·024는 현재 AI 이미지가 쓰지 않습니다.
+   소유자가 `receipt_ai`가 되도록 그 역할로 실행하고, 적용 뒤 `pg_dump -n recipe_ai --schema-only`를 stage와 비교합니다.
+   ```bash
+   # v3 prod DB 서버에서(SSM). 파일은 AI 저장소 main에서 가져옵니다.
+   sudo -u postgres psql -d receipt_ai -v ON_ERROR_STOP=1 -c 'SET ROLE receipt_ai' -f 020_recipe_storage.sql
+   sudo -u postgres psql -d receipt_ai -v ON_ERROR_STOP=1 -c 'SET ROLE receipt_ai' -f 022_recipe_recommendation_results.sql
+   ```
 6. **Secret·앱**: `AWS_PROFILE=dameokja-aws-cli v3/environments/prod/seal-secrets.sh` → secrets PR merge →
    ```bash
    kubectl $K -n prod annotate secret cloud-secrets sealedsecrets.bitnami.com/managed=true
