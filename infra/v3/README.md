@@ -16,7 +16,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 6 | dameokja-v3-storage-addon | cloudformation/storage-addon.yaml | EBS CSI·Metrics Server 1 Replica Ready |
 | 7 | dameokja-v3-dev-pod-sg | cloudformation/dev-pod-sg.yaml | dev FE·BE·AI·Redis·Kafka Pod SG |
 | 8 | dameokja-v3-dev-data-access | cloudformation/dev-data-access.yaml | 기본 VPC Peering·경로, dev DB SG의 BE→3306·AI→5432, dev DB EC2 PostgreSQL 설치 |
-| 9 | dameokja-v3-dev-app-iam | cloudformation/dev-app-iam.yaml | dev BE·AI IRSA 역할(S3 image/ 접두사) |
+| 9 | dameokja-v3-dev-app-iam | cloudformation/dev-app-iam.yaml | dev BE·AI IRSA 역할(S3 image/ 접두사), 팀 그룹 dameokja-iam의 dev SSM(`/dameokja-v3-dev*`) 관리 정책 |
 | 10 | dameokja-v3-observability | cloudformation/observability.yaml | 관측 EC2(Prometheus·Loki·Grafana), Association 성공 |
 | 11 | dameokja-v3-stage-pod-sg | cloudformation/stage-pod-sg.yaml | stage FE·BE·AI·Redis·Kafka Pod SG, Kafka 브로커 사이 9090·9091, Gateway ALB→stage FE·BE(dev-pod-sg의 ALB SG Export를 먼저 apply) |
 | 12 | dameokja-v3-stage-db | cloudformation/stage-db.yaml | stage DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공(stage-pod-sg 뒤, 비밀번호는 prod SSM `/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD`·`/dameokja-v2-prod-ai/POSTGRES_PASSWORD`와 같은 값) |
@@ -169,10 +169,17 @@ FE·BE·AI는 `v3/charts/application` 하나로 배포하고 환경 값은 `v3/e
 | be | be.dev.svc.cluster.local:8080 | be-secrets, cloud-secrets(REDIS_PASSWORD) | dameokja-v3-dev-be |
 | ai-api | ai-api.dev.svc.cluster.local:8000 | ai-secrets | dameokja-v3-dev-ai-api |
 
-Secret 값은 v2 dev SSM(`/dameokja-v2-dev`, `-ai`, `-fe`)과 Secrets Manager `dameokja-v2-dev/ghcr`에서 옮깁니다. 클러스터 주소가 바뀌는 키(AI_BASE_URL, SPRING_DATA_REDIS_*, CALLBACK_URL, LOG_DIR)는 Secret에서 빼고 values의 env(ConfigMap)로 정합니다. AI의 DATABASE_URL은 호스트만 dev DB EC2로 바꿉니다. 관리자 PC Git Bash에서 kubeseal 0.41.2(Controller와 같은 버전)를 설치한 뒤 실행하고, 생성된 `secrets/*.yaml`만 커밋합니다. 인증서는 `v3/platform/sealed-secrets-cert.pem`(2036년 만료)입니다.
+Secret 값은 dev SSM(`/dameokja-v3-dev`, `-ai`, `-fe`)과 Secrets Manager `dameokja-v2-dev/ghcr`에서 옮깁니다. 팀원은 IAM 그룹 dameokja-iam(정책 `dameokja-v3-dev-ssm-team`)으로 이 SSM 경로 값을 바꿀 수 있습니다. 클러스터 주소가 바뀌는 키(AI_BASE_URL, SPRING_DATA_REDIS_*, CALLBACK_URL, LOG_DIR)는 Secret에서 빼고 values의 env(ConfigMap)로 정합니다. AI의 DATABASE_URL은 호스트만 dev DB EC2로 바꿉니다. 관리자 PC Git Bash에서 kubeseal 0.41.2(Controller와 같은 버전)를 설치한 뒤 실행하고, 생성된 `secrets/*.yaml`만 커밋합니다. 인증서는 `v3/platform/sealed-secrets-cert.pem`(2036년 만료)입니다.
 
 ```bash
 AWS_PROFILE=dameokja-aws-cli v3/environments/dev/seal-secrets.sh
+```
+
+dev SSM 경로는 v2 이름(`/dameokja-v2-dev*`)에서 옮겼습니다. dev-app-iam 스택을 배포한 뒤 처음 한 번 관리자가 값을 복사합니다(stage와 같은 방식, 값은 출력하지 않고 이미 있는 이름은 덮어쓰지 않습니다). Secret 값은 그대로라 다시 만들지 않아도 됩니다. 확인한 뒤 v2 경로 값은 지웁니다(스크립트가 마지막에 명령을 보여 줍니다).
+
+```bash
+AWS_PROFILE=dameokja-aws-cli v3/environments/dev/copy-ssm-from-v2.sh           # 복사할 이름만 출력
+AWS_PROFILE=dameokja-aws-cli v3/environments/dev/copy-ssm-from-v2.sh --apply   # 복사
 ```
 
 Argo CD 정의는 `v3/argocd/`에 있고 dev-apps 프로젝트는 dev Namespace의 Deployment·Service·ConfigMap·ServiceAccount·SealedSecret만 허용합니다. 3단계에서 직접 만든 cloud-secrets는 SealedSecret이 넘겨받도록 표시한 뒤 동기화합니다. 동기화는 수동이며 secrets를 먼저 합니다.
@@ -191,7 +198,7 @@ NetworkPolicy는 FE→BE, BE↔AI(요청·콜백), BE→Redis·Kafka·MySQL, AI�
 
 dev와 같은 `v3/charts/application`을 쓰고 값은 `v3/environments/stage/<앱>.yaml`입니다. FE·BE는 2개, AI는 분석 결과를 메모리에 두므로 v2 stage처럼 1개입니다. 모두 stage-app Node(라벨·taint)에만 놓입니다. 이미지는 dev에서 확인한 digest를 수동으로 올립니다.
 
-Secret은 stage SSM(`/dameokja-v3-stage`, `-ai`, `-fe`)에서 옮기고, DB 계정·비밀번호는 prod SSM과 같은 값, DB 주소는 stage DB EC2입니다. stage SSM에 없는 SENTRY_DSN·TAVILY_API_KEY는 dev 값을 씁니다. 팀원은 IAM 그룹 dameokja-iam(정책 `dameokja-v3-stage-ssm-team`)으로 이 경로 값을 바꿀 수 있습니다. 값을 바꾼 뒤에는 관리자가 아래 스크립트로 Secret을 다시 만들어 커밋합니다.
+Secret은 stage SSM(`/dameokja-v3-stage`, `-ai`, `-fe`)에서 옮기고, DB 계정·비밀번호는 prod SSM과 같은 값, DB 주소는 stage DB EC2입니다. stage SSM에 없는 SENTRY_DSN·TAVILY_API_KEY는 dev 값(`/dameokja-v3-dev*`)을 씁니다. 팀원은 IAM 그룹 dameokja-iam(정책 `dameokja-v3-stage-ssm-team`)으로 이 경로 값을 바꿀 수 있습니다. 값을 바꾼 뒤에는 관리자가 아래 스크립트로 Secret을 다시 만들어 커밋합니다.
 
 stage SSM 경로는 v2 이름(`/dameokja-v2-stage*`)에서 옮겼습니다. 처음 한 번 관리자가 값을 복사합니다(값은 출력하지 않고, 이미 있는 이름은 덮어쓰지 않습니다).
 

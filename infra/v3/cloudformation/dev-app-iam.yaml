@@ -59,8 +59,8 @@ Resources:
                 Action: s3:GetObject
                 Resource: !Sub arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*
 
-  # 팀원(IAM 그룹 dameokja-iam)이 dev 설정값(SSM /dameokja-v2-dev*)을 관리합니다. v3 dev Secret(seal-secrets.sh)의 원본입니다.
-  # v2 dev 스택의 dameokja-v2-dev-ssm-team과 같은 권한이며, 그 스택을 지우기 전에 옮겼습니다(#285).
+  # 팀원(IAM 그룹 dameokja-iam)이 dev 설정값(SSM /dameokja-v3-dev*)을 관리합니다. v3 dev Secret(seal-secrets.sh)의 원본입니다.
+  # v2 dev 스택의 dameokja-v2-dev-ssm-team과 같은 권한이며, 그 스택을 지우기 전에 옮겼습니다(#285). 경로는 v2 이름에서 v3 이름으로 옮겼습니다.
   TeamSsmPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -73,8 +73,8 @@ Resources:
             Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath, ssm:GetParameterHistory, ssm:PutParameter,
               ssm:DeleteParameter, ssm:DeleteParameters, ssm:AddTagsToResource, ssm:ListTagsForResource]
             Resource:
-              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev/*
-              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-dev-*
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-dev/*
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-dev-*
           - Effect: Allow
             Action: ssm:DescribeParameters
             Resource: '*'

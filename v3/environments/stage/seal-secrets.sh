@@ -33,7 +33,7 @@ ssm be-secrets /dameokja-v3-stage \
   KAKAO_REDIRECT_URI OAUTH_FRONTEND_BASE_URL
 ssm be-secrets /dameokja-v2-prod SPRING_DATASOURCE_USERNAME SPRING_DATASOURCE_PASSWORD DB_USERNAME DB_PASSWORD
 # stage SSM에 없는 키는 dev 값을 씁니다(SENTRY_ENVIRONMENT로 환경을 나눔).
-ssm be-secrets /dameokja-v2-dev SENTRY_DSN
+ssm be-secrets /dameokja-v3-dev SENTRY_DSN
 sed -i -E "s#jdbc:mysql://[^:/]+:3306/#jdbc:mysql://$DB_HOST:3306/#" "$tmp/be-secrets/SPRING_DATASOURCE_URL"
 grep -q "jdbc:mysql://$DB_HOST:3306/" "$tmp/be-secrets/SPRING_DATASOURCE_URL" || { echo "SPRING_DATASOURCE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
@@ -49,7 +49,7 @@ ssm ai-secrets /dameokja-v2-prod-ai DATABASE_URL
 # dev·prod처럼 BE 값 하나를 세 키에 씁니다.
 cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY"
 cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/CALLBACK_API_KEY"
-ssm ai-secrets /dameokja-v2-dev-ai TAVILY_API_KEY
+ssm ai-secrets /dameokja-v3-dev-ai TAVILY_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
