@@ -37,7 +37,9 @@ mode=$1; SRC=$2; REGION=ap-northeast-2
 MYPW=$(aws ssm get-parameter --region $REGION --name /dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD --with-decryption --query Parameter.Value --output text)
 PGPW=$(aws ssm get-parameter --region $REGION --name /dameokja-v2-prod-ai/POSTGRES_PASSWORD --with-decryption --query Parameter.Value --output text)
 cnf=$(mktemp); chmod 600 "$cnf"; trap 'rm -f "$cnf" /tmp/receipt_ai.dump /tmp/receipt_ai.list' EXIT
-printf '[client]\nuser=dameokja\npassword=%s\nhost=%s\n' "$MYPW" "$SRC" > "$cnf"
+# 옵션 파일에서 # 뒤는 주석이라 값을 큰따옴표로 감쌉니다(\·" 이스케이프). v2 prod 비밀번호에 #이 있습니다.
+q=${MYPW//\\/\\\\}; q=${q//\"/\\\"}
+printf '[client]\nuser=dameokja\npassword="%s"\nhost=%s\n' "$q" "$SRC" > "$cnf"
 export PGPASSWORD=$PGPW
 
 src_mysql() { mysql --defaults-extra-file="$cnf" -N -B "$@"; }
