@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# v2 dev SSM·Secrets Manager 값으로 dev SealedSecret을 만듭니다. 관리자 PC Git Bash에서 실행합니다.
+# dev SSM 값(/dameokja-v3-dev*)과 Secrets Manager GHCR 값으로 dev SealedSecret을 만듭니다. 관리자 PC Git Bash에서 실행합니다.
 # 값은 화면에 출력하지 않고, 평문 임시 폴더(Git 제외 private/ 아래)는 끝나면 지웁니다. 암호문(secrets/*.yaml)만 Git에 올립니다.
 # 키 목록은 infra/v2/ecs/dev/*.json의 secrets에서 environments/dev/*.yaml env(ConfigMap)가 정하는 키를 뺀 것입니다.
 set -euo pipefail
-# Git Bash가 /dameokja-v2-dev 같은 인자를 Windows 경로로 바꾸지 않게 합니다. 그래서 아래 경로는 모두 상대 경로입니다.
+# Git Bash가 /dameokja-v3-dev 같은 인자를 Windows 경로로 바꾸지 않게 합니다. 그래서 아래 경로는 모두 상대 경로입니다.
 export MSYS_NO_PATHCONV=1
 cd "$(git rev-parse --show-toplevel)"
 K=(--kubeconfig infra/v3/private/kubeconfig)
@@ -24,7 +24,7 @@ seal() {
 
 # BE: AI_BASE_URL·SPRING_DATA_REDIS_HOST·SPRING_DATA_REDIS_PORT는 ConfigMap이 정합니다.
 # SENTRY_DSN은 v2 ECS JSON에 빠져 있었지만 SSM에 있고 BE application.yml이 읽어 넣습니다(#240).
-ssm be-secrets /dameokja-v2-dev \
+ssm be-secrets /dameokja-v3-dev \
   KTB_REFRIGERATOR_ID SERVER_PORT SERVER_FORWARD_HEADERS_STRATEGY SPRING_DATASOURCE_URL \
   SPRING_DATASOURCE_USERNAME SPRING_DATASOURCE_PASSWORD SPRING_JPA_HIBERNATE_DDL_AUTO \
   DB_USERNAME DB_PASSWORD JWT_SECRET AUTH_COOKIE_SECURE PUSH_AUTH_ENCRYPTION_KEY \
@@ -35,7 +35,7 @@ ssm be-secrets /dameokja-v2-dev \
   AI_CONNECT_TIMEOUT AI_READ_TIMEOUT ANALYSIS_JOB_TTL KAKAO_REST_API_KEY KAKAO_CLIENT_SECRET \
   KAKAO_REDIRECT_URI OAUTH_FRONTEND_BASE_URL SENTRY_DSN
 # AI: CALLBACK_URL·LOG_DIR은 ConfigMap이 정합니다. DB는 v2 AI EC2 로컬 PG에서 dev DB EC2로 옮겼습니다.
-ssm ai-secrets /dameokja-v2-dev-ai \
+ssm ai-secrets /dameokja-v3-dev-ai \
   APP_ENV INTERNAL_API_KEY LOG_LEVEL LOG_RETENTION_DAYS ANALYSIS_QUEUE_MAXSIZE \
   ANALYSIS_RESULT_TTL_SECONDS ANALYSIS_RESULT_MAX_ENTRIES IMAGE_SOURCE S3_REGION \
   S3_ALLOWED_PREFIX OLLAMA_MODEL CALLBACK_TIMEOUT_SECONDS CALLBACK_MAX_ATTEMPTS S3_BUCKET \
@@ -44,7 +44,7 @@ ssm ai-secrets /dameokja-v2-dev-ai \
 sed -i 's#@127.0.0.1:5432/#@172.31.4.192:5432/#' "$tmp/ai-secrets/DATABASE_URL"
 grep -q '@172.31.4.192:5432/' "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 # FE: v2에서 String 타입이지만 Webhook 주소라 Secret으로 둡니다.
-ssm fe-secrets /dameokja-v2-dev-fe DISCORD_BUG_REPORT_WEBHOOK_URL
+ssm fe-secrets /dameokja-v3-dev-fe DISCORD_BUG_REPORT_WEBHOOK_URL
 # Redis 비밀번호는 3단계에서 클러스터에 직접 만든 값을 그대로 옮깁니다.
 mkdir -p "$tmp/cloud-secrets"
 kubectl "${K[@]}" -n dev get secret cloud-secrets -o jsonpath='{.data.REDIS_PASSWORD}' | base64 -d > "$tmp/cloud-secrets/REDIS_PASSWORD"
