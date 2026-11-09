@@ -54,7 +54,6 @@ Resources:
       SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
       Tags: [{Key: Name, Value: dameokja-v3-prod-db}]
 
-
   # 데이터 이전: v2 prod DB가 이 서버에서 오는 mysqldump·pg_dump 접속을 받습니다.
   # v2 MySQL 계정(dameokja@10.20.32.0/255.255.224.0)과 pg_hba(10.20.32.0/20)는 이 Subnet을 이미 허용합니다.
   MigrationMySqlFromProdDb:
@@ -172,8 +171,6 @@ Resources:
         - sudo -u postgres psql -d receipt_ai -c "CREATE EXTENSION IF NOT EXISTS pg_trgm"
 
 Outputs:
-  DbSecurityGroupId:
-    Value: !Ref DbSecurityGroup
   DbInstanceId:
     Value: !Ref DbInstance
   DbPrivateIp:

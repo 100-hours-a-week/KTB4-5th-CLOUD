@@ -22,10 +22,10 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 12 | dameokja-v3-stage-db | cloudformation/stage-db.yaml | stage DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공(stage-pod-sg 뒤, 비밀번호는 prod SSM `/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD`·`/dameokja-v2-prod-ai/POSTGRES_PASSWORD`와 같은 값) |
 | 13 | dameokja-v3-stage-app-iam | cloudformation/stage-app-iam.yaml | stage BE·AI IRSA 역할(S3 image/stage/ 접두사) |
 | 14 | dameokja-v3-stage-power | cloudformation/stage-power.yaml | stage 켜기·끄기용 GitHub OIDC 역할·kubectl 역할(Access Entry, 그룹 dameokja:stage-power) |
-| 15 | dameokja-v3-prod-pod-sg | cloudformation/prod-pod-sg.yaml | prod FE·BE·AI·Redis·Kafka Pod SG(stage-pod-sg와 같은 규칙), Gateway ALB→prod FE·BE |
-| 16 | dameokja-v3-prod-db | cloudformation/prod-db.yaml | prod DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공. 이전 동안 SourceDbSecurityGroupId로 v2 DB 접근 |
-| 17 | dameokja-v3-prod-app-iam | cloudformation/prod-app-iam.yaml | prod BE·AI IRSA 역할(S3 image/prod/ 접두사, v2 prod와 같은 객체) |
 | 15 | dameokja-v3-grafana-edge | cloudformation/grafana-edge.yaml | us-east-1. Grafana 인증서·CloudFront·VPC Origin(관측 EC2 3000)·grafana.dameokja.com 레코드(observability 뒤) |
+| 16 | dameokja-v3-prod-pod-sg | cloudformation/prod-pod-sg.yaml | prod FE·BE·AI·Redis·Kafka Pod SG(stage-pod-sg와 같은 규칙), Gateway ALB→prod FE·BE |
+| 17 | dameokja-v3-prod-db | cloudformation/prod-db.yaml | prod DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공. 이전 동안 SourceDbSecurityGroupId로 v2 DB 접근 |
+| 18 | dameokja-v3-prod-app-iam | cloudformation/prod-app-iam.yaml | prod BE·AI IRSA 역할(S3 image/prod/ 접두사, v2 prod와 같은 객체) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -272,7 +272,7 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
 
 ### prod 전환 순서
 
-각 단계가 끝난 것을 확인한 뒤 다음으로 갑니다. 5단계까지는 사용자 트래픽이 v2(지금은 #300으로 꺼짐)로 갑니다.
+각 단계가 끝난 것을 확인한 뒤 다음으로 갑니다. 8단계 전까지 사용자 트래픽은 v2(지금은 #300으로 꺼짐)로 갑니다.
 
 1. **CloudFormation**: prod-pod-sg → prod-app-iam → edge-cert(us-east-1, ProdSharedCertificate ISSUED 확인) 순서로 plan → apply.
    prod-db는 params의 `SourceDbSecurityGroupId`에 v2 DB SG ID를 넣는 PR을 먼저 merge한 뒤 apply합니다.
