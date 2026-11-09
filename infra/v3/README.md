@@ -23,6 +23,9 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 13 | dameokja-v3-stage-app-iam | cloudformation/stage-app-iam.yaml | stage BE·AI IRSA 역할(S3 image/stage/ 접두사), 팀 그룹 dameokja-iam의 stage SSM(`/dameokja-v3-stage*`) 관리 정책 |
 | 14 | dameokja-v3-stage-power | cloudformation/stage-power.yaml | stage 켜기·끄기용 GitHub OIDC 역할·kubectl 역할(Access Entry, 그룹 dameokja:stage-power) |
 | 15 | dameokja-v3-grafana-edge | cloudformation/grafana-edge.yaml | us-east-1. Grafana 인증서·CloudFront·VPC Origin(관측 EC2 3000)·grafana.dameokja.com 레코드(observability 뒤) |
+| 16 | dameokja-v3-prod-pod-sg | cloudformation/prod-pod-sg.yaml | prod FE·BE·AI·Redis·Kafka Pod SG(stage-pod-sg와 같은 규칙), Gateway ALB→prod FE·BE |
+| 17 | dameokja-v3-prod-db | cloudformation/prod-db.yaml | prod DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공. 이전 동안 SourceDbSecurityGroupId로 v2 DB 접근 |
+| 18 | dameokja-v3-prod-app-iam | cloudformation/prod-app-iam.yaml | prod BE·AI IRSA 역할(S3 image/prod/ 접두사, v2 prod와 같은 객체) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -101,8 +104,15 @@ helm $K upgrade --install platform v3/charts/platform -n tool --wait \
   --set environments.stage.podSecurityGroups.be=$(out dameokja-v3-stage-pod-sg BePodSecurityGroupId) \
   --set environments.stage.podSecurityGroups.ai-api=$(out dameokja-v3-stage-pod-sg AiPodSecurityGroupId) \
   --set environments.stage.podSecurityGroups.redis=$(out dameokja-v3-stage-pod-sg RedisPodSecurityGroupId) \
-  --set environments.stage.podSecurityGroups.kafka=$(out dameokja-v3-stage-pod-sg KafkaPodSecurityGroupId)
+  --set environments.stage.podSecurityGroups.kafka=$(out dameokja-v3-stage-pod-sg KafkaPodSecurityGroupId) \
+  --set environments.prod.podSecurityGroups.fe=$(out dameokja-v3-prod-pod-sg FePodSecurityGroupId) \
+  --set environments.prod.podSecurityGroups.be=$(out dameokja-v3-prod-pod-sg BePodSecurityGroupId) \
+  --set environments.prod.podSecurityGroups.ai-api=$(out dameokja-v3-prod-pod-sg AiPodSecurityGroupId) \
+  --set environments.prod.podSecurityGroups.redis=$(out dameokja-v3-prod-pod-sg RedisPodSecurityGroupId) \
+  --set environments.prod.podSecurityGroups.kafka=$(out dameokja-v3-prod-pod-sg KafkaPodSecurityGroupId)
 ```
+
+prod-pod-sg를 apply하기 전에는 위 prod 줄이 비어 platform 설치가 실패합니다. prod DB 주소(`environments.prod.dbCidr`)는 values.yaml에 커밋합니다.
 
 stage-app NodePool은 dev-app과 같은 사양이지만 `dameokja.com/environment=stage` 라벨·NoSchedule taint가 있어 stage Pod(같은 nodeSelector·toleration)만 받습니다. stage Pod를 0개로 줄이면 5분 뒤 stage Node도 0대가 됩니다. stage Kafka는 브로커 3개라 NetworkPolicy·Pod SG에서 브로커끼리 9090·9091을 엽니다.
 
@@ -229,7 +239,7 @@ Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실�
 
 ## stage 이미지와 prod 승인
 
-FE·BE·AI main CI는 이미지를 빌드한 뒤 "v3 stage 이미지 반영"(`v3-stage-image.yml`)을 실행합니다. 이 Workflow가 `v3/environments/stage/<앱>.yaml`의 활성 색상 이미지를 main에 커밋하고, 실행 이름은 `v3 stage <저장소> <실행ID>.<재시도> <이미지>`입니다. `prod-approval.yml`은 같은 이름의 성공 실행이 있어야 prod 배포를 진행합니다. stage가 꺼져 있으면 다음 켜기 때 그 이미지로 뜹니다.
+FE·BE·AI main CI는 이미지를 빌드한 뒤 "v3 stage 이미지 반영"(`v3-stage-image.yml`)을 실행합니다. 이 Workflow가 `v3/environments/stage/<앱>.yaml`의 활성 색상 이미지를 main에 커밋하고, 실행 이름은 `v3 stage <저장소> <실행ID>.<재시도> <이미지>`입니다. `prod-approval.yml`은 같은 이름의 성공 실행이 있어야 prod 배포를 진행합니다. 승인 뒤 배포는 v3 prod(`v3-prod-image.yml`)로 갑니다(아래 "prod"). stage가 꺼져 있으면 다음 켜기 때 그 이미지로 뜹니다.
 
 ## dev 외부 진입점
 
@@ -260,6 +270,74 @@ aws ssm start-session --target <ObservabilityInstanceId> --document-name AWS-Sta
 4. 대시보드 "v3 dev 개요"(uid dameokja-v3-dev)는 Association이 파일로 넣습니다. Node Ready·CPU·메모리, Pending Pod, Pod 재시작, BE 요청률·5xx·응답 시간(평균·최대), dev 로그를 봅니다. 화면에서 고칠 수 없으니 `observability.yaml`을 고쳐 다시 apply합니다. BE가 histogram bucket을 내보내지 않아 p95는 없습니다.
 
 스택을 지워도 데이터 EBS는 남습니다. 다시 쓰지 않으면 Output DataVolumeId의 볼륨을 직접 지웁니다.
+
+## prod (stage와 같은 구성)
+
+stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이는 아래뿐입니다.
+
+| 항목 | stage | prod |
+|---|---|---|
+| 도메인 | stage.dameokja.com | dameokja.com (공용 CloudFront, 가중치 레코드 SetIdentifier v3) |
+| Node | stage-app NodePool(라벨·taint stage) | prod-app NodePool(라벨·taint prod), 같은 사양·상한 |
+| DB | stage-db, 빈 스키마로 시작 | prod-db, v2 prod DB 데이터를 한 번 옮긴 뒤(`migrate-db.sh`) BE 스키마로 올림(`migrate-schema.sh`) |
+| Secret | v2 stage SSM | v2 prod SSM(`v3/environments/prod/seal-secrets.sh`), BE DB URL은 v2 Task 환경 변수에서 호스트만 바꿈 |
+| Kafka·Redis | stage-data(브로커 3) | prod-data(브로커 3), 토픽 prod.dameokja.* |
+| 켜기·끄기 | v3-stage-power | 없음(항상 켬) |
+| Argo 동기화 | 수동 | secrets 수동, 앱 자동(prune·selfHeal 끔) |
+| 이미지 | v3-stage-image.yml | prod-approval.yml → v3-prod-image.yml(Environment "prod" 승인 뒤 커밋) |
+
+### prod 전환 순서
+
+각 단계가 끝난 것을 확인한 뒤 다음으로 갑니다. 8단계 전까지 사용자 트래픽은 v2(지금은 #300으로 꺼짐)로 갑니다.
+
+1. **CloudFormation**: prod-pod-sg → prod-app-iam → edge-cert(us-east-1, ProdSharedCertificate ISSUED 확인) 순서로 plan → apply.
+   prod-db는 params의 `SourceDbSecurityGroupId`에 v2 DB SG ID를 넣는 PR을 먼저 merge한 뒤 apply합니다.
+   `aws ec2 describe-security-groups --filters Name=tag:Name,Values=dameokja-prod-db --query 'SecurityGroups[].GroupId'`
+2. **값 커밋(PR)**: `v3/charts/platform/values.yaml`의 `environments.prod.dbCidr`(prod-db DbPrivateIp/32),
+   `infra/v3/params/edge.json`의 `CertificateArn`(edge-cert ProdSharedCertificateArn)·`ProdDomainName`(dameokja.com). `ProdDnsWeight`는 0으로 둡니다.
+3. **클러스터 도구**: `kubectl apply -f v3/platform/namespaces.yaml`, strimzi·alloy·platform Helm upgrade("관리 도구 설치"의 명령).
+4. **prod 데이터 계층**: Kafka 브로커 3개라 prod Node(m7i.large) 3대가 새로 생깁니다.
+   ```bash
+   kubectl $K -n prod create secret generic cloud-secrets --from-literal=REDIS_PASSWORD="$(openssl rand -hex 24)"
+   helm $K upgrade --install prod-data v3/charts/prod-data -n prod --wait --timeout 15m
+   kubectl $K -n prod wait kafka/prod-kafka --for=condition=Ready --timeout=900s
+   helm $K upgrade prod-data v3/charts/prod-data -n prod --set topics.enabled=true --wait
+   kubectl $K -n prod wait kafkatopic --all --for=condition=Ready --timeout=300s
+   ```
+5. **DB 이전**: v2 prod 앱이 꺼진 상태(쓰기 없음)에서 합니다. 먼저 v2 DB EBS 스냅샷을 만들고 v2 DB EC2를 시작합니다.
+   ```bash
+   v3/environments/prod/migrate-db.sh check   # 접속·행 수 확인(읽기만)
+   v3/environments/prod/migrate-db.sh run     # 대상이 비어 있을 때만 복원, 표별 행 수 대조
+   ```
+   v2 Redis(세션 등)는 옮기지 않습니다. 전환 뒤 사용자가 다시 로그인해야 할 수 있습니다.
+
+   이어서 **스키마 마이그레이션**을 합니다. v2 prod 스키마(표 18개)는 BE main이 기대하는 스키마(표 30개)보다 뒤처져 있어,
+   그대로 6단계로 가면 BE(ddl-auto=validate)가 뜨지 않습니다. 6단계는 Argo 자동 동기화로 BE가 바로 배포되므로 반드시 그 전에 합니다.
+   BE 저장소(기본 `../KTB4-5th-BE`)를 `git fetch origin dev`로 받아 둡니다(SQL은 BE dev `ade4bcf`로 고정).
+   ```bash
+   v3/environments/prod/migrate-schema.sh check   # 읽기만: app ↔ BE db/schema.sql 차이 출력
+   v3/environments/prod/migrate-schema.sh run     # BE DDL → prod 보완(ingredients.owner_id) → BE DML, 끝에 차이 0·DML OK 확인
+   ```
+   DDL은 되돌릴 수 없습니다. run이 실패하면 다시 실행하지 말고, 대상 DB를 비운 뒤 `migrate-db.sh run`부터 다시 합니다.
+   DDL이 `analysis_feedbacks.item_id`를 지우므로 원본은 위 v2 DB 스냅샷으로 보관합니다.
+6. **Secret·앱**: `AWS_PROFILE=dameokja-aws-cli v3/environments/prod/seal-secrets.sh` → secrets PR merge →
+   ```bash
+   kubectl $K -n prod annotate secret cloud-secrets sealedsecrets.bitnami.com/managed=true
+   kubectl $K apply -f v3/argocd/prod-apps-project.yaml
+   kubectl $K -n tool apply -f v3/argocd/prod-applications.yaml   # 앱은 자동 동기화로 바로 배포됨
+   kubectl $K -n tool patch application prod-secrets --type merge -p '{"operation":{"sync":{}}}'
+   ```
+   BE가 Secret을 찾지 못해 처음 한 번 재시작할 수 있습니다. FE 2·BE 2·AI 1 Ready와 Target Group healthy를 확인합니다.
+7. **edge apply**(2단계 값): DnsWeight 0이라 사용자 트래픽은 아직 바뀌지 않습니다. CloudFront로 사전 시험합니다.
+   `curl --connect-to dameokja.com:443:<배포>.cloudfront.net:443 https://dameokja.com/manifest.webmanifest`, 로그인(Kakao redirect)·업로드·SSE.
+8. **DNS 전환**: 반드시 **v3를 먼저 100으로 올린 뒤** v2 가중치 레코드를 0으로 내립니다.
+   Route 53은 같은 이름의 가중치가 모두 0이면 모든 레코드에 균등 분배하므로, v2를 먼저 0으로 내리면 그 사이 트래픽이
+   남아 있는 v1 레코드(가중치 0, 43.203.168.253)로도 갑니다. 전환 전에 v1 레코드를 지우는 것을 권합니다.
+   v3·v2는 alias 레코드라 TTL은 대상(CloudFront·ALB)의 60초를 따릅니다.
+   `aws route53 list-resource-record-sets --hosted-zone-id Z08470472LJSW357027J9 --query "ResourceRecordSets[?Name=='dameokja.com.']"`
+9. **정리**: prod-db `SourceDbSecurityGroupId`를 비우고 apply(v2 DB 접근 닫기). v2 DB EC2는 확인 기간 뒤 중지합니다(스냅샷 보관).
+
+되돌리기: 8단계 전에는 v3 자원만 지우면 됩니다. 8단계 뒤에는 가중치를 되돌리되, v3에 새로 쓰인 데이터는 v2로 돌아가지 않습니다.
 
 ## 검증과 한계
 

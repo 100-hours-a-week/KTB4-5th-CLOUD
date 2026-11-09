@@ -1,0 +1,9 @@
+[
+  {"ParameterKey": "VpcId", "ParameterValue": "vpc-04fc5393afa0ce9fd"},
+  {"ParameterKey": "SubnetId", "ParameterValue": "subnet-0778204ce3b43756e"},
+  {"ParameterKey": "AppSubnetCidr", "ParameterValue": "10.20.32.0/20"},
+  {"ParameterKey": "AppSubnetMySqlHost", "ParameterValue": "10.20.32.0/255.255.240.0"},
+  {"ParameterKey": "AmiId", "ParameterValue": "ami-05becc39a92b78fa5"},
+  {"ParameterKey": "InstanceType", "ParameterValue": "t3.medium"},
+  {"ParameterKey": "SourceDbSecurityGroupId", "ParameterValue": ""}
+]
