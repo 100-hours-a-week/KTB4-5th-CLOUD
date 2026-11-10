@@ -6,7 +6,14 @@ import exec from 'k6/execution';
 import { SharedArray } from 'k6/data';
 
 const base = __ENV.BASE_URL || 'https://dameokja.com';
-const items = Number(__ENV.ITEMS || 1000);
+// BE 일일 추천은 냉장고 재고가 300개(AiRecipeRecommendationRequest.MAX_INVENTORY)를 넘으면 접수하지 않는다(의도된 동작).
+// 1,000개로 맞추던 이전 기본값 때문에 시험 냉장고 50개의 일일 추천이 매일 실패했다. db-stress.js가 측정 중 등록으로 잠깐 늘릴 여유를 두고 250개로 둔다.
+const RECOMMEND_INVENTORY_LIMIT = 300;
+const items = Number(__ENV.ITEMS || 250);
+if (!Number.isInteger(items) || items < 1) throw new Error(`ITEMS는 1 이상의 정수여야 합니다: ${__ENV.ITEMS}`);
+if (items > RECOMMEND_INVENTORY_LIMIT && __ENV.ALLOW_OVER_RECOMMEND_LIMIT !== 'true') {
+  throw new Error(`ITEMS ${items}개는 일일 추천 상한(${RECOMMEND_INVENTORY_LIMIT})을 넘습니다. 꼭 필요하면 -e ALLOW_OVER_RECOMMEND_LIMIT=true`);
+}
 const accounts = new SharedArray('accounts', () => {
   const file = JSON.parse(open(__ENV.ACCOUNTS));
   if (file.baseUrl !== base) throw new Error(`계정 파일 대상(${file.baseUrl})이 BASE_URL과 다릅니다.`);
