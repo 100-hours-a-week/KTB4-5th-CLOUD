@@ -1,6 +1,8 @@
 name: v2 ECS 배포
 
-# BE/FE/AI CI와 CLOUD가 함께 쓰는 배포 단계.
+# 종료됨. v2 ECS(dev·stage·prod)는 모두 v3 EKS로 전환했고 prod ECS 자원도 지웠습니다(#306, #321).
+# BE v1-cicd.yml이 아직 호출하므로 입력 형식만 남기고, 호출되면 안내와 함께 실패합니다.
+# 이전 설명: BE/FE/AI CI와 CLOUD가 함께 쓰는 배포 단계.
 # infra/v2/ecs/<env>/<service>.json으로 Task Definition 새 버전을 등록하고 Service를 그 버전으로 바꿈.
 # 실패하면 ECS가 이전 버전으로 되돌리고 이 작업도 실패로 끝남.
 # 대상 이름은 입력으로 만듦: 클러스터 dameokja-<env>, 서비스 dameokja-<env>-<service>
@@ -28,166 +30,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    environment: ${{ inputs.env == 'prod' && 'prod' || '' }}
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: ecs-${{ inputs.env }}-${{ inputs.service }}
-      cancel-in-progress: false
-    env:
-      CLUSTER: dameokja-${{ inputs.env }}
-      SERVICE: dameokja-${{ inputs.env }}-${{ inputs.service }}
-      SERVICE_IN: ${{ inputs.service }}
-      FILE: cloud/infra/v2/ecs/${{ inputs.env }}/${{ inputs.service }}.json
-      CONTAINER: ${{ inputs.container }}
-      IMAGE: ${{ inputs.image }}
-      ENV_NAME: ${{ inputs.env }}
+    timeout-minutes: 5
+    permissions: {}
     steps:
-      - name: 종료된 v2 dev·stage 배포 차단
-        if: inputs.env == 'dev' || inputs.env == 'stage'
-        run: |
-          echo "::error::${{ inputs.env }}는 v3 EKS로 전환되어 v2 ECS 배포를 종료했습니다. v3-${{ inputs.env }}-image.yml을 사용하세요."
-          exit 1
-      - uses: actions/checkout@v6
-        with:
-          repository: 100-hours-a-week/KTB4-5th-CLOUD
-          ref: main
-          path: cloud
-          persist-credentials: false
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::906462447513:role/dameokja-${{ inputs.env }}-github-ecs-deploy
-          aws-region: ap-northeast-2
-      - name: 배포 대상 확인
-        run: |
-          # stage·prod app(nginx+FE+BE)을 frontend·backend 서비스로 나누는 중(#147). BE·FE CI는 service=app으로 부르므로
-          # 나눠진 서비스가 있으면 그쪽으로 배포
-          if [ "$SERVICE_IN" = app ] && { [ "$CONTAINER" = frontend ] || [ "$CONTAINER" = backend ]; } \
-            && [ "$(aws ecs describe-services --cluster "$CLUSTER" --services "dameokja-$ENV_NAME-$CONTAINER" \
-              --query "length(services[?status=='ACTIVE'])" --output text)" = 1 ]; then
-            SERVICE=dameokja-$ENV_NAME-$CONTAINER
-            FILE=cloud/infra/v2/ecs/$ENV_NAME/$CONTAINER.json
-            echo "SERVICE=$SERVICE" >> "$GITHUB_ENV"
-            echo "FILE=$FILE" >> "$GITHUB_ENV"
-          fi
-          case "$ENV_NAME" in dev|stage|prod) ;; *) echo "env는 dev, stage, prod 중 하나: $ENV_NAME"; exit 1 ;; esac
-          [ -f "$FILE" ] || { echo "Task Definition 파일 없음: $FILE"; exit 1; }
-          if [ -n "$CONTAINER" ] && ! jq -e --arg c "$CONTAINER" 'any(.containerDefinitions[]; .name == $c)' "$FILE" > /dev/null; then
-            echo "$FILE에 $CONTAINER 컨테이너 없음"; exit 1
-          fi
-          echo "대상: $CLUSTER / $SERVICE / ${CONTAINER:-첫 번째 컨테이너}"
-      - name: Task Definition 등록
-        id: register
-        run: |
-          # stage app은 BE·FE가 같은 Task를 써서 두 저장소의 배포가 겹칠 수 있음. 진행 중인 배포가 끝난 뒤 지금 상태를 읽음
-          while [ "$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query "length(services[?status=='ACTIVE'].deployments[] | [?rolloutState=='IN_PROGRESS'])" --output text)" != 0 ]; do
-            echo "진행 중인 배포를 기다리는 중"; sleep 15
-          done
-          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          # Service가 없을 때 Task Definition만 등록하는 것은 JSON 반영(이미지 없음)일 때만. 앱 이미지 배포는 대상이 틀린 것이라 실패
-          if [ "$current" = None ] && [ -n "$IMAGE" ]; then
-            echo "Service 없음: $CLUSTER / $SERVICE"; exit 1
-          fi
-          # 앱 이미지(ghcr.io)는 CI가 정하므로 지금 돌고 있는 이미지를 유지하고, 지정한 컨테이너만 새 이미지로 바꿈.
-          # nginx·redis 같은 공개 이미지는 JSON에 적힌 이미지를 그대로 씀
-          # 새로 나눈 frontend·backend는 처음 등록할 때 app에서 돌고 있는 이미지를 이어받음
-          src=$current
-          if [ "$src" = None ]; then
-            src=$(aws ecs describe-services --cluster "$CLUSTER" --services "dameokja-$ENV_NAME-app" \
-              --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          fi
-          running='{}'
-          if [ "$src" != None ]; then
-            running=$(aws ecs describe-task-definition --task-definition "$src" \
-              --query 'taskDefinition.containerDefinitions' --output json | jq 'map({(.name): .image}) | add')
-          fi
-          target=${CONTAINER:-$(jq -r '.containerDefinitions[0].name' "$FILE")}
-          jq --argjson running "$running" --arg target "$target" --arg image "$IMAGE" '
-            .containerDefinitions |= map(
-              if .name == $target and $image != "" then .image = $image
-              elif (.image | startswith("ghcr.io/")) and $running[.name] then .image = $running[.name]
-              else . end)' "$FILE" > td.json
-          arn=$(aws ecs register-task-definition --cli-input-json file://td.json \
-            --query taskDefinition.taskDefinitionArn --output text)
-          echo "등록: $arn"
-          jq -r '.containerDefinitions[] | "  \(.name): \(.image)"' td.json
-          echo "arn=$arn" >> "$GITHUB_OUTPUT"
-          echo "current=$current" >> "$GITHUB_OUTPUT"
-          echo "service-exists=$([ "$current" != None ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - name: Service 갱신 후 완료 대기
-        if: steps.register.outputs.service-exists == 'true'
+      - name: 종료된 v2 ECS 배포 차단
         env:
-          ARN: ${{ steps.register.outputs.arn }}
-          READ: ${{ steps.register.outputs.current }}
+          ENV_NAME: ${{ inputs.env }}
+          SERVICE_IN: ${{ inputs.service }}
         run: |
-          # BE·FE는 다른 저장소라 concurrency로 서로 막지 못함. 읽은 뒤 다른 배포가 먼저 바꿨으면 그 이미지를 덮어쓰지 않도록 멈춤
-          now=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query 'services[?status==`ACTIVE`]|[0].taskDefinition' --output text)
-          if [ "$now" != "$READ" ]; then
-            echo "다른 배포가 먼저 Service를 바꿈($READ -> $now). 이 실행을 다시 돌리면 최신 상태로 다시 등록함"; exit 1
-          fi
-          id=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$ARN" \
-            --query 'service.deployments[?status==`PRIMARY`]|[0].id' --output text)
-          while sleep 15; do
-            state=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-              --query "services[0].deployments[?id=='$id']|[0].rolloutState" --output text)
-            echo "$id: $state"
-            case "$state" in
-              COMPLETED) exit 0 ;;
-              IN_PROGRESS) ;;
-              *) echo "배포 실패. ECS 이벤트:"
-                 aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-                   --query 'services[0].events[:10].message' --output text
-                 exit 1 ;;
-            esac
-          done
-      # blue/green은 기존 Task 묶음을 한꺼번에 꺼서 남은 Task가 여러 서버에 흩어지고, ECS는 빈 서버만 줄여 서버가 남음 (#189)
-      # 기존 Task가 다 내려간 뒤, Task를 다른 서버로 모두 옮길 수 있는 서버 하나를 DRAINING으로 바꿔 비움
-      # 빈 서버는 Capacity Provider 종료 보호(#187) 덕분에 그 서버만 축소됨. 실패해도 배포 결과에는 영향 없음
-      - name: 흩어진 Task 모으기
-        if: inputs.env == 'prod' && steps.register.outputs.service-exists == 'true'
-        continue-on-error: true
-        run: |
-          for i in $(seq 1 40); do
-            stopped=$(aws ecs list-tasks --cluster "$CLUSTER" --desired-status STOPPED --query taskArns --output text)
-            left=0
-            [ -z "$stopped" ] || left=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $stopped \
-              --query "length(tasks[?lastStatus!='STOPPED'])" --output text)
-            [ "$left" = 0 ] && break
-            echo "내려가는 중인 Task $left개"; sleep 15
-          done
-          cis=$(aws ecs list-container-instances --cluster "$CLUSTER" --status ACTIVE --query containerInstanceArns --output text)
-          aws ecs describe-container-instances --cluster "$CLUSTER" --container-instances $cis > ci.json
-          aws ecs describe-tasks --cluster "$CLUSTER" \
-            --tasks $(aws ecs list-tasks --cluster "$CLUSTER" --desired-status RUNNING --query taskArns --output text) > tasks.json
-          cat > pick.jq <<'EOF'
-          # 입력 $c(describe-container-instances), $t(describe-tasks), $spread(서버마다 1개만 둘 서비스 group). 출력: 비울 컨테이너 인스턴스 ARN, 없으면 ""
-          def res($n): [.remainingResources[] | select(.name == $n) | .integerValue][0];
-          ($t.tasks | map({ci: .containerInstanceArn, g: .group, cpu: (.cpu // "0" | tonumber), mem: (.memory // "0" | tonumber)})) as $tasks
-          | ($c.containerInstances | map(.containerInstanceArn as $a | {arn: $a, cpu: res("CPU"), mem: res("MEMORY"),
-              n: (.runningTasksCount + .pendingTasksCount), gs: [$tasks[] | select(.ci == $a) | .g]})) as $inst
-          | if ($inst | length) < 2 or any($inst[]; .n == 0) then ""
-            else
-              [ $inst | sort_by(.n)[] as $cand
-                | ($tasks | map(select(.ci == $cand.arn)) | sort_by(-.mem)) as $mine
-                # 큰 Task부터 처음 들어가는 서버에 넣어 봄(first-fit). backend는 이미 backend가 있는 서버에는 넣지 않음(#171처럼 한 서버에 몰리지 않게)
-                | (reduce $mine[] as $x ({o: ($inst | map(select(.arn != $cand.arn))), ok: true};
-                    if .ok | not then . else
-                      ([.o | to_entries[] | select(.value.cpu >= $x.cpu and .value.mem >= $x.mem
-                         and (($x.g != $spread) or (.value.gs | index($x.g) | not))) | .key][0]) as $k
-                      | if $k == null then .ok = false
-                        else .o[$k].cpu -= $x.cpu | .o[$k].mem -= $x.mem | .o[$k].gs += [$x.g] end
-                    end)) as $r
-                | select($r.ok) | $cand.arn ] | first // ""
-            end
-          EOF
-          pick=$(jq -n -r --slurpfile c ci.json --slurpfile t tasks.json --arg spread "service:dameokja-$ENV_NAME-backend" \
-            '$c[0] as $c | $t[0] as $t | '"$(cat pick.jq)")
-          jq -r '.containerInstances[] | "  \(.ec2InstanceId): Task \(.runningTasksCount)개"' ci.json
-          if [ -z "$pick" ]; then echo "비울 서버 없음(빈 서버가 이미 있거나 옮길 자리가 없음)"; exit 0; fi
-          aws ecs update-container-instances-state --cluster "$CLUSTER" --container-instances "$pick" --status DRAINING \
-            --query 'containerInstances[].[ec2InstanceId,status]' --output text
+          echo "::error::v2 ECS 배포는 종료되었습니다(env=$ENV_NAME, service=$SERVICE_IN). dev는 v3-dev-image.yml, stage는 v3-stage-image.yml, prod는 prod-approval.yml → v3-prod-image.yml을 사용하세요."
+          exit 1
