@@ -38,7 +38,7 @@ Resources:
       SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
       Tags: [{Key: Name, Value: dameokja-v3-observability}]
 
-  # SSM 관리(접속·Run Command)와 Grafana GitHub OAuth 값 읽기 권한만 둡니다.
+  # SSM 관리·GitHub OAuth와 prod CloudWatch 읽기 권한을 둡니다.
   ObservabilityRole:
     Type: AWS::IAM::Role
     Properties:
@@ -56,6 +56,17 @@ Resources:
               - Effect: Allow
                 Action: ssm:GetParameters
                 Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v3-observability/grafana-github-*
+        - PolicyName: grafana-prod-cloudwatch-read
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [cloudwatch:GetMetricData, cloudwatch:GetMetricStatistics, cloudwatch:ListMetrics, logs:DescribeLogGroups, logs:GetQueryResults, logs:StopQuery]
+                Resource: '*'
+                Condition: {StringEquals: {aws:RequestedRegion: !Ref 'AWS::Region'}}
+              - Effect: Allow
+                Action: [logs:StartQuery, logs:GetLogGroupFields]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/dameokja/v2-prod/*:*
   ObservabilityInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -73,7 +84,8 @@ Resources:
       MetadataOptions:
         HttpEndpoint: enabled
         HttpTokens: required
-        HttpPutResponseHopLimit: 1
+        # Grafana 컨테이너에서 IMDSv2로 인스턴스 역할의 임시 자격 증명을 받습니다.
+        HttpPutResponseHopLimit: 2
       NetworkInterfaces:
         - DeviceIndex: '0'
           AssociatePublicIpAddress: false
@@ -254,6 +266,11 @@ Resources:
             datasources:
               - {name: Prometheus, type: prometheus, url: 'http://prometheus:9090', isDefault: true}
               - {name: Loki, type: loki, url: 'http://loki:3100'}
+              - name: CloudWatch prod
+                uid: dameokja-cloudwatch
+                type: cloudwatch
+                jsonData: {authType: default, defaultRegion: ap-northeast-2}
+
             EOF
           # 대시보드는 파일에서만 관리합니다(화면에서 고친 내용은 다음 적용 때 덮어씀).
           - |
@@ -307,6 +324,10 @@ Resources:
                  "targets": [{"refId": "A", "expr": "{cluster=\"dameokja-v3\", namespace=\"dev\"}"}]}
               ]
             }
+            EOF
+          - |
+            cat > /opt/observability.new/dashboards/environments-overview.json <<'EOF'
+            {"uid":"dameokja-v3-environments","title":"v3 환경 모니터링 (dev·stage·prod)","schemaVersion":41,"refresh":"30s","time":{"from":"now-1h","to":"now"},"tags":["dameokja","v3","dev","stage","prod"],"links":[{"title":"prod","url":"/d/dameokja-v3-environments?var-env=prod","type":"link"},{"title":"stage","url":"/d/dameokja-v3-environments?var-env=stage","type":"link"},{"title":"dev","url":"/d/dameokja-v3-environments?var-env=dev","type":"link"},{"title":"기존 dev","url":"/d/dameokja-v3-dev","type":"link"}],"templating":{"list":[{"name":"prom","type":"datasource","query":"prometheus"},{"name":"loki","type":"datasource","query":"loki"},{"name":"env","label":"환경","type":"custom","query":"prod,stage,dev","current":{"text":"prod","value":"prod"},"options":[{"text":"prod","value":"prod","selected":true},{"text":"stage","value":"stage","selected":false},{"text":"dev","value":"dev","selected":false}],"multi":false,"includeAll":false}]},"panels":[{"id":1,"title":"BE 요청률·5xx (req/s)","type":"timeseries","gridPos":{"x":0,"y":0,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"sum(rate(http_server_requests_seconds_count{cluster=\"dameokja-v3\",namespace=\"$env\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[$__rate_interval]))","legendFormat":"전체"},{"refId":"B","expr":"sum(rate(http_server_requests_seconds_count{cluster=\"dameokja-v3\",namespace=\"$env\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\",status=~\"5..\"}[$__rate_interval]))","legendFormat":"5xx"}],"fieldConfig":{"defaults":{"unit":"reqps"},"overrides":[]}},{"id":2,"title":"BE 응답 시간 (평균·p95·p99)","type":"timeseries","gridPos":{"x":12,"y":0,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"sum(rate(http_server_requests_seconds_sum{cluster=\"dameokja-v3\",namespace=\"$env\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{cluster=\"dameokja-v3\",namespace=\"$env\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[$__rate_interval]))","legendFormat":"평균"},{"refId":"B","expr":"histogram_quantile(0.95,sum by(le)(rate(http_server_requests_seconds_bucket{cluster=\"dameokja-v3\",namespace=\"$env\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[$__rate_interval])))","legendFormat":"p95"},{"refId":"C","expr":"histogram_quantile(0.99,sum by(le)(rate(http_server_requests_seconds_bucket{cluster=\"dameokja-v3\",namespace=\"$env\",job=\"prometheus.scrape.be\",uri!~\"/actuator.*\"}[$__rate_interval])))","legendFormat":"p99"}],"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]},"description":"histogram을 제공하는 환경에서 p95·p99를 표시합니다. 요청이 없으면 응답 시간이 비어 있을 수 있습니다."},{"id":3,"title":"Pod별 CPU 사용량","type":"timeseries","gridPos":{"x":0,"y":8,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"sum by(pod)(rate(container_cpu_usage_seconds_total{cluster=\"dameokja-v3\",namespace=\"$env\",container!=\"\",container!=\"POD\"}[$__rate_interval]))","legendFormat":"{{pod}}"}],"fieldConfig":{"defaults":{"unit":"cores"},"overrides":[]}},{"id":4,"title":"Pod별 메모리 working set","type":"timeseries","gridPos":{"x":12,"y":8,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"sum by(pod)(container_memory_working_set_bytes{cluster=\"dameokja-v3\",namespace=\"$env\",container!=\"\",container!=\"POD\"})","legendFormat":"{{pod}}"}],"fieldConfig":{"defaults":{"unit":"bytes"},"overrides":[]}},{"id":5,"title":"Pod Ready·Pending","type":"timeseries","gridPos":{"x":0,"y":16,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"sum(kube_pod_status_ready{cluster=\"dameokja-v3\",namespace=\"$env\",condition=\"true\"})","legendFormat":"Ready"},{"refId":"B","expr":"sum(kube_pod_status_phase{cluster=\"dameokja-v3\",namespace=\"$env\",phase=\"Pending\"})","legendFormat":"Pending"}],"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]}},{"id":6,"title":"Deployment 현재·희망 replica","type":"timeseries","gridPos":{"x":12,"y":16,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"kube_deployment_status_replicas_available{cluster=\"dameokja-v3\",namespace=\"$env\"}","legendFormat":"{{deployment}} available"},{"refId":"B","expr":"kube_deployment_spec_replicas{cluster=\"dameokja-v3\",namespace=\"$env\"}","legendFormat":"{{deployment}} desired"}],"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]}},{"id":7,"title":"HPA 현재·희망·최대 replica","type":"timeseries","gridPos":{"x":0,"y":24,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"kube_horizontalpodautoscaler_status_current_replicas{cluster=\"dameokja-v3\",namespace=\"$env\"}","legendFormat":"{{horizontalpodautoscaler}} current"},{"refId":"B","expr":"kube_horizontalpodautoscaler_status_desired_replicas{cluster=\"dameokja-v3\",namespace=\"$env\"}","legendFormat":"{{horizontalpodautoscaler}} desired"},{"refId":"C","expr":"kube_horizontalpodautoscaler_spec_max_replicas{cluster=\"dameokja-v3\",namespace=\"$env\"}","legendFormat":"{{horizontalpodautoscaler}} max"}],"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]},"description":"시험용 HPA가 삭제된 뒤에는 현재 값이 없습니다. 시험 시간 범위를 선택하면 과거 값을 조회할 수 있습니다."},{"id":8,"title":"Pod 재시작 (1시간 증가분)","type":"timeseries","gridPos":{"x":12,"y":24,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"sum by(pod)(increase(kube_pod_container_status_restarts_total{cluster=\"dameokja-v3\",namespace=\"$env\"}[1h]))","legendFormat":"{{pod}}"}],"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]}},{"id":9,"title":"선택 환경 Pod가 배치된 Node CPU","type":"timeseries","gridPos":{"x":0,"y":32,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"label_replace(sum by(instance)(rate(container_cpu_usage_seconds_total{cluster=\"dameokja-v3\",id=\"/\"}[$__rate_interval])),\"node\",\"$1\",\"instance\",\"(.+)\") * on(node) group_left() max by(node)(kube_pod_info{cluster=\"dameokja-v3\",namespace=\"$env\"})","legendFormat":"{{node}}"}],"fieldConfig":{"defaults":{"unit":"cores"},"overrides":[]},"description":"해당 환경 Pod가 배치된 노드의 전체 사용량입니다. 공유 노드의 다른 워크로드도 포함됩니다."},{"id":10,"title":"선택 환경 Pod가 배치된 Node 메모리","type":"timeseries","gridPos":{"x":12,"y":32,"w":12,"h":8},"datasource":{"type":"prometheus","uid":"${prom}"},"targets":[{"refId":"A","expr":"label_replace(container_memory_working_set_bytes{cluster=\"dameokja-v3\",id=\"/\"},\"node\",\"$1\",\"instance\",\"(.+)\") * on(node) group_left() max by(node)(kube_pod_info{cluster=\"dameokja-v3\",namespace=\"$env\"})","legendFormat":"{{node}}"}],"fieldConfig":{"defaults":{"unit":"bytes"},"overrides":[]}},{"id":11,"title":"$env 애플리케이션 로그","type":"logs","gridPos":{"x":0,"y":40,"w":12,"h":8},"datasource":{"type":"loki","uid":"${loki}"},"targets":[{"refId":"A","expr":"{cluster=\"dameokja-v3\",namespace=\"$env\",source!=\"kubernetes-events\"}"}],"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]}},{"id":12,"title":"$env Kubernetes 이벤트","type":"logs","gridPos":{"x":12,"y":40,"w":12,"h":8},"datasource":{"type":"loki","uid":"${loki}"},"targets":[{"refId":"A","expr":"{cluster=\"dameokja-v3\",source=\"kubernetes-events\"} | json | namespace=\"$env\""}],"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]},"description":"이벤트의 namespace 필드를 기준으로 필터링합니다."}]}
             EOF
           # 설정이 바뀐 경우에만 컨테이너를 다시 만듭니다.
           - |
