@@ -25,6 +25,7 @@ env:
   KAFKA_ENV: prod
   # BE Kafka Consumer 시작(BE 기본값 false). v2 prod SSM에는 없는 키
   KAFKA_LISTENER_ENABLED: 'true'
+  NOTIFICATION_EXPIRATION_KAFKA_ENABLED: 'true'
 resources:
   requests: {cpu: 500m, memory: 1Gi}
   limits: {cpu: '1', memory: 2Gi}
