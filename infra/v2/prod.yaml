@@ -1,10 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: dameokja v2 prod (stage와 같은 구성. 서브넷 2AZ, 앱 서버는 2b 한 곳, NAT, ALB, ECS on EC2 ASG, 자체 구축 Redis·MySQL)
+Description: dameokja v2 prod 네트워크(VPC·서브넷·NAT). v2 앱은 v3 EKS로 전환되어 제거, v3가 이 네트워크를 재사용
 
 # stage.yaml과 같은 구성의 v2 prod. dev(172.31)·v1 prod(10.0.0.0/24)·stage(10.10) VPC와 겹치지 않는 10.20 VPC를 새로 만듦
 # 구조: dameokja.com -> ALB(TLS 종료) -> private 서브넷 ECS Task(frontend·backend 서비스, awsvpc. ALB가 경로로 나눔) -> Redis / prod 전용 MySQL
 # dameokja.com은 v1 prod를 그대로 가리킴. 전환은 나중에 Route 53 가중치 레코드로 함
 # Task Definition은 infra/v2/ecs/prod/*.json. Service보다 먼저 등록되어 있어야 함
+# 2026-11-10 v3 EKS prod 전환 뒤 v2 앱(ECS·ALB·DB·Redis 등)을 제거하고 네트워크만 남김. v3(EKS·prod-db 등)가 이 VPC·PrivateSubnetA·NAT를 씀.
+# 남은 리소스는 모두 DeletionPolicy Retain이라 이 스택을 지워도 삭제되지 않음. 네트워크는 v3 스택으로 가져온(import) 뒤 이 스택을 지울 예정.
 Parameters:
   VpcCidr:
     Type: String
@@ -30,56 +32,12 @@ Parameters:
   HostedZoneId:
     Type: AWS::Route53::HostedZone::Id
     Description: dameokja.com hosted zone
-  # ALB 인증서 도메인. dameokja.com 레코드는 v1·v2 가중치 레코드로 prod-dns-weight.yml이 관리 (prod 서브도메인 없음)
-  DomainName:
-    Type: String
-    Default: dameokja.com
-  # prod와 같은 m7i 계열. m7i는 large(2 vCPU, 8GB)가 가장 작은 크기
-  InstanceType:
-    Type: String
-    Default: m7i.large
-  # 지금 stage 앱 서버와 같은 ECS 최적화 AMI로 고정. SSM 권장 AMI 경로를 쓰면 AWS가 새 AMI를 낼 때마다 다음 배포에서 LaunchTemplate이 바뀜
-  AmiId:
-    Type: AWS::EC2::Image::Id
-    Default: ami-08afa937d0ef1a748
-  MinSize:
-    Type: Number
-    Default: 2
-  MaxSize:
-    Type: Number
-    Default: 4
-  # 10-19~24 CPU 평균 1~2%라 m7i.large(8GB)에서 줄임 (#134). MySQL 버퍼 풀 기본값 + PostgreSQL 512MB가 4GB 안에 들어감
-  DbInstanceType:
-    Type: String
-    Default: t3.medium
-  RedisInstanceType:
-    Type: String
-    Default: t3.small
-  # 일반 AL2023 AMI(ECS 최적화 아님) ID 고정. SSM 최신 AMI 경로를 쓰면 새 AMI가 나올 때마다 DB 인스턴스가 교체됨
-  DbAmiId:
-    Type: AWS::EC2::Image::Id
-  GhcrCredentialsArn:
-    Type: String
-    Description: Secrets Manager secret ARN with GHCR username/PAT (read:packages), created by hand
-  S3BucketName:
-    Type: String
-    Default: dameokja-906462447513-ap-northeast-2-an
-  S3UploadPrefix:
-    Type: String
-    Default: image/prod/
-  # off면 앱 Task·앱 서버를 0으로 줄임(비용, #300). 데이터·ALB·VPC는 그대로 두고 on으로 되돌림
-  # DB·Redis EC2는 CloudFormation으로 중지할 수 없어 따로 중지·시작함
-  Power:
-    Type: String
-    Default: "on"
-    AllowedValues: ["on", "off"]
-
-Conditions:
-  PowerOn: !Equals [!Ref Power, "on"]
 
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       CidrBlock: !Ref VpcCidr
       EnableDnsSupport: true
@@ -89,12 +47,16 @@ Resources:
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       Tags:
         - { Key: Name, Value: dameokja-prod }
 
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       InternetGatewayId: !Ref InternetGateway
@@ -103,6 +65,8 @@ Resources:
   # 앱 서버(ECS)는 2b 한 곳에만 둠. AZ 분리는 DB만 (private 2c는 DB Standby용, ALB는 서브넷 2AZ가 필수)
   PublicSubnetA:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzA
@@ -112,6 +76,8 @@ Resources:
 
   PublicSubnetB:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzB
@@ -121,6 +87,8 @@ Resources:
 
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzA
@@ -130,6 +98,8 @@ Resources:
 
   PrivateSubnetB:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       AvailabilityZone: !Ref AzB
@@ -139,6 +109,8 @@ Resources:
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       Tags:
@@ -146,6 +118,8 @@ Resources:
 
   PublicDefaultRoute:
     Type: AWS::EC2::Route
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     DependsOn: InternetGatewayAttachment
     Properties:
       RouteTableId: !Ref PublicRouteTable
@@ -154,12 +128,16 @@ Resources:
 
   PublicSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       SubnetId: !Ref PublicSubnetA
       RouteTableId: !Ref PublicRouteTable
 
   PublicSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       SubnetId: !Ref PublicSubnetB
       RouteTableId: !Ref PublicRouteTable
@@ -167,6 +145,8 @@ Resources:
   # --- NAT 1개(AzA). AzA 장애 시 AzB private의 외부 통신도 끊기는 것은 감수 (구현 기록 임시 기본값)
   NatEip:
     Type: AWS::EC2::EIP
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
@@ -175,6 +155,8 @@ Resources:
 
   NatGateway:
     Type: AWS::EC2::NatGateway
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AllocationId: !GetAtt NatEip.AllocationId
       SubnetId: !Ref PublicSubnetA
@@ -183,6 +165,8 @@ Resources:
 
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       Tags:
@@ -190,6 +174,8 @@ Resources:
 
   PrivateDefaultRoute:
     Type: AWS::EC2::Route
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       DestinationCidrBlock: 0.0.0.0/0
@@ -197,12 +183,16 @@ Resources:
 
   PrivateSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       SubnetId: !Ref PrivateSubnetA
       RouteTableId: !Ref PrivateRouteTable
 
   PrivateSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       SubnetId: !Ref PrivateSubnetB
       RouteTableId: !Ref PrivateRouteTable
@@ -210,138 +200,19 @@ Resources:
   # S3 트래픽(이미지 업로드·조회, ECR 레이어 등)이 NAT를 타지 않게 (무료)
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       VpcEndpointType: Gateway
       RouteTableIds: [!Ref PrivateRouteTable]
 
-  # --- 보안그룹
-  AlbSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod ALB (80/443 public)
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
-        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-alb }
-
-  # ECS 인스턴스 자체. Task는 awsvpc라 각자 ENI와 아래 Task용 보안그룹을 따로 가짐
-  InstanceSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod ECS instances (no inbound)
-      VpcId: !Ref Vpc
-      Tags:
-        - { Key: Name, Value: dameokja-prod-instance }
-
-  # backend Task. ALB에서 오는 8080만. 이름·설명은 바꾸면 보안 그룹이 새로 만들어져서 app 시절 그대로 둠
-  AppSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod app task (80 from ALB)
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, SourceSecurityGroupId: !Ref AlbSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-app }
-
-  # frontend Task(FE). ALB에서 오는 3000만. DB·Redis·AI에는 접근하지 않음
-  FrontendSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod frontend task (3000 from ALB)
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 3000, ToPort: 3000, SourceSecurityGroupId: !Ref AlbSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-frontend }
-
-  # AI API Task. 앱 Task(BE)에서 오는 8000만
-  AiSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod AI task (8000 from app task)
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 8000, ToPort: 8000, SourceSecurityGroupId: !Ref AppSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-ai }
-
-  RedisSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod Redis (6379 from app task)
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 6379, ToPort: 6379, SourceSecurityGroupId: !Ref AppSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-redis }
-
-  DbSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: dameokja v2 prod MySQL (3306 from app task)
-      VpcId: !Ref Vpc
-      SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref AppSecurityGroup }
-      Tags:
-        - { Key: Name, Value: dameokja-prod-db }
-
-  # Replica·Standby → Primary 복제·CLONE(3306). 같은 보안 그룹 안에서만 허용 (#145, #179)
-  DbReplicationIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref DbSecurityGroup
-      IpProtocol: tcp
-      FromPort: 3306
-      ToPort: 3306
-      SourceSecurityGroupId: !Ref DbSecurityGroup
-      Description: DB replica to primary
-
-  # AI Task → DB 서버 PostgreSQL(5432). 같은 서버의 MySQL과 포트만 다름
-  DbPostgresFromAiIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref DbSecurityGroup
-      IpProtocol: tcp
-      FromPort: 5432
-      ToPort: 5432
-      SourceSecurityGroupId: !Ref AiSecurityGroup
-      Description: AI task PostgreSQL
-
-  # --- 진입점: ACM 인증서 + ALB + 리스너. 서비스별 타겟 그룹·규칙은 아래
-  Certificate:
-    Type: AWS::CertificateManager::Certificate
-    Properties:
-      DomainName: !Ref DomainName
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Ref DomainName
-          HostedZoneId: !Ref HostedZoneId
-
-  Alb:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    # internet-facing ALB는 VPC에 IGW가 붙어 있어야 만들어짐. 액세스 로그는 버킷 정책이 먼저 있어야 켜짐
-    DependsOn: [InternetGatewayAttachment, AlbLogBucketPolicy]
-    Properties:
-      Name: dameokja-prod-alb
-      Type: application
-      Scheme: internet-facing
-      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
-      SecurityGroups: [!Ref AlbSecurityGroup]
-      LoadBalancerAttributes:
-        - { Key: idle_timeout.timeout_seconds, Value: "300" } # SSE 연결 유지 (구현 기록 임시 기본값)
-        # 요청별 로그(경로·상태 코드·처리 시간). nginx 로그 대신 SLO 집계에 씀(#147). Athena 테이블은 모니터링 스택
-        - { Key: access_logs.s3.enabled, Value: "true" }
-        - { Key: access_logs.s3.bucket, Value: !Ref AlbLogBucket }
-        - { Key: access_logs.s3.prefix, Value: alb }
-
   # ALB 액세스 로그 보관(30일). ALB는 버킷 정책을 확인한 뒤에야 로그 설정을 받음
   AlbLogBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub "dameokja-prod-alb-logs-${AWS::AccountId}"
       BucketEncryption:
@@ -362,6 +233,8 @@ Resources:
   # 서울 리전은 ELB 계정(600734575887)이 로그를 씀
   AlbLogBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       Bucket: !Ref AlbLogBucket
       PolicyDocument:
@@ -372,461 +245,12 @@ Resources:
             Action: s3:PutObject
             Resource: !Sub "${AlbLogBucket.Arn}/alb/AWSLogs/${AWS::AccountId}/*"
 
-  HttpListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref Alb
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: redirect
-          RedirectConfig: { Protocol: HTTPS, Port: "443", StatusCode: HTTP_301 }
-
-  HttpsListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref Alb
-      Port: 443
-      Protocol: HTTPS
-      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
-      Certificates:
-        - CertificateArn: !Ref Certificate
-      DefaultActions:
-        - Type: fixed-response
-          FixedResponseConfig: { StatusCode: "404", ContentType: text/plain, MessageBody: not found }
-
-  # --- backend·frontend 서비스(#147). nginx 없이 ALB가 경로로 나눠 보냄
-  # 서비스마다 타겟 그룹 2개(Blue/Green)와 리스너 규칙 하나. swagger는 밖에 열지 않음(/api만)
-  BackendTargetGroupBlue:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: dameokja-prod-be-blue
-      VpcId: !Ref Vpc
-      Protocol: HTTP
-      Port: 8080
-      TargetType: ip
-      HealthCheckPath: /actuator/health
-      Matcher: { HttpCode: "200" }
-      TargetGroupAttributes:
-        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
-
-  BackendTargetGroupGreen:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: dameokja-prod-be-green
-      VpcId: !Ref Vpc
-      Protocol: HTTP
-      Port: 8080
-      TargetType: ip
-      HealthCheckPath: /actuator/health
-      Matcher: { HttpCode: "200" }
-      TargetGroupAttributes:
-        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
-
-  FrontendTargetGroupBlue:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: dameokja-prod-fe-blue
-      VpcId: !Ref Vpc
-      Protocol: HTTP
-      Port: 3000
-      TargetType: ip
-      HealthCheckPath: /
-      Matcher: { HttpCode: "200-399" }
-      TargetGroupAttributes:
-        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
-
-  FrontendTargetGroupGreen:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: dameokja-prod-fe-green
-      VpcId: !Ref Vpc
-      Protocol: HTTP
-      Port: 3000
-      TargetType: ip
-      HealthCheckPath: /
-      Matcher: { HttpCode: "200-399" }
-      TargetGroupAttributes:
-        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
-
-  # ECS Native Blue/Green이 배포 때마다 아래 두 규칙의 가중치를 바꿔 blue <-> green을 전환
-  # 그래서 실제 가중치는 템플릿(blue 100)과 다를 수 있음(2026-10-27 prod 확인: 둘 다 green 100).
-  # 규칙 속성을 고치면 CloudFormation이 템플릿 가중치로 되돌려 빈 타겟 그룹으로 요청이 갈 수 있으니, 먼저 실제 가중치를 확인하고 템플릿을 맞춘다
-  BackendListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      ListenerArn: !Ref HttpsListener
-      Priority: 10
-      Conditions:
-        - Field: path-pattern
-          PathPatternConfig: { Values: ["/api", "/api/*"] }
-      Actions:
-        - Type: forward
-          ForwardConfig:
-            TargetGroups:
-              - { TargetGroupArn: !Ref BackendTargetGroupBlue, Weight: 100 }
-              - { TargetGroupArn: !Ref BackendTargetGroupGreen, Weight: 0 }
-
-  FrontendListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      ListenerArn: !Ref HttpsListener
-      Priority: 20
-      Conditions:
-        - Field: path-pattern
-          PathPatternConfig: { Values: ["/*"] }
-      Actions:
-        - Type: forward
-          ForwardConfig:
-            TargetGroups:
-              - { TargetGroupArn: !Ref FrontendTargetGroupBlue, Weight: 100 }
-              - { TargetGroupArn: !Ref FrontendTargetGroupGreen, Weight: 0 }
-
-  # --- Redis: EC2 자체 구축 단일 노드, 이중화 없음 (v2 22번), AOF 영속화
-  # AMI는 DB와 같은 고정 일반 AL2023, 역할도 DB와 같은 SSM 접속용
-  RedisInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: !Ref DbAmiId
-      InstanceType: !Ref RedisInstanceType
-      SubnetId: !Ref PrivateSubnetA
-      SecurityGroupIds: [!Ref RedisSecurityGroup]
-      IamInstanceProfile: !Ref DbInstanceProfile
-      UserData:
-        Fn::Base64: |
-          #!/bin/bash
-          set -e
-          timedatectl set-timezone Asia/Seoul
-          dnf install -y redis6
-          sed -i -e 's/^bind .*/bind 0.0.0.0/' -e 's/^protected-mode yes/protected-mode no/' \
-            -e 's/^appendonly no/appendonly yes/' /etc/redis6/redis6.conf
-          systemctl enable --now redis6
-      Tags:
-        - { Key: Name, Value: dameokja-prod-redis }
-
-  # dev와 같은 Redis 버전(redis:7.4-alpine)을 Docker로 실행. UserData의 redis6(6.2)는 끄고 쓰지 않음
-  # UserData를 바꾸면 처음 부팅 때만 실행되므로 Association으로 적용. 꺼져 있으면 켜질 때 실행되고, 이미 돌고 있으면 그대로 둠
-  RedisDockerAssociation:
-    Type: AWS::SSM::Association
-    Properties:
-      AssociationName: dameokja-prod-redis-docker
-      Name: AWS-RunShellScript
-      Targets:
-        - { Key: InstanceIds, Values: [!Ref RedisInstance] }
-      Parameters:
-        commands:
-          - set -e
-          - dnf install -y docker
-          - systemctl enable --now docker
-          - systemctl disable --now redis6 || true
-          - mkdir -p /var/lib/redis-data
-          - if [ -z "$(docker ps -q --filter name=^redis$ --filter ancestor=redis:7.4-alpine)" ]; then docker rm -f redis || true; docker run -d --name redis --restart unless-stopped --network host -v /var/lib/redis-data:/data redis:7.4-alpine redis-server --protected-mode no --appendonly yes; fi
-
-  # --- prod 전용 MySQL 8.4 (Primary 1대). Standby(2c)·Orchestrator는 #120 장애 테스트 뒤 비용 때문에 정리함 (#203)
-  # 다시 만들 때는 #179(Standby)·#183(Orchestrator, prod-db-ha.yaml) 이후 기록과 tests/DB HA/결과.md 참고
-  # 복제를 붙일 수 있게 처음부터 binlog·GTID를 켬. 계정·스키마는 처음 한 번 Session Manager로 만듦
-  DbRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ec2.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      # 앱 DB 계정 Association이 비밀번호를 서버 안에서 읽도록 (명령 기록에 비밀번호를 남기지 않음)
-      Policies:
-        - PolicyName: read-db-password
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ssm:GetParameter
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD"
-              - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource: !Ref ReplicationSecret
-
-  # 복제 계정(repl) 비밀번호. 사람이 만들지 않고 생성 시 자동으로 정함 (#145)
-  ReplicationSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: dameokja-v2-prod/db-replication
-      GenerateSecretString:
-        PasswordLength: 32
-        # MySQL 기본 비밀번호 정책(대소문자·숫자·특수문자)을 맞추되 셸·SQL 따옴표에 걸리는 문자는 뺌
-        RequireEachIncludedType: true
-        ExcludeCharacters: "'\"`$\\/@%&;|<>(){}[]!*?#~^ "
-
-  DbInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles: [!Ref DbRole]
-
-  DbInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: !Ref DbAmiId
-      InstanceType: !Ref DbInstanceType
-      SubnetId: !Ref PrivateSubnetA
-      SecurityGroupIds: [!Ref DbSecurityGroup]
-      IamInstanceProfile: !Ref DbInstanceProfile
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs: { VolumeSize: 30, VolumeType: gp3 }
-      UserData:
-        Fn::Base64: |
-          #!/bin/bash
-          set -e
-          timedatectl set-timezone Asia/Seoul
-          dnf install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm
-          dnf install -y mysql-community-server
-          cat > /etc/my.cnf.d/dameokja.cnf <<'EOF'
-          [mysqld]
-          server_id=1
-          log_bin=binlog
-          gtid_mode=ON
-          enforce_gtid_consistency=ON
-          default_time_zone='+09:00'
-          EOF
-          systemctl enable --now mysqld
-      Tags:
-        - { Key: Name, Value: dameokja-prod-db }
-
-  # MySQL RPM의 /etc/my.cnf는 my.cnf.d를 읽지 않아 위 dameokja.cnf(GTID 등)가 적용되지 않음. 포함 줄을 넣고,
-  # v1 prod DB에서 복제받을 수 있게 복제본 설정을 zz-replica.cnf로 덧씀(파일 이름순으로 나중에 읽혀 server_id를 덮음)
-  # UserData를 바꾸면 DB 서버가 교체될 수 있어 Association으로 적용. 서버가 바뀌어도 대상이 따라가고, 꺼져 있으면 켜질 때 실행됨
-  # 설정이 바뀐 경우에만 MySQL 재시작
-  # 스택 생성 때 Association이 UserData의 MySQL 설치보다 먼저 돌아 /etc/my.cnf가 include 한 줄만 남고 기본 설정이 my.cnf.rpmnew로 밀려난 적이 있음.
-  # 그래서 설치가 끝날 때까지 기다리고, rpmnew가 있으면 기본 설정을 되살린 뒤 include를 넣음
-  DbConfigAssociation:
-    Type: AWS::SSM::Association
-    Properties:
-      AssociationName: dameokja-prod-db-mycnf
-      Name: AWS-RunShellScript
-      Targets:
-        - { Key: InstanceIds, Values: [!Ref DbInstance] }
-      Parameters:
-        commands:
-          - set -e; changed=
-          - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
-          - systemctl is-enabled mysqld >/dev/null 2>&1 || { echo 'MySQL 설치가 끝나지 않음'; exit 1; }
-          - if [ -f /etc/my.cnf.rpmnew ] && ! grep -q '^\[mysqld\]' /etc/my.cnf; then cp /etc/my.cnf.rpmnew /etc/my.cnf; rm -f /etc/my.cnf.rpmnew; changed=1; fi
-          - grep -q '^!includedir /etc/my.cnf.d' /etc/my.cnf || { echo '!includedir /etc/my.cnf.d' >> /etc/my.cnf; changed=1; }
-          - printf '[mysqld]\nserver_id=2\nlog_replica_updates=ON\nskip_replica_start=ON\nrelay_log_recovery=ON\n' > /tmp/zz-replica.cnf
-          - cmp -s /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf || { mv /tmp/zz-replica.cnf /etc/my.cnf.d/zz-replica.cnf; changed=1; }
-          - if [ -n "$changed" ]; then systemctl restart mysqld; fi
-
-  # BE가 쓰는 앱 DB 계정. 비밀번호는 SSM에서 서버 안에서 읽어 명령 기록에 남지 않음. 비밀번호를 바꾸면 이 Association을 다시 실행
-  # root는 sudo 접속(auth_socket)으로 바꿔 둔 상태를 전제로 함 (2026-10-19 수동 적용)
-  DbAppUserAssociation:
-    Type: AWS::SSM::Association
-    DependsOn: DbConfigAssociation
-    Properties:
-      AssociationName: dameokja-prod-db-app-user
-      Name: AWS-RunShellScript
-      Targets:
-        - { Key: InstanceIds, Values: [!Ref DbInstance] }
-      Parameters:
-        commands:
-          - set -e
-          - for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 10; done
-          - !Sub PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v2-prod/SPRING_DATASOURCE_PASSWORD --with-decryption --query Parameter.Value --output text)
-          - mysql -uroot -e "CREATE DATABASE IF NOT EXISTS app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs; CREATE USER IF NOT EXISTS 'dameokja'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; ALTER USER 'dameokja'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; GRANT ALL PRIVILEGES ON app.* TO 'dameokja'@'10.20.32.0/255.255.224.0';"
-
-  # Primary에 복제 계정과 CLONE 플러그인을 둠. Replica가 처음 한 번 CLONE으로 데이터를 받고 이후 GTID로 복제 (#145)
-  DbReplicationSourceAssociation:
-    Type: AWS::SSM::Association
-    DependsOn: DbConfigAssociation
-    Properties:
-      AssociationName: dameokja-prod-db-replication-source
-      Name: AWS-RunShellScript
-      Targets:
-        - { Key: InstanceIds, Values: [!Ref DbInstance] }
-      Parameters:
-        commands:
-          - set -e
-          - for i in $(seq 1 90); do mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 10; done
-          - mysql -uroot -Ne "SELECT 1 FROM information_schema.plugins WHERE plugin_name='clone'" | grep -q 1 || mysql -uroot -e "INSTALL PLUGIN clone SONAME 'mysql_clone.so'"
-          - !Sub PW=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id ${ReplicationSecret} --query SecretString --output text)
-          - mysql -uroot -e "CREATE USER IF NOT EXISTS 'repl'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; ALTER USER 'repl'@'10.20.32.0/255.255.224.0' IDENTIFIED BY '$PW'; GRANT REPLICATION SLAVE, BACKUP_ADMIN ON *.* TO 'repl'@'10.20.32.0/255.255.224.0';"
-
-  # --- BE가 DB를 찾는 고정 이름: db.prod.dameokja.internal (TTL 5초) (#179)
-  # Cloud Map 영역(prod.dameokja.internal)에는 레코드를 직접 넣을 수 없어(403) DB 전용 사설 영역을 따로 둠 (#181)
-  # 이름이 더 구체적이라 같은 VPC에서 Cloud Map 영역보다 먼저 쓰임. Orchestrator 훅 권한도 이 영역 하나로 좁힐 수 있음
-  DbHostedZone:
-    Type: AWS::Route53::HostedZone
-    Properties:
-      Name: db.prod.dameokja.internal
-      VPCs:
-        - { VPCId: !Ref Vpc, VPCRegion: !Ref AWS::Region }
-
-  # Orchestrator를 다시 두면 장애조치 훅이 이 레코드를 새 Primary IP로 바꿈. 지금은 Primary IP 고정
-  DbDnsRecord:
-    Type: AWS::Route53::RecordSet
-    Properties:
-      HostedZoneId: !Ref DbHostedZone
-      Name: db.prod.dameokja.internal.
-      Type: A
-      TTL: "5"
-      ResourceRecords: [!GetAtt DbInstance.PrivateIp]
-
-  # AI용 PostgreSQL 16을 MySQL과 같은 DB 서버에 둠 (dev는 AI 서버에 직접 설치). 메모리 상한 shared_buffers 512MB
-  # 계정 비밀번호는 SSM /dameokja-v2-prod-ai/POSTGRES_PASSWORD를 서버 안에서 읽음(명령 기록에 남기지 않음). 스키마·기준 데이터는 dev에서 따로 옮김
-  DbPostgresAssociation:
-    Type: AWS::SSM::Association
-    DependsOn: DbConfigAssociation
-    Properties:
-      AssociationName: dameokja-prod-db-postgres
-      Name: AWS-RunShellScript
-      Targets:
-        - { Key: InstanceIds, Values: [!Ref DbInstance] }
-      Parameters:
-        executionTimeout: ["1800"]
-        commands:
-          - set -e; changed=
-          - for i in $(seq 1 90); do systemctl is-enabled mysqld >/dev/null 2>&1 && break; sleep 10; done
-          - rpm -q postgresql16-server >/dev/null 2>&1 || dnf install -y postgresql16-server postgresql16-contrib
-          - D=/var/lib/pgsql/data; [ -f $D/PG_VERSION ] || postgresql-setup --initdb
-          - echo "listen_addresses = '*'" > /tmp/dameokja.conf; echo "shared_buffers = 512MB" >> /tmp/dameokja.conf; echo "password_encryption = scram-sha-256" >> /tmp/dameokja.conf
-          - mkdir -p $D/conf.d && chown postgres:postgres $D/conf.d; grep -q "^include_dir = 'conf.d'" $D/postgresql.conf || { echo "include_dir = 'conf.d'" >> $D/postgresql.conf; changed=1; }
-          - cmp -s /tmp/dameokja.conf $D/conf.d/dameokja.conf || { install -o postgres -g postgres -m 600 /tmp/dameokja.conf $D/conf.d/dameokja.conf; changed=1; }
-          - !Sub "grep -q '^host receipt_ai receipt_ai ${PrivateSubnetACidr} scram-sha-256' $D/pg_hba.conf || { echo 'host receipt_ai receipt_ai ${PrivateSubnetACidr} scram-sha-256' >> $D/pg_hba.conf; changed=1; }"
-          - systemctl enable postgresql; if systemctl is-active -q postgresql; then [ -z "$changed" ] || systemctl restart postgresql; else systemctl start postgresql; fi
-          - !Sub "PW=$(aws ssm get-parameter --region ${AWS::Region} --name /dameokja-v2-prod-ai/POSTGRES_PASSWORD --with-decryption --query Parameter.Value --output text)"
-          - sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='receipt_ai'" | grep -q 1 || sudo -u postgres psql -c "CREATE ROLE receipt_ai LOGIN"
-          - echo "ALTER ROLE receipt_ai PASSWORD :'pw';" | sudo -u postgres psql -v ON_ERROR_STOP=1 -v pw="$PW" >/dev/null
-          - sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='receipt_ai'" | grep -q 1 || sudo -u postgres createdb -O receipt_ai receipt_ai
-          - sudo -u postgres psql -d receipt_ai -c "CREATE EXTENSION IF NOT EXISTS pg_trgm"
-
-  # --- ECS 클러스터 + ASG(private 2b) + Capacity Provider
-  Cluster:
-    Type: AWS::ECS::Cluster
-    Properties:
-      ClusterName: dameokja-prod
-      # 태스크·컨테이너 단위 CPU·메모리 확인용 (#142)
-      ClusterSettings:
-        - { Name: containerInsights, Value: enabled }
-
-  InstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ec2.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-
-  InstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles: [!Ref InstanceRole]
-
-  # 새 인스턴스는 처음 부팅 때 클러스터 등록과 KST 설정. 템플릿을 바꾸면 이후 새로 뜨는 인스턴스부터 적용
-  LaunchTemplate:
-    Type: AWS::EC2::LaunchTemplate
-    Properties:
-      LaunchTemplateName: dameokja-prod
-      LaunchTemplateData:
-        ImageId: !Ref AmiId
-        InstanceType: !Ref InstanceType
-        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
-        SecurityGroupIds: [!Ref InstanceSecurityGroup]
-        MetadataOptions: { HttpTokens: required }
-        TagSpecifications:
-          - ResourceType: instance
-            Tags:
-              - { Key: Name, Value: dameokja-prod }
-        UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
-            timedatectl set-timezone Asia/Seoul
-
-  AutoScalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      AutoScalingGroupName: dameokja-prod
-      VPCZoneIdentifier: [!Ref PrivateSubnetA]
-      LaunchTemplate:
-        LaunchTemplateId: !Ref LaunchTemplate
-        Version: !GetAtt LaunchTemplate.LatestVersionNumber
-      MinSize: !If [PowerOn, !Ref MinSize, 0]
-      MaxSize: !Ref MaxSize
-      # 아래 ManagedTerminationProtection의 전제. 새 서버는 축소 보호 상태로 뜨고, ECS가 Task가 없을 때만 보호를 풂 (#187)
-      NewInstancesProtectedFromScaleIn: true
-
-  # Task를 올릴 자리가 모자라면 ECS가 ASG 인스턴스 수를 늘리고, 남으면 줄임 (min~max 안에서)
-  # 축소할 때 Task가 있는 서버는 고르지 않음. 꺼져 있을 때 빈 서버 대신 Task가 있는 서버가 종료된 적 있음(10/29 측정 중, 10/31) (#187)
-  CapacityProvider:
-    Type: AWS::ECS::CapacityProvider
-    Properties:
-      AutoScalingGroupProvider:
-        AutoScalingGroupArn: !Ref AutoScalingGroup
-        ManagedScaling:
-          Status: ENABLED
-          TargetCapacity: 100
-        ManagedTerminationProtection: ENABLED
-
-  ClusterCapacityProviders:
-    Type: AWS::ECS::ClusterCapacityProviderAssociations
-    Properties:
-      Cluster: !Ref Cluster
-      CapacityProviders: [!Ref CapacityProvider]
-      DefaultCapacityProviderStrategy:
-        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
-
-  # --- BE가 AI를 찾는 내부 주소: ai.prod.dameokja.internal (AI Task가 뜨면 IP가 등록됨)
-  PrivateNamespace:
-    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
-    Properties:
-      Name: prod.dameokja.internal
-      Vpc: !Ref Vpc
-
-  AiDiscoveryService:
-    Type: AWS::ServiceDiscovery::Service
-    Properties:
-      Name: ai
-      NamespaceId: !Ref PrivateNamespace
-      DnsConfig:
-        RoutingPolicy: MULTIVALUE
-        DnsRecords:
-          - { Type: A, TTL: 10 }
-      HealthCheckCustomConfig:
-        FailureThreshold: 1
-
-  # --- 스택이 정하는 설정값. 콘솔에서 바꾸면 다음 배포 때 덮어씀
-  RedisHostParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod/SPRING_DATA_REDIS_HOST
-      Type: String
-      Value: !GetAtt RedisInstance.PrivateIp
-
-  RedisPortParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod/SPRING_DATA_REDIS_PORT
-      Type: String
-      Value: "6379"
-
-  AiBaseUrlParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod/AI_BASE_URL
-      Type: String
-      Value: http://ai.prod.dameokja.internal:8000
-
   # --- 컨테이너 로그 (awslogs). 서비스마다 로그 그룹 하나
   # /dameokja/prod/*는 v1 prod(CloudWatch Agent)가 이미 쓰고 있어 v2 prod는 /dameokja/v2-prod/*
   FrontendLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: /dameokja/v2-prod/frontend
       RetentionInDays: 30
@@ -834,12 +258,16 @@ Resources:
   # BE 로그는 수집·저장 비용이 가장 커서 14일만 보관 (#175)
   BackendLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: /dameokja/v2-prod/backend
       RetentionInDays: 14
 
   AiLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: /dameokja/v2-prod/ai
       RetentionInDays: 30
@@ -848,239 +276,17 @@ Resources:
   # dev는 EC2 Agent(dev.yaml CloudWatchAgentAssociation)로 같은 지표를 이미 수집함
   PrometheusLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: /dameokja/v2-prod/prometheus
       RetentionInDays: 30
 
-  CloudWatchAgentConfigParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod/cloudwatch-agent/config
-      Type: String
-      Value: '{"agent":{"metrics_collection_interval":60,"omit_hostname":true,"region":"ap-northeast-2"},"logs":{"metrics_collected":{"prometheus":{"log_group_name":"/dameokja/v2-prod/prometheus","prometheus_config_path":"env:PROMETHEUS_CONFIG_CONTENT","emf_processor":{"metric_declaration_dedup":true,"metric_namespace":"Dameokja/v2-prod/App","metric_declaration":[{"source_labels":["job"],"label_matcher":"^dameokja-backend$","dimensions":[["env"]],"metric_selectors":["^hikaricp_connections_(active|idle|pending|max)$","^hikaricp_connections_timeout_total$"]}]}}}}}'
-
-  PrometheusScrapeConfigParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod/cloudwatch-agent/prometheus
-      Type: String
-      Value: |
-        global:
-          scrape_interval: 1m
-          scrape_timeout: 10s
-        scrape_configs:
-          - job_name: dameokja-backend
-            metrics_path: /actuator/prometheus
-            sample_limit: 10000
-            static_configs:
-              - targets: ["127.0.0.1:8080"]
-                labels:
-                  env: prod
-            metric_relabel_configs:
-              - source_labels: [__name__]
-                regex: "hikaricp_connections.*"
-                action: keep
-
-  # AI 지표(RunPod 처리·LLM·FastAPI 프로세스) 수집용 CloudWatch Agent 사이드카 설정 (ecs/prod/ai.json의 cloudwatch-agent 컨테이너가 읽음, #137)
-  # AI /metrics는 루프백 요청이면 내부 API 키 없이 열림(AI 저장소). 로그 그룹은 BE 사이드카와 같은 PrometheusLogGroup
-  AiCloudWatchAgentConfigParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod-ai/cloudwatch-agent/config
-      Type: String
-      Value: '{"agent":{"metrics_collection_interval":60,"omit_hostname":true,"region":"ap-northeast-2"},"logs":{"metrics_collected":{"prometheus":{"log_group_name":"/dameokja/v2-prod/prometheus","prometheus_config_path":"env:PROMETHEUS_CONFIG_CONTENT","emf_processor":{"metric_declaration_dedup":true,"metric_namespace":"Dameokja/v2-prod/Ai","metric_declaration":[{"source_labels":["job"],"label_matcher":"^dameokja-ai$","dimensions":[["env"]],"metric_selectors":["^process_(cpu_seconds_total|resident_memory_bytes)$","^dameokja_analysis_(queue_size|active)$","^dameokja_remote_llm_model_load_seconds_(sum|count)$"]},{"source_labels":["job","stage"],"label_matcher":"^dameokja-ai;(worker_total|worker_queue_wait|ocr|llm)$","dimensions":[["env","stage"]],"metric_selectors":["^dameokja_remote_worker_stage_seconds_(sum|count)$"]},{"source_labels":["job","type"],"label_matcher":"^dameokja-ai;(prompt|completion)$","dimensions":[["env","type"]],"metric_selectors":["^dameokja_remote_llm_tokens_total$","^dameokja_remote_llm_tokens_per_second_(sum|count)$"]}]}}}}}'
-
-  AiPrometheusScrapeConfigParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /dameokja-v2-prod-ai/cloudwatch-agent/prometheus
-      Type: String
-      Value: |
-        global:
-          scrape_interval: 1m
-          scrape_timeout: 10s
-        scrape_configs:
-          - job_name: dameokja-ai
-            metrics_path: /metrics
-            static_configs:
-              - targets: ["127.0.0.1:8000"]
-                labels:
-                  env: prod
-            metric_relabel_configs:
-              - source_labels: [__name__]
-                regex: "process_(cpu_seconds_total|resident_memory_bytes)|dameokja_analysis_(queue_size|active)|dameokja_remote_worker_stage_seconds_(sum|count)|dameokja_remote_llm_(tokens_total|tokens_per_second_(sum|count)|model_load_seconds_(sum|count))"
-                action: keep
-
-  # --- IAM
-  # ECS 에이전트가 이미지 받기(GHCR 토큰)와 SSM 값 읽기에 쓰는 역할
-  TaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: dameokja-prod-ecs-task-execution
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ecs-tasks.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-      Policies:
-        - PolicyName: read-app-config
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ssm:GetParameters
-                Resource:
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-prod/*"
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-prod-fe/*"
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dameokja-v2-prod-ai/*"
-              - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource: !Ref GhcrCredentialsArn
-
-  # BE 컨테이너: 이미지 버킷의 prod 업로드 경로만
-  BackendTaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: dameokja-prod-backend-task
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ecs-tasks.amazonaws.com }
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: profile-images
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: [s3:PutObject, s3:GetObject]
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
-              # 프로필 기본 이미지 한 파일만 읽기
-              - Effect: Allow
-                Action: s3:GetObject
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/profiles/default.png"
-        # 같은 Task의 CloudWatch Agent 사이드카가 연결 풀 지표를 EMF 로그로 보냄
-        - PolicyName: prometheus-emf
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
-                Resource: !Sub "${PrometheusLogGroup.Arn}"
-              - Effect: Allow
-                Action: logs:DescribeLogGroups
-                Resource: "*"
-              # Agent가 시작할 때 인스턴스 태그·볼륨을 조회함. 없으면 설정 변환이 실패하고 종료됨 (2026-10-20 확인)
-              - Effect: Allow
-                Action: [ec2:DescribeTags, ec2:DescribeVolumes]
-                Resource: "*"
-
-  # AI 서버: BE가 올린 이미지 읽기
-  AiTaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: dameokja-prod-ai-task
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ecs-tasks.amazonaws.com }
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: read-images
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: s3:GetObject
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/${S3UploadPrefix}*"
-        # 같은 Task의 CloudWatch Agent 사이드카가 AI 지표를 EMF 로그로 보냄 (BackendTaskRole prometheus-emf와 같음, #137)
-        - PolicyName: prometheus-emf
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
-                Resource: !Sub "${PrometheusLogGroup.Arn}"
-              - Effect: Allow
-                Action: logs:DescribeLogGroups
-                Resource: "*"
-              - Effect: Allow
-                Action: [ec2:DescribeTags, ec2:DescribeVolumes]
-                Resource: "*"
-
-  # ECS Native Blue/Green이 배포 중 리스너 규칙·타겟 그룹을 바꿀 때 쓰는 역할
-  EcsInfrastructureRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: dameokja-prod-ecs-infrastructure
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ecs.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers
-
-  # CLOUD prod 승인 job(prod-approval.yml)이 prod Task Definition 등록과 Service 갱신에 쓰는 역할
-  GitHubEcsDeployRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: dameokja-prod-github-ecs-deploy
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
-            Action: sts:AssumeRoleWithWebIdentity
-            Condition:
-              StringEquals:
-                token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                # prod는 CLOUD prod-approval.yml의 GitHub Environments "prod" 승인 job만. FE·BE·AI main이 직접 바꾸지 못하게 함
-                token.actions.githubusercontent.com:sub: repo:100-hours-a-week@167328634/KTB4-5th-CLOUD@1349507673:environment:prod
-      Policies:
-        - PolicyName: ecs-deploy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: [ecs:RegisterTaskDefinition, ecs:DescribeTaskDefinition]
-                Resource: "*"
-              - Effect: Allow
-                Action: [ecs:UpdateService, ecs:DescribeServices]
-                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/*"
-              - Effect: Allow
-                Action: [ecs:DescribeServiceDeployments, ecs:ListServiceDeployments]
-                Resource: "*"
-              # 배포 뒤 흩어진 Task 모으기: 이 클러스터의 서버·Task 조회와 서버 DRAINING (#189)
-              - Effect: Allow
-                Action: ecs:ListContainerInstances
-                Resource: !GetAtt Cluster.Arn
-              - Effect: Allow
-                Action: [ecs:DescribeContainerInstances, ecs:UpdateContainerInstancesState]
-                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:container-instance/${Cluster}/*"
-              - Effect: Allow
-                Action: ecs:DescribeTasks
-                Resource: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/${Cluster}/*"
-              - Effect: Allow
-                Action: ecs:ListTasks
-                Resource: "*"
-                Condition:
-                  ArnEquals:
-                    ecs:cluster: !GetAtt Cluster.Arn
-              - Effect: Allow
-                Action: iam:PassRole
-                Resource: [!GetAtt TaskExecutionRole.Arn, !GetAtt BackendTaskRole.Arn, !GetAtt AiTaskRole.Arn]
-
   # CLOUD prod-dns-weight.yml(승인 job)이 dameokja.com A 레코드의 v1·v2 가중치만 바꾸는 역할
   GitHubDnsRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       RoleName: dameokja-prod-github-dns
       AssumeRolePolicyDocument:
@@ -1119,6 +325,8 @@ Resources:
   # 팀원(IAM 그룹 dameokja-iam)이 prod 설정값(SSM)을 관리하고, prod 인스턴스에 Session Manager로 접속
   TeamSsmAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       ManagedPolicyName: dameokja-v2-prod-ssm-team
       Groups: [dameokja-iam]
@@ -1150,6 +358,8 @@ Resources:
   # 팀원이 프로젝트 로그를 콘솔·Logs Insights에서 분석하도록 허용한다. 로그 변경·삭제 권한은 포함하지 않는다.
   TeamLogsInsightsAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       ManagedPolicyName: dameokja-team-logs-insights
       Groups: [dameokja-iam]
@@ -1181,164 +391,10 @@ Resources:
               - tag:GetResources
             Resource: "*"
 
-  # --- ECS Service. Task Definition은 infra/v2/ecs/prod/*.json (ecs-deploy.yml이 등록). family만 적어 최신 버전을 씀
-  # Task는 메모리가 덜 남은 서버부터 채움(binpack). ECS는 돌던 Task를 옮기지 않아서, 흩어지면 빈 서버가 안 생겨 서버 수가 줄지 않음(#147)
-  # ECS Native Blue/Green: 새 버전을 다른 쪽 타겟 그룹에 띄우고 헬스체크 통과 후 리스너 규칙을 그쪽으로 전환,
-  # 대기(Bake) 시간 동안 문제가 생기면 되돌림
-  # BE, FE. Task Definition은 infra/v2/ecs/prod/backend.json, frontend.json
-  # 0개로 만들고 Task 수는 자동 조정(2~4)이 정함. 자동 조정이 2개로 올린 뒤에도 스택이 Task 수를 되돌리지 않게 하기 위함
-  BackendService:
-    Type: AWS::ECS::Service
-    DependsOn: ClusterCapacityProviders
-    Properties:
-      ServiceName: dameokja-prod-backend
-      Cluster: !Ref Cluster
-      TaskDefinition: dameokja-prod-backend
-      DesiredCount: !If [PowerOn, 2, 0]
-      CapacityProviderStrategy:
-        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
-      PlacementStrategies:
-        - { Type: binpack, Field: memory }
-      AvailabilityZoneRebalancing: DISABLED # 앱 서버는 2b 한 곳이라 쓸 일 없고, 켜져 있으면 binpack을 못 씀
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          Subnets: [!Ref PrivateSubnetA]
-          SecurityGroups: [!Ref AppSecurityGroup]
-      HealthCheckGracePeriodSeconds: 300
-      LoadBalancers:
-        - ContainerName: backend
-          ContainerPort: 8080
-          TargetGroupArn: !Ref BackendTargetGroupBlue
-          AdvancedConfiguration:
-            AlternateTargetGroupArn: !Ref BackendTargetGroupGreen
-            ProductionListenerRule: !Ref BackendListenerRule
-            RoleArn: !GetAtt EcsInfrastructureRole.Arn
-      DeploymentConfiguration:
-        Strategy: BLUE_GREEN
-        BakeTimeInMinutes: 5
-        MinimumHealthyPercent: 100
-        MaximumPercent: 200
-        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
-
-  FrontendService:
-    Type: AWS::ECS::Service
-    DependsOn: ClusterCapacityProviders
-    Properties:
-      ServiceName: dameokja-prod-frontend
-      Cluster: !Ref Cluster
-      TaskDefinition: dameokja-prod-frontend
-      DesiredCount: !If [PowerOn, 2, 0]
-      CapacityProviderStrategy:
-        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
-      PlacementStrategies:
-        - { Type: binpack, Field: memory }
-      AvailabilityZoneRebalancing: DISABLED # 앱 서버는 2b 한 곳이라 쓸 일 없고, 켜져 있으면 binpack을 못 씀
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          Subnets: [!Ref PrivateSubnetA]
-          SecurityGroups: [!Ref FrontendSecurityGroup]
-      HealthCheckGracePeriodSeconds: 300
-      LoadBalancers:
-        - ContainerName: frontend
-          ContainerPort: 3000
-          TargetGroupArn: !Ref FrontendTargetGroupBlue
-          AdvancedConfiguration:
-            AlternateTargetGroupArn: !Ref FrontendTargetGroupGreen
-            ProductionListenerRule: !Ref FrontendListenerRule
-            RoleArn: !GetAtt EcsInfrastructureRole.Arn
-      DeploymentConfiguration:
-        Strategy: BLUE_GREEN
-        BakeTimeInMinutes: 5
-        MinimumHealthyPercent: 100
-        MaximumPercent: 200
-        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
-
-  # AI API. BE는 ai.prod.dameokja.internal:8000으로 호출 (Cloud Map에 Task IP 등록)
-  AiService:
-    Type: AWS::ECS::Service
-    DependsOn: ClusterCapacityProviders
-    Properties:
-      ServiceName: dameokja-prod-ai
-      Cluster: !Ref Cluster
-      TaskDefinition: dameokja-prod-ai
-      DesiredCount: !If [PowerOn, 1, 0]
-      CapacityProviderStrategy:
-        - { CapacityProvider: !Ref CapacityProvider, Weight: 1 }
-      PlacementStrategies:
-        - { Type: binpack, Field: memory }
-      AvailabilityZoneRebalancing: DISABLED # 앱 서버는 2b 한 곳이라 쓸 일 없고, 켜져 있으면 binpack을 못 씀
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          Subnets: [!Ref PrivateSubnetA]
-          SecurityGroups: [!Ref AiSecurityGroup]
-      ServiceRegistries:
-        - RegistryArn: !GetAtt AiDiscoveryService.Arn
-      DeploymentConfiguration:
-        MinimumHealthyPercent: 100
-        MaximumPercent: 200
-        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
-
-  # 앱 Task 수 자동 조정 (Target Tracking, v2 20번). Task가 늘어 자리가 모자라면 Capacity Provider가 인스턴스를 늘림
-  BackendScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    Properties:
-      ServiceNamespace: ecs
-      ScalableDimension: ecs:service:DesiredCount
-      ResourceId: !Sub "service/${Cluster}/${BackendService.Name}"
-      MinCapacity: !If [PowerOn, 2, 0]
-      MaxCapacity: !If [PowerOn, 4, 0]
-
-  BackendCpuScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    Properties:
-      PolicyName: dameokja-prod-backend-cpu
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId: !Ref BackendScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ECSServiceAverageCPUUtilization
-
-  FrontendScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    Properties:
-      ServiceNamespace: ecs
-      ScalableDimension: ecs:service:DesiredCount
-      ResourceId: !Sub "service/${Cluster}/${FrontendService.Name}"
-      MinCapacity: !If [PowerOn, 2, 0]
-      MaxCapacity: !If [PowerOn, 4, 0]
-
-  FrontendCpuScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    Properties:
-      PolicyName: dameokja-prod-frontend-cpu
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId: !Ref FrontendScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ECSServiceAverageCPUUtilization
-
 Outputs:
   VpcId:
     Value: !Ref Vpc
-  ClusterName:
-    Value: !Ref Cluster
-  AlbDnsName:
-    Value: !GetAtt Alb.DNSName
-  AlbHostedZoneId:
-    Value: !GetAtt Alb.CanonicalHostedZoneID
   PrivateSubnetA:
     Value: !Ref PrivateSubnetA
   PrivateSubnetB:
     Value: !Ref PrivateSubnetB
-  AppSecurityGroupId:
-    Value: !Ref AppSecurityGroup
-  AiSecurityGroupId:
-    Value: !Ref AiSecurityGroup
-  RedisPrivateIp:
-    Value: !GetAtt RedisInstance.PrivateIp
-  DbInstanceId:
-    Value: !Ref DbInstance
-  DbPrivateIp:
-    Value: !GetAtt DbInstance.PrivateIp
