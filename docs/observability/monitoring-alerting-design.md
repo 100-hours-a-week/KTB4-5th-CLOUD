@@ -2,7 +2,7 @@
 
 작성일: 2026-10-02  
 적용 범위: v1 (dev·prod). v2 stage·prod의 실제 구성은 [9. 설계와 달라진 점](#9-설계와-달라진-점-v2)  
-선행 문서: [SLI-SLO-design.md](SLI-SLO-design.md) — 이 문서는 그 5장에서 "별도 알림 설계"로 미뤄둔 운영자 알림의 발생 조건·심각도·수신자·대응·복구 조건을 정합니다.  
+선행 문서: [Cloud SLI·SLO 설계](https://github.com/100-hours-a-week/KTB4-5th-wiki/wiki/Cloud-SLI-SLO-%EC%84%A4%EA%B3%84) — 이 문서는 그 5장에서 "별도 알림 설계"로 미뤄둔 운영자 알림의 발생 조건·심각도·수신자·대응·복구 조건을 정합니다.  
 구현: `infra/monitoring` ([README](../../infra/monitoring/README.md))
 
 ## 1. 범위

@@ -2,7 +2,7 @@
 
 > 2026-11-10: v2 prod 모니터링 스택(`dameokja-v2-prod-monitoring`)과 템플릿을 v3 EKS 전환 뒤 삭제했습니다. v3 관측은 Grafana(`infra/v3`)를 씁니다. 아래는 v1 시절 기록입니다.
 
-[SLI-SLO-design.md](../../docs/observability/SLI-SLO-design.md)의 작업 성공률 SLI를 CloudWatch로 수집·계산하고, 오류 예산 소진 속도와 일반 오류를 Discord로 알린다.
+[Cloud SLI·SLO 설계](https://github.com/100-hours-a-week/KTB4-5th-wiki/wiki/Cloud-SLI-SLO-%EC%84%A4%EA%B3%84)의 작업 성공률 SLI를 CloudWatch로 수집·계산하고, 오류 예산 소진 속도와 일반 오류를 Discord로 알린다.
 설계 근거와 후보 비교는 [monitoring-alerting-design.md](../../docs/observability/monitoring-alerting-design.md)를 참고한다.
 
 ## 구성
