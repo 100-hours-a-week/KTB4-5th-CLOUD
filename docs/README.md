@@ -35,6 +35,5 @@
 | | [10/26 Batch 중복 실행 분석](implementation/2026-10-26%20Batch%20중복%20실행%20분석.md) | 정기 Batch 중복 실행 원인 분석 |
 | `observability/` | [monitoring-alerting-design.md](observability/monitoring-alerting-design.md) | v2 CloudWatch 모니터링·알림 설계(구현: `infra/monitoring`) |
 | | [cloudwatch-agent-setup.md](observability/cloudwatch-agent-setup.md) | v2 CloudWatch 로그 수집(nginx·BE·Agent) 적용 기록 |
-| | [prod 자원 산정 분석](observability/analysis/2026-10-26-prod-resource-sizing/README.md) | v3 자원값 산정에 쓴 v2 prod 7일 지표 분석 |
 
 구현 중 장애 분석은 `implementation/`에 두고, 그 밖의 트러블슈팅 기록은 저장소 밖 `기술 문서` 폴더에서 관리합니다.

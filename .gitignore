@@ -6,6 +6,3 @@ certbot/
 .deploy/
 env/*.env
 !env/*.env.example
-# 부하 검증 계정의 비밀번호와 생성 결과는 커밋하지 않는다.
-tests/k6/private/
-__pycache__/
