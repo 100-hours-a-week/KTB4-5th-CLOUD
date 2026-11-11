@@ -19,7 +19,6 @@
 | | [v2 prod 전환 결과.md](implementation/v2%20prod%20전환%20결과.md) | 10/19 운영 전환·DB 이전 결과와 장애 분석 |
 | | [10/19 DB 마이그레이션 쓰기 실패 트러블슈팅](implementation/2026-10-19_DB_마이그레이션_중_쓰기_실패_트러블슈팅.md) | BE 연결 전환 지연의 원인과 재발 방지 방향 |
 | | [10/26 Batch 중복 실행 분석](implementation/2026-10-26%20Batch%20중복%20실행%20분석.md) | 정기 Batch 중복 실행 원인 분석 |
-| | [v3 비용 산정 및 구현 예산.md](implementation/v3%20비용%20산정%20및%20구현%20예산.md) | v3 구성 비용 산정 |
 | `observability/` | [SLI-SLO-design.md](observability/SLI-SLO-design.md) | SLI·SLO 설계 |
 | | [monitoring-alerting-design.md](observability/monitoring-alerting-design.md) | CloudWatch 모니터링·알림 설계(구현: `infra/monitoring`) |
 | | [cloudwatch-agent-setup.md](observability/cloudwatch-agent-setup.md) | CloudWatch 로그 수집(nginx·BE·Agent) 적용 기록 |
