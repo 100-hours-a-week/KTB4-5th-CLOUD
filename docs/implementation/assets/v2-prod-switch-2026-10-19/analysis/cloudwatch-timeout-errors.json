@@ -1,0 +1,95 @@
+{
+  "queryId": "6a6c116d-cd9d-404a-999a-f66d794e9dcc",
+  "status": "Complete",
+  "statistics": {
+    "recordsMatched": 394.0,
+    "recordsScanned": 737391.0,
+    "estimatedRecordsSkipped": 0.0,
+    "bytesScanned": 50063862.0,
+    "estimatedBytesSkipped": 0.0,
+    "logGroupsScanned": 1.0,
+    "resultCount": 20.0
+  },
+  "rows": [
+    {
+      "@timestamp": "2026-10-19 14:05:31.674",
+      "@message": "2026-10-19T23:05:31.674+09:00  WARN 1 --- [backend] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=83)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.674",
+      "@message": "2026-10-19T23:05:31.674+09:00  WARN 1 --- [backend] [nio-8080-exec-2] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=82)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.676",
+      "@message": "2026-10-19T23:05:31.676+09:00 ERROR 1 --- [backend] [nio-8080-exec-2] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.678",
+      "@message": "2026-10-19T23:05:31.678+09:00 ERROR 1 --- [backend] [nio-8080-exec-4] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.959",
+      "@message": "2026-10-19T23:05:31.959+09:00  WARN 1 --- [backend] [   scheduling-2] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=81)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.961",
+      "@message": "Caused by: org.hibernate.exception.JDBCConnectionException: Unable to acquire JDBC Connection [HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=81)] [n/a]"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.961",
+      "@message": "2026-10-19T23:05:31.959+09:00 ERROR 1 --- [backend] [   scheduling-2] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:31.961",
+      "@message": "Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=81)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.355",
+      "@message": "2026-10-19T23:05:32.355+09:00  WARN 1 --- [backend] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=81)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.356",
+      "@message": "2026-10-19T23:05:32.356+09:00 ERROR 1 --- [backend] [nio-8080-exec-3] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.432",
+      "@message": "2026-10-19T23:05:32.432+09:00  WARN 1 --- [backend] [nio-8080-exec-6] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=80)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.433",
+      "@message": "2026-10-19T23:05:32.433+09:00 ERROR 1 --- [backend] [nio-8080-exec-6] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.694",
+      "@message": "2026-10-19T23:05:32.694+09:00  WARN 1 --- [backend] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=80)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.695",
+      "@message": "2026-10-19T23:05:32.695+09:00 ERROR 1 --- [backend] [io-8080-exec-10] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.887",
+      "@message": "2026-10-19T23:05:32.887+09:00  WARN 1 --- [backend] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=79)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:32.887",
+      "@message": "2026-10-19T23:05:32.887+09:00 ERROR 1 --- [backend] [nio-8080-exec-8] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:33.085",
+      "@message": "2026-10-19T23:05:33.084+09:00  WARN 1 --- [backend] [nio-8080-exec-9] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=79)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:33.085",
+      "@message": "2026-10-19T23:05:33.085+09:00 ERROR 1 --- [backend] [nio-8080-exec-9] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:33.155",
+      "@message": "2026-10-19T23:05:33.155+09:00  WARN 1 --- [backend] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HikariPool-1 - Connection is not available, request timed out after 30000ms (total=10, active=10, idle=0, waiting=78)"
+    },
+    {
+      "@timestamp": "2026-10-19 14:05:33.155",
+      "@message": "2026-10-19T23:05:33.155+09:00 ERROR 1 --- [backend] [nio-8080-exec-1] c.d.b.g.s.JwtAuthenticationFilter        : JWT 인증 처리 실패: org.springframework.transaction.CannotCreateTransactionException"
+    }
+  ]
+}

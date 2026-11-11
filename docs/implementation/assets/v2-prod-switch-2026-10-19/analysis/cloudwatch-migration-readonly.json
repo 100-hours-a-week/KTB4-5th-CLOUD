@@ -1,0 +1,63 @@
+{
+  "queryId": "59febcfa-9c8e-4a0d-815f-305a198a51c3",
+  "status": "Complete",
+  "statistics": {
+    "recordsMatched": 4800.0,
+    "recordsScanned": 1081351.0,
+    "estimatedRecordsSkipped": 0.0,
+    "bytesScanned": 85895504.0,
+    "estimatedBytesSkipped": 0.0,
+    "logGroupsScanned": 1.0,
+    "resultCount": 8.0
+  },
+  "rows": [
+    {
+      "@message": "Caused by: org.hibernate.exception.GenericJDBCException: JDBC exception executing SQL [The MySQL server is running with the --read-only option so it cannot execute this statement] [SELECT analysis_dispatch_id",
+      "logLines": "1078",
+      "firstSeen": "2026-10-19 12:35:28.994",
+      "lastSeen": "2026-10-19 12:44:36.372"
+    },
+    {
+      "@message": "org.springframework.orm.jpa.JpaSystemException: JDBC exception executing SQL [The MySQL server is running with the --read-only option so it cannot execute this statement] [SELECT analysis_dispatch_id",
+      "logLines": "1078",
+      "firstSeen": "2026-10-19 12:35:28.994",
+      "lastSeen": "2026-10-19 12:44:36.372"
+    },
+    {
+      "@message": "Caused by: java.sql.SQLException: The MySQL server is running with the --read-only option so it cannot execute this statement",
+      "logLines": "1200",
+      "firstSeen": "2026-10-19 12:35:28.994",
+      "lastSeen": "2026-10-19 12:44:36.372"
+    },
+    {
+      "@message": "2026-10-19T21:44:36.367+09:00  WARN 1 --- [backend] [   scheduling-1] org.hibernate.orm.jdbc.error             : The MySQL server is running with the --read-only option so it cannot execute this statement",
+      "logLines": "1",
+      "firstSeen": "2026-10-19 12:44:36.368",
+      "lastSeen": "2026-10-19 12:44:36.368"
+    },
+    {
+      "@message": "Caused by: org.hibernate.exception.GenericJDBCException: JDBC exception executing SQL [The MySQL server is running with the --read-only option so it cannot execute this statement] [UPDATE analysis_feedbacks",
+      "logLines": "109",
+      "firstSeen": "2026-10-19 12:35:30.470",
+      "lastSeen": "2026-10-19 12:44:36.041"
+    },
+    {
+      "@message": "org.springframework.orm.jpa.JpaSystemException: JDBC exception executing SQL [The MySQL server is running with the --read-only option so it cannot execute this statement] [UPDATE analysis_feedbacks",
+      "logLines": "109",
+      "firstSeen": "2026-10-19 12:35:30.470",
+      "lastSeen": "2026-10-19 12:44:36.041"
+    },
+    {
+      "@message": "2026-10-19T21:44:36.037+09:00  WARN 1 --- [backend] [   scheduling-1] org.hibernate.orm.jdbc.error             : The MySQL server is running with the --read-only option so it cannot execute this statement",
+      "logLines": "1",
+      "firstSeen": "2026-10-19 12:44:36.037",
+      "lastSeen": "2026-10-19 12:44:36.037"
+    },
+    {
+      "@message": "2026-10-19T21:44:35.359+09:00  WARN 1 --- [backend] [   scheduling-2] org.hibernate.orm.jdbc.error             : The MySQL server is running with the --read-only option so it cannot execute this statement",
+      "logLines": "1",
+      "firstSeen": "2026-10-19 12:44:35.359",
+      "lastSeen": "2026-10-19 12:44:35.359"
+    }
+  ]
+}

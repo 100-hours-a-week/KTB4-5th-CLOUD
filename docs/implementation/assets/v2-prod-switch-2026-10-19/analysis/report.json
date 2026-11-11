@@ -1,0 +1,2388 @@
+{
+  "runId": "switch20261019live",
+  "firstSampleMs": 1792412218860,
+  "lastSampleMs": 1792419418917,
+  "phases": [
+    {
+      "phase": "baseline",
+      "kind": "read",
+      "requests": 244,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 25.98945
+    },
+    {
+      "phase": "baseline",
+      "kind": "write",
+      "requests": 47,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 36.833042
+    },
+    {
+      "phase": "baseline",
+      "kind": "write_precondition",
+      "requests": 47,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.989539
+    },
+    {
+      "phase": "baseline",
+      "kind": "write_readback",
+      "requests": 46,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 22.069755
+    },
+    {
+      "phase": "transition-start",
+      "kind": "auth",
+      "requests": 135,
+      "failed": 2,
+      "http5xx": 0,
+      "p95Ms": 196.400307
+    },
+    {
+      "phase": "transition-start",
+      "kind": "read",
+      "requests": 35499,
+      "failed": 219,
+      "http5xx": 0,
+      "p95Ms": 46.909916
+    },
+    {
+      "phase": "transition-start",
+      "kind": "write",
+      "requests": 2,
+      "failed": 1,
+      "http5xx": 1,
+      "p95Ms": 357.31362
+    },
+    {
+      "phase": "transition-start",
+      "kind": "write_precondition",
+      "requests": 7021,
+      "failed": 7019,
+      "http5xx": 7001,
+      "p95Ms": 47.413116
+    },
+    {
+      "phase": "transition-start",
+      "kind": "write_readback",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.34613
+    },
+    {
+      "phase": "unmarked",
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 221.74514
+    },
+    {
+      "phase": "unmarked",
+      "kind": "read",
+      "requests": 62,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.496006
+    },
+    {
+      "phase": "unmarked",
+      "kind": "write",
+      "requests": 12,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 63.496891
+    },
+    {
+      "phase": "unmarked",
+      "kind": "write_precondition",
+      "requests": 12,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 27.31299
+    },
+    {
+      "phase": "unmarked",
+      "kind": "write_readback",
+      "requests": 12,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 25.067573
+    }
+  ],
+  "minutes": [
+    {
+      "minuteEpoch": 29873536,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 221.74514
+    },
+    {
+      "minuteEpoch": 29873536,
+      "kind": "read",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 24.917485
+    },
+    {
+      "minuteEpoch": 29873536,
+      "kind": "write",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 63.496891
+    },
+    {
+      "minuteEpoch": 29873536,
+      "kind": "write_precondition",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 16.852765
+    },
+    {
+      "minuteEpoch": 29873536,
+      "kind": "write_readback",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 25.067573
+    },
+    {
+      "minuteEpoch": 29873537,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 28.09273
+    },
+    {
+      "minuteEpoch": 29873537,
+      "kind": "write",
+      "requests": 57,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 39.302596
+    },
+    {
+      "minuteEpoch": 29873537,
+      "kind": "write_precondition",
+      "requests": 57,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.989539
+    },
+    {
+      "minuteEpoch": 29873537,
+      "kind": "write_readback",
+      "requests": 56,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 22.586807
+    },
+    {
+      "minuteEpoch": 29873538,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 462.691717
+    },
+    {
+      "minuteEpoch": 29873538,
+      "kind": "read",
+      "requests": 297,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 60.980314
+    },
+    {
+      "minuteEpoch": 29873538,
+      "kind": "write",
+      "requests": 2,
+      "failed": 1,
+      "http5xx": 1,
+      "p95Ms": 357.31362
+    },
+    {
+      "minuteEpoch": 29873538,
+      "kind": "write_precondition",
+      "requests": 58,
+      "failed": 56,
+      "http5xx": 56,
+      "p95Ms": 62.384744
+    },
+    {
+      "minuteEpoch": 29873538,
+      "kind": "write_readback",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.34613
+    },
+    {
+      "minuteEpoch": 29873539,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 56.919104
+    },
+    {
+      "minuteEpoch": 29873539,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 64.053142
+    },
+    {
+      "minuteEpoch": 29873540,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 52.276674
+    },
+    {
+      "minuteEpoch": 29873540,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 51.041349
+    },
+    {
+      "minuteEpoch": 29873541,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 50.494724
+    },
+    {
+      "minuteEpoch": 29873541,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 51.25767
+    },
+    {
+      "minuteEpoch": 29873542,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 53.18824
+    },
+    {
+      "minuteEpoch": 29873542,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 48.928274
+    },
+    {
+      "minuteEpoch": 29873543,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 52.427809
+    },
+    {
+      "minuteEpoch": 29873543,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 53.434395
+    },
+    {
+      "minuteEpoch": 29873544,
+      "kind": "auth",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 104.220945
+    },
+    {
+      "minuteEpoch": 29873544,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 51.546353
+    },
+    {
+      "minuteEpoch": 29873544,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 54.316345
+    },
+    {
+      "minuteEpoch": 29873545,
+      "kind": "auth",
+      "requests": 4,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 152.278538
+    },
+    {
+      "minuteEpoch": 29873545,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 52.835007
+    },
+    {
+      "minuteEpoch": 29873545,
+      "kind": "write_precondition",
+      "requests": 61,
+      "failed": 61,
+      "http5xx": 61,
+      "p95Ms": 50.069754
+    },
+    {
+      "minuteEpoch": 29873546,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 175.64189
+    },
+    {
+      "minuteEpoch": 29873546,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 54.97704
+    },
+    {
+      "minuteEpoch": 29873546,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 53.895642
+    },
+    {
+      "minuteEpoch": 29873547,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 53.787359
+    },
+    {
+      "minuteEpoch": 29873547,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 58.13077
+    },
+    {
+      "minuteEpoch": 29873548,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 55.666386
+    },
+    {
+      "minuteEpoch": 29873548,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 54.999312
+    },
+    {
+      "minuteEpoch": 29873549,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 51.073307
+    },
+    {
+      "minuteEpoch": 29873549,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 48.844197
+    },
+    {
+      "minuteEpoch": 29873550,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 59.786641
+    },
+    {
+      "minuteEpoch": 29873550,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 56.7174
+    },
+    {
+      "minuteEpoch": 29873551,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 50.6496
+    },
+    {
+      "minuteEpoch": 29873551,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 64.199208
+    },
+    {
+      "minuteEpoch": 29873552,
+      "kind": "auth",
+      "requests": 1,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 110.309153
+    },
+    {
+      "minuteEpoch": 29873552,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 51.749208
+    },
+    {
+      "minuteEpoch": 29873552,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 48.065865
+    },
+    {
+      "minuteEpoch": 29873553,
+      "kind": "auth",
+      "requests": 5,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 119.037018
+    },
+    {
+      "minuteEpoch": 29873553,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 49.364793
+    },
+    {
+      "minuteEpoch": 29873553,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 45.710569
+    },
+    {
+      "minuteEpoch": 29873554,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 116.133235
+    },
+    {
+      "minuteEpoch": 29873554,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 50.697108
+    },
+    {
+      "minuteEpoch": 29873554,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 52.206407
+    },
+    {
+      "minuteEpoch": 29873555,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 55.336959
+    },
+    {
+      "minuteEpoch": 29873555,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 65.223566
+    },
+    {
+      "minuteEpoch": 29873556,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 65.302043
+    },
+    {
+      "minuteEpoch": 29873556,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 64.438715
+    },
+    {
+      "minuteEpoch": 29873557,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 132.601345
+    },
+    {
+      "minuteEpoch": 29873557,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 104.038645
+    },
+    {
+      "minuteEpoch": 29873558,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 58.889948
+    },
+    {
+      "minuteEpoch": 29873558,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 59.881085
+    },
+    {
+      "minuteEpoch": 29873559,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 42.966112
+    },
+    {
+      "minuteEpoch": 29873559,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 50.381247
+    },
+    {
+      "minuteEpoch": 29873560,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.616135
+    },
+    {
+      "minuteEpoch": 29873560,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 34.909489
+    },
+    {
+      "minuteEpoch": 29873561,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 477.431454
+    },
+    {
+      "minuteEpoch": 29873561,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 36.785216
+    },
+    {
+      "minuteEpoch": 29873561,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 38.644392
+    },
+    {
+      "minuteEpoch": 29873562,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 144.020491
+    },
+    {
+      "minuteEpoch": 29873562,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.406017
+    },
+    {
+      "minuteEpoch": 29873562,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 50.627144
+    },
+    {
+      "minuteEpoch": 29873563,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.894814
+    },
+    {
+      "minuteEpoch": 29873563,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 36.166739
+    },
+    {
+      "minuteEpoch": 29873564,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 28.794654
+    },
+    {
+      "minuteEpoch": 29873564,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 36.979257
+    },
+    {
+      "minuteEpoch": 29873565,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 27.301759
+    },
+    {
+      "minuteEpoch": 29873565,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 32.9468
+    },
+    {
+      "minuteEpoch": 29873566,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.956095
+    },
+    {
+      "minuteEpoch": 29873566,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 38.323917
+    },
+    {
+      "minuteEpoch": 29873567,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.697009
+    },
+    {
+      "minuteEpoch": 29873567,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 38.618737
+    },
+    {
+      "minuteEpoch": 29873568,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.856458
+    },
+    {
+      "minuteEpoch": 29873568,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 31.132319
+    },
+    {
+      "minuteEpoch": 29873569,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 109.933047
+    },
+    {
+      "minuteEpoch": 29873569,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 26.995005
+    },
+    {
+      "minuteEpoch": 29873569,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 26.651077
+    },
+    {
+      "minuteEpoch": 29873570,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 105.073613
+    },
+    {
+      "minuteEpoch": 29873570,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.316
+    },
+    {
+      "minuteEpoch": 29873570,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 32.031236
+    },
+    {
+      "minuteEpoch": 29873571,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.712468
+    },
+    {
+      "minuteEpoch": 29873571,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.009276
+    },
+    {
+      "minuteEpoch": 29873572,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 47.840646
+    },
+    {
+      "minuteEpoch": 29873572,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 46.876785
+    },
+    {
+      "minuteEpoch": 29873573,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 101.175084
+    },
+    {
+      "minuteEpoch": 29873573,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 83.220892
+    },
+    {
+      "minuteEpoch": 29873574,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 60.52969
+    },
+    {
+      "minuteEpoch": 29873574,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 73.842695
+    },
+    {
+      "minuteEpoch": 29873575,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 42.517761
+    },
+    {
+      "minuteEpoch": 29873575,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 49.276266
+    },
+    {
+      "minuteEpoch": 29873576,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 41.487153
+    },
+    {
+      "minuteEpoch": 29873576,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 42.081082
+    },
+    {
+      "minuteEpoch": 29873577,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 196.400307
+    },
+    {
+      "minuteEpoch": 29873577,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 38.743466
+    },
+    {
+      "minuteEpoch": 29873577,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 41.061823
+    },
+    {
+      "minuteEpoch": 29873578,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 162.625515
+    },
+    {
+      "minuteEpoch": 29873578,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 33.228941
+    },
+    {
+      "minuteEpoch": 29873578,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.465042
+    },
+    {
+      "minuteEpoch": 29873579,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 33.988581
+    },
+    {
+      "minuteEpoch": 29873579,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 35.223812
+    },
+    {
+      "minuteEpoch": 29873580,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 38.804427
+    },
+    {
+      "minuteEpoch": 29873580,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 47.70078
+    },
+    {
+      "minuteEpoch": 29873581,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 36.448376
+    },
+    {
+      "minuteEpoch": 29873581,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 41.090838
+    },
+    {
+      "minuteEpoch": 29873582,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 33.238865
+    },
+    {
+      "minuteEpoch": 29873582,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 32.112795
+    },
+    {
+      "minuteEpoch": 29873583,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.384974
+    },
+    {
+      "minuteEpoch": 29873583,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.396948
+    },
+    {
+      "minuteEpoch": 29873584,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.834336
+    },
+    {
+      "minuteEpoch": 29873584,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 32.994234
+    },
+    {
+      "minuteEpoch": 29873585,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 155.291251
+    },
+    {
+      "minuteEpoch": 29873585,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.063672
+    },
+    {
+      "minuteEpoch": 29873585,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.170221
+    },
+    {
+      "minuteEpoch": 29873586,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 93.549299
+    },
+    {
+      "minuteEpoch": 29873586,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.650711
+    },
+    {
+      "minuteEpoch": 29873586,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 42.025192
+    },
+    {
+      "minuteEpoch": 29873587,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.177844
+    },
+    {
+      "minuteEpoch": 29873587,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 36.295767
+    },
+    {
+      "minuteEpoch": 29873588,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.021632
+    },
+    {
+      "minuteEpoch": 29873588,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 31.580828
+    },
+    {
+      "minuteEpoch": 29873589,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.392462
+    },
+    {
+      "minuteEpoch": 29873589,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 31.08542
+    },
+    {
+      "minuteEpoch": 29873590,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.846482
+    },
+    {
+      "minuteEpoch": 29873590,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 31.621711
+    },
+    {
+      "minuteEpoch": 29873591,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.429077
+    },
+    {
+      "minuteEpoch": 29873591,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.965923
+    },
+    {
+      "minuteEpoch": 29873592,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 38.411656
+    },
+    {
+      "minuteEpoch": 29873592,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 47.584794
+    },
+    {
+      "minuteEpoch": 29873593,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 169.986532
+    },
+    {
+      "minuteEpoch": 29873593,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.069636
+    },
+    {
+      "minuteEpoch": 29873593,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 31.205913
+    },
+    {
+      "minuteEpoch": 29873594,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 98.441284
+    },
+    {
+      "minuteEpoch": 29873594,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.069241
+    },
+    {
+      "minuteEpoch": 29873594,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 57.718958
+    },
+    {
+      "minuteEpoch": 29873595,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.352986
+    },
+    {
+      "minuteEpoch": 29873595,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 32.521677
+    },
+    {
+      "minuteEpoch": 29873596,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.216465
+    },
+    {
+      "minuteEpoch": 29873596,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 31.873796
+    },
+    {
+      "minuteEpoch": 29873597,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.644341
+    },
+    {
+      "minuteEpoch": 29873597,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.549176
+    },
+    {
+      "minuteEpoch": 29873598,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 35.264567
+    },
+    {
+      "minuteEpoch": 29873598,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.649631
+    },
+    {
+      "minuteEpoch": 29873599,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.505038
+    },
+    {
+      "minuteEpoch": 29873599,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 32.79159
+    },
+    {
+      "minuteEpoch": 29873600,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.003213
+    },
+    {
+      "minuteEpoch": 29873600,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.255837
+    },
+    {
+      "minuteEpoch": 29873601,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 144.01358
+    },
+    {
+      "minuteEpoch": 29873601,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.314075
+    },
+    {
+      "minuteEpoch": 29873601,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.500424
+    },
+    {
+      "minuteEpoch": 29873602,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 98.053087
+    },
+    {
+      "minuteEpoch": 29873602,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.163367
+    },
+    {
+      "minuteEpoch": 29873602,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.442083
+    },
+    {
+      "minuteEpoch": 29873603,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 54.863212
+    },
+    {
+      "minuteEpoch": 29873603,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 120.723995
+    },
+    {
+      "minuteEpoch": 29873604,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.635606
+    },
+    {
+      "minuteEpoch": 29873604,
+      "kind": "write_precondition",
+      "requests": 58,
+      "failed": 58,
+      "http5xx": 58,
+      "p95Ms": 42.84839
+    },
+    {
+      "minuteEpoch": 29873605,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 38.571615
+    },
+    {
+      "minuteEpoch": 29873605,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 30.841884
+    },
+    {
+      "minuteEpoch": 29873606,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.427055
+    },
+    {
+      "minuteEpoch": 29873606,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.551882
+    },
+    {
+      "minuteEpoch": 29873607,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.96618
+    },
+    {
+      "minuteEpoch": 29873607,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.492697
+    },
+    {
+      "minuteEpoch": 29873608,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 38.373015
+    },
+    {
+      "minuteEpoch": 29873608,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.387604
+    },
+    {
+      "minuteEpoch": 29873609,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 106.279892
+    },
+    {
+      "minuteEpoch": 29873609,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.172947
+    },
+    {
+      "minuteEpoch": 29873609,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.918718
+    },
+    {
+      "minuteEpoch": 29873610,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 106.704306
+    },
+    {
+      "minuteEpoch": 29873610,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.649503
+    },
+    {
+      "minuteEpoch": 29873610,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 28.364559
+    },
+    {
+      "minuteEpoch": 29873611,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.460863
+    },
+    {
+      "minuteEpoch": 29873611,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 31.577364
+    },
+    {
+      "minuteEpoch": 29873612,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.331416
+    },
+    {
+      "minuteEpoch": 29873612,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.737402
+    },
+    {
+      "minuteEpoch": 29873613,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.601724
+    },
+    {
+      "minuteEpoch": 29873613,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.076585
+    },
+    {
+      "minuteEpoch": 29873614,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.002628
+    },
+    {
+      "minuteEpoch": 29873614,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 33.399128
+    },
+    {
+      "minuteEpoch": 29873615,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 36.165028
+    },
+    {
+      "minuteEpoch": 29873615,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 48.953634
+    },
+    {
+      "minuteEpoch": 29873616,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.050217
+    },
+    {
+      "minuteEpoch": 29873616,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 37.076486
+    },
+    {
+      "minuteEpoch": 29873617,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 153.710594
+    },
+    {
+      "minuteEpoch": 29873617,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.903719
+    },
+    {
+      "minuteEpoch": 29873617,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 36.067205
+    },
+    {
+      "minuteEpoch": 29873618,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 91.562192
+    },
+    {
+      "minuteEpoch": 29873618,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.051691
+    },
+    {
+      "minuteEpoch": 29873618,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 42.597188
+    },
+    {
+      "minuteEpoch": 29873619,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 33.718438
+    },
+    {
+      "minuteEpoch": 29873619,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 32.359724
+    },
+    {
+      "minuteEpoch": 29873620,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.981155
+    },
+    {
+      "minuteEpoch": 29873620,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.715838
+    },
+    {
+      "minuteEpoch": 29873621,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.724808
+    },
+    {
+      "minuteEpoch": 29873621,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.113301
+    },
+    {
+      "minuteEpoch": 29873622,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.441159
+    },
+    {
+      "minuteEpoch": 29873622,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 35.885915
+    },
+    {
+      "minuteEpoch": 29873623,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.235334
+    },
+    {
+      "minuteEpoch": 29873623,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 35.758005
+    },
+    {
+      "minuteEpoch": 29873624,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.655285
+    },
+    {
+      "minuteEpoch": 29873624,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 37.609998
+    },
+    {
+      "minuteEpoch": 29873625,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 159.586186
+    },
+    {
+      "minuteEpoch": 29873625,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.280123
+    },
+    {
+      "minuteEpoch": 29873625,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.104505
+    },
+    {
+      "minuteEpoch": 29873626,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 95.693373
+    },
+    {
+      "minuteEpoch": 29873626,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 31.932623
+    },
+    {
+      "minuteEpoch": 29873626,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 47.387035
+    },
+    {
+      "minuteEpoch": 29873627,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 32.916671
+    },
+    {
+      "minuteEpoch": 29873627,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 30.797285
+    },
+    {
+      "minuteEpoch": 29873628,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.779298
+    },
+    {
+      "minuteEpoch": 29873628,
+      "kind": "write_precondition",
+      "requests": 57,
+      "failed": 57,
+      "http5xx": 57,
+      "p95Ms": 34.171797
+    },
+    {
+      "minuteEpoch": 29873629,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 28.838168
+    },
+    {
+      "minuteEpoch": 29873629,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 27.763744
+    },
+    {
+      "minuteEpoch": 29873630,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 27.865967
+    },
+    {
+      "minuteEpoch": 29873630,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 28.373549
+    },
+    {
+      "minuteEpoch": 29873631,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 28.859034
+    },
+    {
+      "minuteEpoch": 29873631,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.738255
+    },
+    {
+      "minuteEpoch": 29873632,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.951807
+    },
+    {
+      "minuteEpoch": 29873632,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 27.904008
+    },
+    {
+      "minuteEpoch": 29873633,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 172.014327
+    },
+    {
+      "minuteEpoch": 29873633,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 93.325923
+    },
+    {
+      "minuteEpoch": 29873633,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 92.089502
+    },
+    {
+      "minuteEpoch": 29873634,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 100.422124
+    },
+    {
+      "minuteEpoch": 29873634,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 45.14229
+    },
+    {
+      "minuteEpoch": 29873634,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 59.273726
+    },
+    {
+      "minuteEpoch": 29873635,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 37.216064
+    },
+    {
+      "minuteEpoch": 29873635,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 44.149417
+    },
+    {
+      "minuteEpoch": 29873636,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 34.026568
+    },
+    {
+      "minuteEpoch": 29873636,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 38.943862
+    },
+    {
+      "minuteEpoch": 29873637,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 26.282414
+    },
+    {
+      "minuteEpoch": 29873637,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 28.357645
+    },
+    {
+      "minuteEpoch": 29873638,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 30.833667
+    },
+    {
+      "minuteEpoch": 29873638,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 32.843293
+    },
+    {
+      "minuteEpoch": 29873639,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 25.164107
+    },
+    {
+      "minuteEpoch": 29873639,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 37.288833
+    },
+    {
+      "minuteEpoch": 29873640,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 44.912307
+    },
+    {
+      "minuteEpoch": 29873640,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 47.354437
+    },
+    {
+      "minuteEpoch": 29873641,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 126.814926
+    },
+    {
+      "minuteEpoch": 29873641,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 24.980853
+    },
+    {
+      "minuteEpoch": 29873641,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 34.214013
+    },
+    {
+      "minuteEpoch": 29873642,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 110.832171
+    },
+    {
+      "minuteEpoch": 29873642,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 24.210697
+    },
+    {
+      "minuteEpoch": 29873642,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 22.765373
+    },
+    {
+      "minuteEpoch": 29873643,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 23.211584
+    },
+    {
+      "minuteEpoch": 29873643,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.115181
+    },
+    {
+      "minuteEpoch": 29873644,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 26.047
+    },
+    {
+      "minuteEpoch": 29873644,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 25.055512
+    },
+    {
+      "minuteEpoch": 29873645,
+      "kind": "auth",
+      "requests": 4,
+      "failed": 2,
+      "http5xx": 0,
+      "p95Ms": 4975.852009
+    },
+    {
+      "minuteEpoch": 29873645,
+      "kind": "read",
+      "requests": 222,
+      "failed": 89,
+      "http5xx": 0,
+      "p95Ms": 4982.001733
+    },
+    {
+      "minuteEpoch": 29873645,
+      "kind": "write_precondition",
+      "requests": 23,
+      "failed": 23,
+      "http5xx": 16,
+      "p95Ms": 4977.788478
+    },
+    {
+      "minuteEpoch": 29873646,
+      "kind": "read",
+      "requests": 278,
+      "failed": 18,
+      "http5xx": 0,
+      "p95Ms": 4974.380675
+    },
+    {
+      "minuteEpoch": 29873646,
+      "kind": "write_precondition",
+      "requests": 54,
+      "failed": 54,
+      "http5xx": 53,
+      "p95Ms": 57.294612
+    },
+    {
+      "minuteEpoch": 29873647,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 29.790858
+    },
+    {
+      "minuteEpoch": 29873647,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 37.01877
+    },
+    {
+      "minuteEpoch": 29873648,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 23.646084
+    },
+    {
+      "minuteEpoch": 29873648,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.992493
+    },
+    {
+      "minuteEpoch": 29873649,
+      "kind": "auth",
+      "requests": 6,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 93.706545
+    },
+    {
+      "minuteEpoch": 29873649,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 22.97959
+    },
+    {
+      "minuteEpoch": 29873649,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 29.276815
+    },
+    {
+      "minuteEpoch": 29873650,
+      "kind": "auth",
+      "requests": 3,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 97.656315
+    },
+    {
+      "minuteEpoch": 29873650,
+      "kind": "read",
+      "requests": 282,
+      "failed": 23,
+      "http5xx": 0,
+      "p95Ms": 4977.630907
+    },
+    {
+      "minuteEpoch": 29873650,
+      "kind": "write_precondition",
+      "requests": 49,
+      "failed": 49,
+      "http5xx": 47,
+      "p95Ms": 58.604209
+    },
+    {
+      "minuteEpoch": 29873651,
+      "kind": "read",
+      "requests": 233,
+      "failed": 80,
+      "http5xx": 0,
+      "p95Ms": 4981.804852
+    },
+    {
+      "minuteEpoch": 29873651,
+      "kind": "write_precondition",
+      "requests": 25,
+      "failed": 25,
+      "http5xx": 18,
+      "p95Ms": 4977.222446
+    },
+    {
+      "minuteEpoch": 29873652,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 25.306542
+    },
+    {
+      "minuteEpoch": 29873652,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 33.356997
+    },
+    {
+      "minuteEpoch": 29873653,
+      "kind": "auth",
+      "requests": 2,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 96.476874
+    },
+    {
+      "minuteEpoch": 29873653,
+      "kind": "read",
+      "requests": 292,
+      "failed": 9,
+      "http5xx": 0,
+      "p95Ms": 1293.685255
+    },
+    {
+      "minuteEpoch": 29873653,
+      "kind": "write_precondition",
+      "requests": 55,
+      "failed": 55,
+      "http5xx": 54,
+      "p95Ms": 24.335625
+    },
+    {
+      "minuteEpoch": 29873654,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 24.128257
+    },
+    {
+      "minuteEpoch": 29873654,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 25.424341
+    },
+    {
+      "minuteEpoch": 29873655,
+      "kind": "read",
+      "requests": 300,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 22.945565
+    },
+    {
+      "minuteEpoch": 29873655,
+      "kind": "write_precondition",
+      "requests": 60,
+      "failed": 60,
+      "http5xx": 60,
+      "p95Ms": 21.671264
+    },
+    {
+      "minuteEpoch": 29873656,
+      "kind": "read",
+      "requests": 295,
+      "failed": 0,
+      "http5xx": 0,
+      "p95Ms": 28.283251
+    },
+    {
+      "minuteEpoch": 29873656,
+      "kind": "write_precondition",
+      "requests": 59,
+      "failed": 59,
+      "http5xx": 59,
+      "p95Ms": 31.612144
+    }
+  ],
+  "writeFailureEpisodes": [
+    {
+      "firstFailureStartedMs": 1792412281900,
+      "recoveredMs": null
+    }
+  ],
+  "maxObservedWriteSuccessGapMs": 2065,
+  "continuityErrors": 0,
+  "readbackErrors": 0,
+  "limitation": "표본 사이 장애·전송하지 못한 요청은 실패 시간으로 단정할 수 없다. 전체 DB 유실·중복 검증은 별도 수행한다.",
+  "droppedIterations": 315
+}

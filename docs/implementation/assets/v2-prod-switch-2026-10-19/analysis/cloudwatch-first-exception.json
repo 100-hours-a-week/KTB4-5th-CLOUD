@@ -1,0 +1,75 @@
+{
+  "queryId": "4dd7b111-37a7-4ac5-bfef-cd77b6a0c020",
+  "status": "Complete",
+  "statistics": {
+    "recordsMatched": 15.0,
+    "recordsScanned": 72670.0,
+    "estimatedRecordsSkipped": 0.0,
+    "bytesScanned": 5066323.0,
+    "estimatedBytesSkipped": 0.0,
+    "logGroupsScanned": 1.0,
+    "resultCount": 15.0
+  },
+  "rows": [
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "\tat com.dameokja.backend.ingredient.application.update.IngredientUpdateService$$SpringCGLIB$$0.update(<generated>) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "\tat com.dameokja.backend.ingredient.application.update.IngredientUpdateService.findDuplicates(IngredientUpdateService.java:88) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "\tat com.dameokja.backend.ingredient.application.update.IngredientUpdateService.applyUpdate(IngredientUpdateService.java:66) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "java.lang.NullPointerException: Cannot invoke \"com.dameokja.backend.user.domain.User.getId()\" because the return value of \"com.dameokja.backend.ingredient.domain.Ingredient.getOwner()\" is null"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "\tat com.dameokja.backend.ingredient.application.update.IngredientUpdateService.update(IngredientUpdateService.java:37) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "\tat com.dameokja.backend.ingredient.presentation.IngredientController.update(IngredientController.java:98) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:02.391",
+      "@message": "\tat com.dameokja.backend.ingredient.application.update.IngredientUpdateService.mergeDuplicates(IngredientUpdateService.java:76) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:03.059",
+      "@message": "\tat com.dameokja.backend.ingredient.application.detail.IngredientDetailService$$SpringCGLIB$$0.getDetail(<generated>) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:03.059",
+      "@message": "\tat com.dameokja.backend.ingredient.presentation.IngredientController.getDetail(IngredientController.java:85) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:03.059",
+      "@message": "\tat com.dameokja.backend.ingredient.application.detail.IngredientDetailService.getDetail(IngredientDetailService.java:31) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:03.059",
+      "@message": "java.lang.NullPointerException: Cannot invoke \"com.dameokja.backend.user.domain.User.getNickname()\" because the return value of \"com.dameokja.backend.ingredient.domain.Ingredient.getOwner()\" is null"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:05.355",
+      "@message": "\tat com.dameokja.backend.ingredient.presentation.IngredientController.getDetail(IngredientController.java:85) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:05.355",
+      "@message": "\tat com.dameokja.backend.ingredient.application.detail.IngredientDetailService.getDetail(IngredientDetailService.java:31) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:05.355",
+      "@message": "\tat com.dameokja.backend.ingredient.application.detail.IngredientDetailService$$SpringCGLIB$$0.getDetail(<generated>) ~[!/:0.0.1-SNAPSHOT]"
+    },
+    {
+      "@timestamp": "2026-10-19 12:18:05.355",
+      "@message": "java.lang.NullPointerException: Cannot invoke \"com.dameokja.backend.user.domain.User.getNickname()\" because the return value of \"com.dameokja.backend.ingredient.domain.Ingredient.getOwner()\" is null"
+    }
+  ]
+}
