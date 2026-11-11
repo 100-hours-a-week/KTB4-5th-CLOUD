@@ -1,0 +1,69 @@
+{
+  "queryId": "4da16fa1-53fe-45b8-ad1a-107ad8461996",
+  "status": "Complete",
+  "statistics": {
+    "recordsMatched": 43006.0,
+    "recordsScanned": 54515.0,
+    "estimatedRecordsSkipped": 0.0,
+    "bytesScanned": 13145827.0,
+    "estimatedBytesSkipped": 0.0,
+    "logGroupsScanned": 2.0,
+    "resultCount": 6.0
+  },
+  "rows": [
+    {
+      "@log": "906462447513:/dameokja/v2-prod/nginx",
+      "uri": "/api/v1/ingredients/341",
+      "status": "500",
+      "requests": "7002",
+      "firstSeen": "2026-10-19 12:18:02.412",
+      "lastSeen": "2026-10-19 14:16:59.075",
+      "p95Seconds": "0.031"
+    },
+    {
+      "@log": "906462447513:/dameokja/v2-prod/nginx",
+      "uri": "/api/v1/refrigerators/276/ingredients",
+      "status": "200",
+      "requests": "35270",
+      "firstSeen": "2026-10-19 12:18:02.708",
+      "lastSeen": "2026-10-19 14:16:59.073",
+      "p95Seconds": "0.03303"
+    },
+    {
+      "@log": "906462447513:/dameokja/v2-prod/nginx",
+      "uri": "/api/v1/refrigerators/276/ingredients",
+      "status": "499",
+      "requests": "219",
+      "firstSeen": "2026-10-19 14:05:06.615",
+      "lastSeen": "2026-10-19 14:13:54.203",
+      "p95Seconds": "5.0188"
+    },
+    {
+      "@log": "906462447513:/dameokja/v2-prod/nginx",
+      "uri": "/api/v1/ingredients/341",
+      "status": "499",
+      "requests": "18",
+      "firstSeen": "2026-10-19 14:05:07.998",
+      "lastSeen": "2026-10-19 14:13:54.002",
+      "p95Seconds": "5.007"
+    },
+    {
+      "@log": "906462447513:/dameokja/prod/nginx-access",
+      "uri": "/api/v1/refrigerators/276/ingredients",
+      "status": "200",
+      "requests": "316",
+      "firstSeen": "2026-10-19 12:16:59.489",
+      "lastSeen": "2026-10-19 12:18:07.166",
+      "p95Seconds": "0.015"
+    },
+    {
+      "@log": "906462447513:/dameokja/prod/nginx-access",
+      "uri": "/api/v1/ingredients/341",
+      "status": "200",
+      "requests": "181",
+      "firstSeen": "2026-10-19 12:16:59.489",
+      "lastSeen": "2026-10-19 12:18:02.653",
+      "p95Seconds": "0.032"
+    }
+  ]
+}
