@@ -333,5 +333,6 @@ DB는 private subnet에 배치하되 CloudWatch 등으로 나가는 NAT 또는 V
 |---|---|---|---|
 | 운영 상태 | EC2 + Docker Compose로 dev·prod 운영 | dev는 2026-10-09~11 v2 dev(ECS 한 대)로, prod는 2026-10-19 v2 prod로 전환. v1 앱·DB EC2는 종료하고 스냅샷만 보관 | v2 전환([v2 위키](ktb4-cloud-wiki-v2.md), `docs/implementation/v2 prod 전환 결과.md`) |
 | Dev 환경 구성 | nginx·FE·BE·DB를 한 EC2에 | v1 dev Compose·DNS 레코드는 v2 dev 전환 때 삭제. 저장소에는 `v1/prod`만 남음 | v2 dev가 대신함 |
+| Dev 서버 구매 방식·DB 배치 | t4g.small **Spot** 한 대에 nginx·FE·BE·DB | 2026-10-01 서비스 서버를 On-Demand로 바꿈(기존 서버 AMI로 새로 실행). MySQL은 별도 DB EC2로 분리해 운영 | 전환 이유는 기록 없음. 전환 중 영구 Spot 요청이 종료한 인스턴스를 다시 만드는 문제와, DB 계정 호스트가 옛 서버 IP로 묶여 접속이 끊기는 문제를 겪음(트러블슈팅 기록, 저장소 밖 `기술 문서`) |
 | 배포 전략 | Rolling Update | 대상 서비스 컨테이너를 교체하고 헬스체크 실패 시 이전 이미지·설정으로 복구(`v1/scripts/deploy-v1.sh`). 단일 복제본이라 짧은 중단이 있음 | 복제본이 하나라 롤링이 성립하지 않음 |
 | Image Registry 인증 | GHCR Public이라 pull 인증 불필요 | 배포 스크립트가 GitHub Actions 토큰으로 GHCR에 로그인한 뒤 받고, 임시 인증 정보를 지움 | GHCR 패키지를 의도적으로 비공개로 둠(익명 pull 403, 2026-11-02 확인). 앱 저장소는 Public |

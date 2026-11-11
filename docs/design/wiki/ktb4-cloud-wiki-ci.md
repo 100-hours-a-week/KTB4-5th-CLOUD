@@ -144,4 +144,4 @@
 |---|---|---|---|
 | GHCR Repository 공개 범위(8번) | Public, 저장 용량 제한 없음 | GHCR 패키지는 비공개(익명 pull 403). v1 배포는 GitHub Actions 토큰으로, v2 ECS Task는 Secrets Manager의 GHCR 인증 정보(`read:packages`)로 받음 | 패키지는 의도적으로 비공개로 두고, 받는 쪽이 인증함. 앱 저장소(BE·FE·AI)는 Public. 빌드 → GHCR push → 배포 호출 흐름은 설계 그대로 |
 | 실패 인지(9번) | 별도 알림 채널 없음 | Discord 알림 도입: CI/CD 결과와 담당 파트 멘션(`infra/discord-alerts/github`) | CI/CD 알림 워크플로를 추가해 운영 중(PR #1 등) |
-| 배포 이후 흐름 | dev 브랜치 → dev, main → prod 승인 | dev 브랜치 → v2 dev ECS, main → stage 자동 배포 → CLOUD 승인 뒤 같은 이미지 digest로 prod 배포(CLOUD `ecs-deploy.yml`) | v2 전환(#83~#85, #92) |
+| 배포 이후 흐름 | dev 브랜치 → dev, main → prod 승인 | dev 브랜치 → v2 dev ECS, main → stage 자동 배포 → CLOUD 승인 뒤 같은 이미지 digest로 prod 배포(CLOUD `ecs-deploy.yml`). 2026-11-09 뒤에는 dev·stage·prod 모두 v3(`v3-dev-image.yml`, `v3-stage-image.yml`, `v3-prod-image.yml`) | v2 전환(#83~#85, #92), v3 전환(#278, #306) |

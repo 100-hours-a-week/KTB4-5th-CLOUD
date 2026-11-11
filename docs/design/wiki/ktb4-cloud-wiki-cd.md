@@ -1,7 +1,7 @@
 # 다먹자 v1 인프라 위키 — 3단계: CD(지속적 배포) 파이프라인 설계
 
 > KTB 4조 다먹자 팀의 v1 인프라 설계 문서입니다. 이 문서는 **3단계(CD 파이프라인 설계)** 만 다룹니다. 1단계(EC2 + Docker Compose 기반 초기 배포)는 `ktb4-cloud-wiki-v1.md`, 2단계(CI)는 `ktb4-cloud-wiki-ci.md`를 참고하세요.
-> 각 결정 항목은 **상황 → 결론 → 이유 → 트레이드오프** 순서로 정리합니다. (결론/이유/트레이드오프는 작성 예정)
+> 각 결정 항목은 **상황 → 결론 → 이유 → 트레이드오프** 순서로 정리합니다.
 
 ## 목차
 10. [CD 적용 범위 및 방식 결정](#10-cd-적용-범위-및-방식-결정)
@@ -147,7 +147,7 @@ flowchart TB
 
 ### 15. 설계와 달라진 점
 
-> 기준: 2026-11-02. v1 SSH 배포는 dev가 2026-10-11, prod가 2026-10-19에 v2 ECS 배포로 바뀌어 지금은 쓰지 않는다. v2 CD는 [v2 위키 23번](ktb4-cloud-wiki-v2.md#23-cicd-변경사항-설계)을 따른다.
+> 기준: 2026-11-02. v1 SSH 배포는 dev가 2026-10-11, prod가 2026-10-19에 v2 ECS 배포로 바뀌어 지금은 쓰지 않는다. v2 CD는 [v2 위키 23번](ktb4-cloud-wiki-v2.md#23-cicd-변경사항-설계)을 따른다. 2026-11-09 v3 전환 뒤에는 Workflow가 배포 Git의 이미지 값을 커밋하고 Argo CD가 EKS에 동기화한다([v3 인프라 설계 10.4](../v3%20인프라%20설계.md#104-미정이던-값이-정해진-것)).
 
 | 항목 | 설계 | 실제 | 이유·경과 |
 |---|---|---|---|
@@ -155,4 +155,4 @@ flowchart TB
 | Rollback(13번) | 직전 Git SHA 태그 이미지로 재기동 | v1: 배포 전 이미지 digest와 설정을 저장해 두고 되돌림. v2: 회로 차단기가 이전 태스크 정의로 되돌림 | 태그는 다시 지정될 수 있어 digest로 고정 |
 | Registry Credential(14번) | GHCR Public이라 불필요 | v1은 GitHub Actions 토큰으로 로그인 후 임시 인증 정보 삭제, v2는 Secrets Manager의 GHCR 인증 정보 | GHCR 패키지를 의도적으로 비공개로 둠. GitHub Actions가 이미지를 올리고 배포를 호출하는 흐름은 설계 그대로 |
 | 배포 경로·보안(11·14번) | GitHub Actions → SSH | v2는 SSH 없이 GitHub OIDC로 받은 AWS 역할이 ECS API를 부름. 서버 접속은 SSM Session Manager | ECS로 바뀌며 배포 대상이 서버가 아니라 서비스가 됨 |
-| Prod 승인(10번) | 수동 승인 후 배포 | 앱 CI가 stage에 자동 배포 → CLOUD GitHub Environments `prod` 승인 → 같은 digest로 prod 배포 | v2 전환(#83~#85, #92) |
+| Prod 승인(10번) | 수동 승인 후 배포 | 앱 CI가 stage에 자동 배포 → CLOUD GitHub Environments `prod` 승인 → 같은 digest로 prod 배포 | v2 전환(#83~#85, #92). v3에서도 같은 승인 흐름을 유지하고, 승인 뒤 `v3-prod-image.yml`이 prod 이미지 값을 바꿈(#306) |

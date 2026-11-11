@@ -2,6 +2,8 @@
 
 ## 설계 변경 이력
 
+- **2026-11-10 v2 종료**: 2026-11-04~11-10에 dev·stage·prod를 v3(EKS)로 옮기고 v2 앱 자원을 지웠다. 본문은 v2 운영 당시 기준으로 남기며, 종료 경과는 [v2 환경별 구축 아키텍처 8절](../v2%20환경별%20구축%20아키텍처.md#8-v2-종료와-남은-자원)에 적었다. 24번에서 예고한 다음 단계가 v3로 이어진 과정은 [v3 인프라 설계 전 배경](../v3%20인프라%20설계%20전%20배경.md)을 참고한다.
+
 - **2026-11-02 구현 반영**: 본문 결론을 실제 구현(CLOUD main `638e11f`, 2026-11-02 AWS 조회)에 맞췄다. 설계 당시 결론과 달라진 항목, 설계대로 구현·검증한 뒤 내린 항목은 [25. 설계와 달라진 점](#25-설계와-달라진-점)에 모았다.
 
 - **2026-10-13 개정**: v2 DB는 M7i 계열·AMD64(x86-64)를 사용한다. 소프트웨어·운영 도구의 호환성과 향후 확장을 고려해 채택했다. M7i와 M7a의 성능 비교는 부하 검증에서 확인한다. 인스턴스 크기는 부하·장애 시 잔여 용량·비용 검증 후 확정한다. [AWS M7i 사양](https://aws.amazon.com/ec2/instance-types/m7i/)
@@ -11,8 +13,8 @@
 - 설계 결정이며 구현·무중단·AZ 장애 복구가 검증되었다는 뜻은 아니다. 기존 비용 수치는 당시 가정의 비교 자료이며 현재 4대 구성의 실제 견적은 재산정한다.
 - [변경 이유](../인프라%20설계%20의사결정%20근거.md#db-가용성-설계-개정-2026-10-12) · [이전 및 검증 절차](../../implementation/v2%20데이터베이스%20마이그레이션%20계획.md)
 
-> KTB 4조 다먹자 팀의 v1 인프라 설계 문서입니다. 이 문서는 **4단계(트래픽 급증 대비 인프라 확장 및 Auto Scaling 설계)** 만 다룹니다. 1단계(EC2 + Docker Compose 기반 초기 배포)는 `ktb4-cloud-wiki-v1.md`, 2단계(CI)는 `ktb4-cloud-wiki-ci.md`, 3단계(CD)는 `ktb4-cloud-wiki-cd.md`를 참고하세요.
-> **GitHub Wiki에 그대로 옮겨지는 원본**으로, 결과를 바로 파악할 수 있도록 **상황 → 결론** 위주로 작성합니다. 상세 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`, 트래픽 가정 산출 과정은 `인프라 설계 작업노트.md`를 참고하세요.
+> KTB 4조 다먹자 팀의 v2 인프라 설계 문서입니다. 이 문서는 **4단계(트래픽 급증 대비 인프라 확장 및 Auto Scaling 설계)** 만 다룹니다. 1단계(EC2 + Docker Compose 기반 초기 배포)는 `ktb4-cloud-wiki-v1.md`, 2단계(CI)는 `ktb4-cloud-wiki-ci.md`, 3단계(CD)는 `ktb4-cloud-wiki-cd.md`를 참고하세요.
+> **GitHub Wiki에 그대로 옮겨지는 원본**으로, 결과를 바로 파악할 수 있도록 **상황 → 결론** 위주로 작성합니다. 상세 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`, 트래픽 가정 산출 과정은 `v2 인프라 설계 전 배경.md`를 참고하세요.
 
 ## 목차
 15. [현재 서비스의 성장 상황 가정 및 기존 인프라 한계 정의](#15-현재-서비스의-성장-상황-가정-및-기존-인프라-한계-정의)
@@ -37,7 +39,7 @@
 
 ## 전체 아키텍처 개요
 
-아래는 16-22번 결정을 실제로 구현한 v2 prod 아키텍처(2026-11-02 기준). 각 구성요소 옆 괄호 숫자는 해당 결정을 다룬 섹션 번호(세부 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`의 같은 번호 참고). 환경별 배치와 가동 상태는 [v2 환경별 구축 아키텍처](../v2%20환경별%20구축%20아키텍처.md), 설계 당시의 목표 그림은 [25번](#25-설계와-달라진-점)을 참고한다.
+아래는 16-22번 결정을 실제로 구현한 v2 prod 아키텍처(2026-11-02 기준, 2026-11-09까지 운영). 각 구성요소 옆 괄호 숫자는 해당 결정을 다룬 섹션 번호(세부 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`의 같은 번호 참고). 환경별 배치와 가동 상태는 [v2 환경별 구축 아키텍처](../v2%20환경별%20구축%20아키텍처.md), 설계 당시의 목표 그림은 [25번](#25-설계와-달라진-점)을 참고한다.
 
 ```mermaid
 flowchart TB
@@ -216,7 +218,7 @@ flowchart TB
   - **DB Primary 장애조치 자동화**: v2 가용성 목표 99.9%(월 오류 예산 약 43분)는 수동 failover로 맞추기 어려워 자동 failover 도구로 **Orchestrator**를 채택 — Replica의 복제 상태까지 확인하는 장애 판단으로 split-brain 위험을 줄일 수 있다는 근거를 바탕으로 함(후보 비교·근거는 22번 참고). Orchestrator 자체는 **단일 인스턴스**(ASG로 자동 복구, 운영 중 장애가 실제로 발생하면 2대로 확장), 장애 후 클라이언트 리다이렉션은 **VIP/DNS** 방식으로 결정(ProxySQL은 비용·운영 부담으로 v2에서 배제, v3 후보로 유지) — 후보 비교·근거는 22번 참고
   - **Read Replica 장애 대응**: 정상 Replica로 읽기를 전환하며 Primary·Standby에 읽기를 집중시키지 않는다. 라우팅과 Replica 1대의 부하 처리 용량은 검증 전이다. Redis는 기존 결정대로 단일 인스턴스를 유지한다.
   - 신규 배포로 인한 장애 대응은 23번(CI/CD 변경사항 설계)에서 이어서 다룸
-  - **구현**: Standby(2c)·Orchestrator(1대) 자동 장애조치를 만들어 장애 주입 테스트 5개(계획 교체, Orchestrator 장애, mysqld 강제 종료, 네트워크 단절, EC2 중단)를 모두 통과(유실 0, 사람 개입 없음, 장애 중 쓰기 지연 최대 약 30초)한 뒤 비용 때문에 철거함. 지금은 Primary 장애 시 수동 복구. Noisy Neighbor는 컨테이너 하드 리밋(memory)과 backend CPU 1024 예약으로 대응하고 memoryReservation은 쓰지 않음. Redis는 단일 EC2 유지
+  - **구현**: Standby(2c)·Orchestrator(1대) 자동 장애조치를 만들어 장애 주입 테스트 5개(계획 교체, Orchestrator 장애, mysqld 강제 종료, 네트워크 단절, EC2 중단)를 모두 통과(유실 0, 사람 개입 없음, 장애 중 쓰기 지연 최대 약 30초)한 뒤 비용 때문에 철거함. 철거 뒤 v2 종료까지는 Primary 장애 시 수동 복구. Noisy Neighbor는 컨테이너 하드 리밋(memory)과 backend CPU 1024 예약으로 대응하고 memoryReservation은 쓰지 않음. Redis는 단일 EC2 유지
 
 - **이유·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(22번) 참고.
 
@@ -229,7 +231,7 @@ flowchart TB
 - **결론**:
   - **CI**: v1의 GitHub Actions를 그대로 유지 — GitLab CI/CD, Jenkins를 후보로 검토했으나 채택하지 않음
   - **CD(배포 실행)**: GitHub Actions가 직접 **ECS Native Blue/Green**(CodeDeploy 없이)을 호출해 배포 — CodeDeploy Blue/Green, 직접 스크립트, EventBridge 경유를 후보로 검토했으나 채택하지 않음
-    - **구현**: CLOUD의 `ecs-deploy.yml` 하나가 dev·stage·prod 배포를 맡고, prod는 GitHub Environments 승인 뒤 실행. backend·frontend는 Blue/Green(Bake 5분) + 회로 차단기 롤백, AI는 Rolling. CloudWatch 알람 연동 자동 롤백은 아직 없음. 이미지는 GHCR에서 Secrets Manager의 인증 정보로 받음
+    - **구현**: CLOUD의 `ecs-deploy.yml` 하나가 dev·stage·prod 배포를 맡고, prod는 GitHub Environments 승인 뒤 실행. backend·frontend는 Blue/Green(Bake 5분) + 회로 차단기 롤백, AI는 Rolling. CloudWatch 알람 연동 자동 롤백은 아직 없음. 이미지는 GHCR에서 Secrets Manager의 인증 정보로 받음 v3 전환 뒤에는 prod 승인 뒤 배포가 `v3-prod-image.yml`(Argo CD 동기화)로 옮겨졌다(#306).
   - **CI 빌드 환경**: GitHub Actions의 Public 저장소 기본 제공 러너(4 vCPU/16GB, 무료·무제한)를 그대로 사용 — 빌드 시간이 10분을 넘거나 문제가 발생하면 그때 AWS CodeBuild 등 대안 전환을 재검토
   - **저장소 공개 범위**: BE/FE/AI 3개 저장소 모두 v1의 Public 상태를 유지 — Private 전환을 검토·결정했다가 재검토 후 폐기(폐기 경위는 근거 문서의 "폐기된 의사결정" 참고)
 
@@ -257,8 +259,8 @@ flowchart TB
 
 | 항목 | 설계 | 구현과 검증 | 지금 |
 |---|---|---|---|
-| Read Replica(16·19) | AZ별 2대, 읽기 분산 | 1대(#145)·2대(#169)로 만들어 DB 한계 부하를 측정. Primary만이면 약 190 iter/s에서 Primary CPU가 막히고, 조회를 Primary + Replica 2대에 나누면 약 213~226, 앱이 충분히 늘어난 상태에서는 300까지 처리(`tests/DB HA/결과.md`). 설계 피크(약 95 RPS)는 Primary만으로도 약 2배 여유 | 측정 뒤 제거(#173). 복제 계정·CLONE 준비는 남김 |
-| Standby + 자동 장애조치(19·22) | Standby(다른 AZ) + Orchestrator, VIP/DNS 전환 | Standby(2c, GTID 비동기 복제), Orchestrator, 사설 DNS(TTL 5초) 갱신, 옛 Primary 차단(보안 그룹·`super_read_only`)을 #179~#200으로 구현. 장애 주입 테스트 5개 모두 통과(유실 0, 사람 개입 없음, BE 쓰기 실패 최대 11초, 장애 중 쓰기 지연 최대 약 30초) | 비용(월 약 $50) 때문에 철거(#203). DB 고정 이름, BE 연결 3초·쿼리 10초 타임아웃, Hikari 연결 수명 2분, JVM DNS 캐시 5초는 남김 |
+| Read Replica(16·19) | AZ별 2대, 읽기 분산 | 1대(#145)·2대(#169)로 만들어 DB 한계 부하를 측정. Primary만이면 약 190 iter/s에서 Primary CPU가 막히고, 조회를 Primary + Replica 2대에 나누면 약 213~226, 앱이 충분히 늘어난 상태에서는 300까지 처리(`tests/DB HA/결과.md`). 설계 피크(약 95 RPS)는 Primary만으로도 약 2배 여유 | 측정 뒤 제거(#173). 복제 계정·CLONE 준비는 남겼으나 v2 prod DB 삭제(#321)로 함께 사라짐 |
+| Standby + 자동 장애조치(19·22) | Standby(다른 AZ) + Orchestrator, VIP/DNS 전환 | Standby(2c, GTID 비동기 복제), Orchestrator, 사설 DNS(TTL 5초) 갱신, 옛 Primary 차단(보안 그룹·`super_read_only`)을 #179~#200으로 구현. 장애 주입 테스트 5개 모두 통과(유실 0, 사람 개입 없음, BE 쓰기 실패 최대 11초, 장애 중 쓰기 지연 최대 약 30초) | 비용(월 약 $50) 때문에 철거(#203). DB 고정 이름, BE 연결 3초·쿼리 10초 타임아웃, Hikari 연결 수명 2분, JVM DNS 캐시 5초는 다시 켤 때 쓰도록 남겼으나, DB 고정 이름은 v2 prod 자원 삭제(#321)로 함께 사라짐 |
 
 **설계와 다르게 구현한 것**
 
