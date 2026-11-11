@@ -14,7 +14,6 @@
 | | [v3 인프라 설계 전 배경.md](design/v3%20인프라%20설계%20전%20배경.md) | v3 설계 배경 |
 | | [v3 인프라 설계.md](design/v3%20인프라%20설계.md) | v3 인프라 설계 |
 | `implementation/` | [v2 구현 기록.md](implementation/v2%20구현%20기록.md) | v2 구현 중 정한 것(I1~I6), 배포 파이프라인과 dev 구축 순서(ECS 인스턴스 1대, 단계별 PR) |
-| | [v2 prod 전환 방식.md](implementation/v2%20prod%20전환%20방식.md) | v1 prod → v2 prod 전환 방법 조사 |
 | | [v2 데이터베이스 무중단 마이그레이션 검토.md](implementation/v2%20데이터베이스%20무중단%20마이그레이션%20검토.md) | DB 이전 방식 후보 검토. 이전 절차는 [위키](https://github.com/100-hours-a-week/KTB4-5th-wiki/wiki/Cloud-4단계-DB-무중단-마이그레이션-설계) |
 | | [v2 데이터베이스 마이그레이션 테스트 결과.md](implementation/v2%20데이터베이스%20마이그레이션%20테스트%20결과.md) | DB 이전 리허설 결과 |
 | | [v2 prod 전환 결과.md](implementation/v2%20prod%20전환%20결과.md) | 10/19 운영 전환·DB 이전 결과와 장애 분석 |
