@@ -1,17 +1,6 @@
 # 다먹자 v2 인프라 위키 — 4단계: 트래픽 급증 대비 인프라 확장 및 Auto Scaling 설계
 
-## 설계 변경 이력
-
-- **2026-11-10 v2 종료**: 2026-11-04~11-10에 dev·stage·prod를 v3(EKS)로 옮기고 v2 앱 자원을 지웠다. 본문은 v2 운영 당시 기준으로 남기며, 종료 경과는 [v2 환경별 구축 아키텍처 8절](../v2%20환경별%20구축%20아키텍처.md#8-v2-종료와-남은-자원)에 적었다. 24번에서 예고한 다음 단계가 v3로 이어진 과정은 [v3 인프라 설계 전 배경](../v3%20인프라%20설계%20전%20배경.md)을 참고한다.
-
-- **2026-11-02 구현 반영**: 본문 결론을 실제 구현(CLOUD main `638e11f`, 2026-11-02 AWS 조회)에 맞췄다. 설계 당시 결론과 달라진 항목, 설계대로 구현·검증한 뒤 내린 항목은 [25. 설계와 달라진 점](#25-설계와-달라진-점)에 모았다.
-
-- **2026-10-13 개정**: v2 DB는 M7i 계열·AMD64(x86-64)를 사용한다. 소프트웨어·운영 도구의 호환성과 향후 확장을 고려해 채택했다. M7i와 M7a의 성능 비교는 부하 검증에서 확인한다. 인스턴스 크기는 부하·장애 시 잔여 용량·비용 검증 후 확정한다. [AWS M7i 사양](https://aws.amazon.com/ec2/instance-types/m7i/)
-
-- **2026-10-12 개정**: Read Replica를 1대에서 2대로 늘려 AZ별로 배치한다. Primary 1대와 Standby 1대는 유지한다.
-- 비용 절감보다 장애 시 읽기 경로 유지와 승격된 Primary의 과부하 방지를 우선한다. 추가 비용과 잔여 Replica 처리 용량 검증이 필요하다.
-- 설계 결정이며 구현·무중단·AZ 장애 복구가 검증되었다는 뜻은 아니다. 기존 비용 수치는 당시 가정의 비교 자료이며 현재 4대 구성의 실제 견적은 재산정한다.
-- [변경 이유](../인프라%20설계%20의사결정%20근거.md#db-가용성-설계-개정-2026-10-12) · [이전 및 검증 절차](../../implementation/v2%20데이터베이스%20마이그레이션%20계획.md)
+> 기준: v2 마지막 운영 구성(2026-11-08, CLOUD [`638e11f`](https://github.com/100-hours-a-week/KTB4-5th-CLOUD/tree/638e11f/infra/v2)). v2는 2026-11-09 v3(EKS)로 전환한 뒤 종료했다. 24번에서 정한 다음 단계가 v3로 이어진 과정은 [v3 인프라 설계 전 배경](../v3%20인프라%20설계%20전%20배경.md)을 참고한다.
 
 > KTB 4조 다먹자 팀의 v2 인프라 설계 문서입니다. 이 문서는 **4단계(트래픽 급증 대비 인프라 확장 및 Auto Scaling 설계)** 만 다룹니다. 1단계(EC2 + Docker Compose 기반 초기 배포)는 `ktb4-cloud-wiki-v1.md`, 2단계(CI)는 `ktb4-cloud-wiki-ci.md`, 3단계(CD)는 `ktb4-cloud-wiki-cd.md`를 참고하세요.
 > **GitHub Wiki에 그대로 옮겨지는 원본**으로, 결과를 바로 파악할 수 있도록 **상황 → 결론** 위주로 작성합니다. 상세 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`, 트래픽 가정 산출 과정은 `v2 인프라 설계 전 배경.md`를 참고하세요.
@@ -27,7 +16,6 @@
 22. [장애 상황과 가용성 설계](#22-장애-상황과-가용성-설계)
 23. [CI/CD 변경사항 설계](#23-cicd-변경사항-설계)
 24. [확장 이후 발생하는 새로운 한계 분석](#24-확장-이후-발생하는-새로운-한계-분석)
-25. [설계와 달라진 점](#25-설계와-달라진-점)
 
 ---
 
@@ -39,23 +27,23 @@
 
 ## 전체 아키텍처 개요
 
-아래는 16-22번 결정을 실제로 구현한 v2 prod 아키텍처(2026-11-02 기준, 2026-11-09까지 운영). 각 구성요소 옆 괄호 숫자는 해당 결정을 다룬 섹션 번호(세부 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`의 같은 번호 참고). 환경별 배치와 가동 상태는 [v2 환경별 구축 아키텍처](../v2%20환경별%20구축%20아키텍처.md), 설계 당시의 목표 그림은 [25번](#25-설계와-달라진-점)을 참고한다.
+아래는 16-23번 결정으로 운영한 v2 prod 아키텍처(마지막 운영 구성). 각 구성요소 옆 괄호 숫자는 해당 결정을 다룬 섹션 번호(세부 이유·근거·트레이드오프는 `인프라 설계 의사결정 근거.md`의 같은 번호 참고). 환경별 배치는 [v2 환경별 구축 아키텍처](../v2%20환경별%20구축%20아키텍처.md)를 참고한다.
 
 ```mermaid
 flowchart TB
     Client(["사용자 Client"])
-    ALB["ALB — TLS 종료·경로 규칙 (17, 18)"]
+    ALB["ALB — TLS 종료·경로 규칙, 공개 서브넷 AZ 2b·2c (17, 18)"]
 
-    subgraph ASG["ECS Cluster — EC2 Capacity Provider (ASG m7i.large 2~4대, AZ 2b, 20)"]
+    subgraph ASG["ECS Cluster — EC2 Capacity Provider (ASG m7i.large 2~4대, 사설 서브넷 AZ 2b, 20)"]
         BE["backend 서비스 2~4개<br/>BE + CloudWatch Agent (Stateless, 17)"]
         FE["frontend 서비스 2~4개"]
         AI["AI 서비스 1개"]
     end
 
-    Redis[("Redis 자체구축 EC2 1대<br/>Refresh Token Store(17)·SSE Pub/Sub(21)")]
-    S3[("S3<br/>프로필 사진(17)")]
+    Redis[("Redis 자체구축 EC2 1대 (AZ 2b)<br/>Refresh Token Store(17)·SSE Pub/Sub(21)")]
+    S3[("S3 비공개 버킷<br/>프로필 사진(17)")]
     Push["OS/브라우저 푸시<br/>FCM·APNs·Web Push(21)"]
-    Primary[("MySQL 8.4 자체구축 Primary 1대<br/>db.prod.dameokja.internal (19)")]
+    Primary[("DB EC2 t3.medium 1대 (AZ 2b)<br/>MySQL 8.4 Primary · AI용 PostgreSQL 16<br/>db.prod.dameokja.internal (19)")]
 
     Client --> ALB
     ALB -->|"/api*"| BE
@@ -67,9 +55,10 @@ flowchart TB
     BE -."SSE 연결 없을 시 발송 요청".-> Push
     BE -->|"Read·Write"| Primary
     BE -->|"AI API"| AI
+    AI -->|"PostgreSQL"| Primary
 ```
 
-*(다이어그램에는 표시하지 않지만) CloudWatch가 ALB 지표·액세스 로그, ECS(Container Insights), BE HikariCP·AI 지표를 수집함(18번). DB 이중화(Standby·Read Replica·Orchestrator)는 설계대로 구현해 검증한 뒤 비용 때문에 내렸음(19·22번, 25번 참고).*
+*(다이어그램에는 표시하지 않지만) CloudWatch가 ALB 지표·액세스 로그(Athena), ECS(Container Insights), BE HikariCP·AI 지표를 수집하고, 알람은 SNS → Lambda → Discord로 보냄(18번). 배포는 GitHub Actions가 ECS Native Blue/Green을 호출함(23번).*
 
 ---
 
@@ -92,10 +81,10 @@ flowchart TB
 
     | 한계 | 해결에 사용하는 기술/방법 | 관련 항목 |
     |---|---|---|
-    | 1번 가용성(SPOF) | Scale-out(다중 인스턴스), 서로 다른 AZ 2곳 이상 배치, ALB(관리형 이중화), DB Multi-AZ + Read Replica(자체구축) | 16, 18, 19, 20 |
-    | 2번 확장성 | Scale-up+Scale-out 하이브리드, EC2 Auto Scaling Group, Target Tracking + Scheduled Scaling, Stateless 구조(JWT) | 16, 17, 18, 20 |
-    | 5번 보안 노출면 | 미정 — 22-24번에서 직접 설계 예정 | - |
-    | 7번 운영/관측성 부재 | CloudWatch로 ALB·ASG/ECS·DB·Redis·S3 등 AWS 리소스 전체 모니터링(모니터링 대상 범위만 결정, 지표·알림·대시보드 등 세부 설계는 22-24번에서 이어서 다룸) | 18 |
+    | 1번 가용성(SPOF) | Scale-out(다중 인스턴스·Task), ALB(관리형, 두 AZ), ALB 헬스체크·ECS·ASG 자동 교체. 앱·DB·Redis는 AZ 2b 한 곳, DB는 Primary 1대(이중화는 구현·검증 후 비용으로 철거) | 16, 18, 19, 20, 22 |
+    | 2번 확장성 | Scale-up+Scale-out 하이브리드, ECS + EC2 Auto Scaling Group(Capacity Provider), Target Tracking, Stateless 구조(JWT) | 16, 17, 18, 20 |
+    | 5번 보안 노출면 | 앱·DB·Redis를 사설 서브넷에 두고 보안 그룹은 ALB → 앱 → DB·Redis 경로만 허용, ECS 호스트는 인바운드 없음, 서버 접속은 SSH 대신 SSM Session Manager | 18, 22 |
+    | 7번 운영/관측성 부재 | CloudWatch로 ALB 지표·액세스 로그(Athena SLO 쿼리), Container Insights, BE HikariCP·AI 지표를 수집하고 알람을 SNS → Lambda → Discord로 보냄 | 18 |
     | 8번 구조적 결합도 | DB 폴링 → SSE(Server-Sent Events) 기반 실시간 푸시로 전환 | 21 |
   - **간접 해결(1개)**: 3번(리소스 여유 부족). 별도 항목으로 다루지 않고, 2번(확장성)을 해결하는 과정(인스턴스를 더 크게·더 여러 대로 늘림)에서 자연히 함께 해소됨.
   - **이번 범위 제외(2개)**:
@@ -103,7 +92,7 @@ flowchart TB
     - **6번(Secret 관리 한계)**: GitHub(Actions/Secrets)에 종속적으로 CI/CD를 구성하면서 발생하는 트레이드오프로 보고 수용 — 다만 20번에서 ASG가 인스턴스를 동적으로 새로 띄우는 구조가 되므로, 새로 뜬 인스턴스에 런타임 시크릿을 어떻게 주입할지는 23번(CI/CD 변경사항 설계)에서 함께 정리할 필요가 있음.
     4단계 설계와 무관하게 v1 상태를 그대로 유지함.
 
-- **이유**: 성장 가정 수치들은 3단계까지의 설계 전제였던 "MAU 200명 MVP"와 자릿수 자체가 다름(MAU 기준 약 1,150배 차이) — 이후 결정(16-20번)이 모두 이 수치를 기준으로 확장 전략·아키텍처·min/max 용량을 정하므로, 먼저 명확히 수치화해둘 필요가 있음. 이 문서가 산출 근거(계산식, 벤치마크 출처 등)까지 포함하는 단일 진실 공급원(SSOT)이며, 개인 작업용 초안(`인프라 설계 작업노트.md`)은 이 문서에 반영하기 전 가정을 자유롭게 실험해보는 스크래치패드로, 위 표를 포함해 이 문서와 항상 동일하게 맞춰둘 필요는 없음.
+- **이유**: 성장 가정 수치들은 3단계까지의 설계 전제였던 "MAU 200명 MVP"와 자릿수 자체가 다름(MAU 기준 약 1,150배 차이) — 이후 결정(16-20번)이 모두 이 수치를 기준으로 확장 전략·아키텍처·min/max 용량을 정하므로, 먼저 명확히 수치화해둘 필요가 있음. 이 문서가 산출 근거(계산식, 벤치마크 출처 등)까지 포함하는 단일 진실 공급원(SSOT)이며, 개인 작업용 초안(`v2 인프라 설계 전 배경.md`)은 이 문서에 반영하기 전 가정을 자유롭게 실험해보는 스크래치패드로, 위 표를 포함해 이 문서와 항상 동일하게 맞춰둘 필요는 없음.
 
 - **트레이드오프**: 위 수치는 실사용 데이터 없이 벤치마크·개인 경험을 근거로 잡은 예상임. 예상하기 힘든 항목들을 대비하기 위해서 예상을 하였지만, **예상**이기에 보다 정확한 데이터를 기반으로한 **예측**이 필요함. 따라서 실제 서비스 출시 후 로그 기반 재검증이 필요하며, 가정이 수정되면 이후 항목들의 결론도 함께 재검토해야 함.
 
@@ -114,9 +103,8 @@ flowchart TB
 - **결론**:
   - **Scale-up(수직 확장) + Scale-out(수평 확장) 하이브리드** 채택
   - **Scale-out(수평 확장)** — 앱서버를 여러 대로 늘리고, 그 앞에 로드밸런서를 두는 구조로 전환
-  - **Scale-up(수직 확장)** — 개별 인스턴스 사양은 v1의 t4g.small보다 상향한 사양을 기본 단위로 채택(구체적 인스턴스 타입은 좀 더 찾아보고)하고, 이 단위를 여러 대로 늘리는 방식으로 구성
-  - DB는 쓰기(Write)는 단일 인스턴스로 유지하되, 읽기(Read)는 Read Replica로 분산 — 15번에서 정의한 읽기:쓰기 비율(7:1-14:1)상 읽기 비중이 압도적이므로 읽기 트래픽부터 분산
-  - **구현**: 앱서버는 m7i.large 2~4대(ECS)로 Scale-out, DB는 t3.medium Primary 1대. Read Replica는 1·2대로 읽기 분산 한계를 측정한 뒤 내림(19번, 25번)
+  - **Scale-up(수직 확장)** — 개별 인스턴스 사양은 v1의 t4g.small보다 상향한 **m7i.large**(2 vCPU, 8GB)를 기본 단위로 채택하고, 이 단위를 2~4대(ECS)로 늘리는 방식으로 구성
+  - DB는 쓰기·읽기 모두 **Primary 1대**(t3.medium)가 처리 — 측정한 Primary 한 대의 한계(약 190 iter/s)가 설계 피크(약 95 RPS)의 약 2배라 읽기 분산이 아직 필요하지 않음. Read Replica는 1·2대로 만들어 읽기 분산 효과를 측정한 뒤 비용 때문에 철거함(#173, 19번)
 
 - **이유·근거·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(16번) 참고.
 
@@ -134,9 +122,8 @@ flowchart TB
     | 중앙화된 Session Store(예: Redis) 단독 | 세션 정보를 별도 인메모리 저장소에 저장, 앱서버는 세션 ID만 참조 | 즉시 세션 폐기·강제 로그아웃 가능, 서버 측에서 세션 제어 용이 | Redis라는 별도 컴포넌트를 새로 운영해야 함(비용·장애 지점 추가), 매 요청마다 세션 조회 필요 |
     | **Access Token(JWT) + Refresh Token(Redis, RTR)** ✅ | Access Token은 기존처럼 Stateless로 유지하고, Refresh Token만 Redis에 저장해 RTR(사용할 때마다 재발급, 재사용 탐지 시 토큰 계열 전체 무효화)로 관리 | Access Token 검증에는 Redis 조회가 필요 없어 매 요청 오버헤드가 크게 늘지 않음, Refresh Token은 서버 측에서 즉시 폐기·탈취 탐지 가능 | Redis라는 별도 컴포넌트는 여전히 필요(다만 토큰 갱신 시점에만 사용), Access Token 자체는 만료 전 즉시 폐기 불가능한 한계는 남음 |
 
-  - **프로필 사진**은 인스턴스 로컬 디스크 대신 **S3**에 저장하고 클라이언트가 직접 접근해 서빙받는 구조로 전환 — 이미지 서빙 경로를 BE에서 완전히 분리. **CloudFront**는 캐싱 효과를 검토했으나 채택하지 않음(마이페이지·초대 목록 위주의 낮은 반복 조회 빈도 — 이유는 근거 문서 17번 참고)
-  - nginx는 v1처럼 앱서버 내부에 두지 않고, 로드밸런서 뒤로 앱서버를 여러 대 배치하는 구조로 전환(구체적인 방식은 18번에서 비교)
-  - **구현**: stage·prod는 nginx를 없애고 ALB 경로 규칙이 backend(`/api*`)·frontend(`/*`) 서비스로 바로 보냄. 프로필 사진은 비공개 버킷 + Presigned URL로 클라이언트가 직접 받음
+  - **프로필 사진**은 인스턴스 로컬 디스크 대신 **S3 비공개 버킷**에 저장하고, BE가 발급한 **Presigned URL**로 클라이언트가 S3에서 직접 받는 구조로 전환 — 이미지 서빙 경로를 BE에서 완전히 분리하면서 버킷은 공개하지 않음. **CloudFront**는 캐싱 효과를 검토했으나 채택하지 않음(마이페이지·초대 목록 위주의 낮은 반복 조회 빈도 — 이유는 근거 문서 17번 참고)
+  - nginx는 두지 않음 — stage·prod는 **ALB 경로 규칙**이 backend(`/api*`)·frontend(`/*`) 서비스로 바로 보내고, FE·BE를 서로 다른 ECS 서비스로 나눠 따로 배포·확장·관찰함(#147). ALB가 TLS 종료와 경로 분기를 맡아 nginx 역할이 겹치기 때문. dev만 앱 EC2 한 대 안에서 nginx가 TLS와 분기를 맡음
 
 - **이유·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(17번) 참고.
 
@@ -145,7 +132,7 @@ flowchart TB
 - **상황**: 16번에서 Scale-out으로 방향은 정했지만, 실제로 "여러 앱서버를 어떤 방식으로 띄우고 관리할지"는 아직 정하지 않음. AWS 안에서도 EC2를 직접 오토스케일링 그룹으로 관리하는 방법부터 컨테이너 오케스트레이션을 관리형으로 맡기는 방법까지 선택지가 여러 개 있어, 각 방식의 트레이드오프를 비교해야 함.
 
 - **결론**: **ECS — EC2 launch type + Auto Scaling Group + ALB** 채택(아래 표의 두 번째 후보) — Fargate·ECS Managed Instances는 배제. 표는 비교 참고용으로 유지
-  - **구현**: 인스턴스는 m7i.large(x86, ECS 최적화 AL2023). 서비스는 backend·frontend·AI로 나누고, 메모리 기준 binpack으로 배치해 빈 서버를 줄임
+  - 인스턴스는 m7i.large(x86, ECS 최적화 AL2023 AMI). 서비스는 backend·frontend·AI로 나누고, 메모리 기준 binpack으로 배치해 빈 서버를 줄임(#147)
 
   | 후보 | 방식 | 장점 | 단점 |
   |---|---|---|---|
@@ -154,21 +141,18 @@ flowchart TB
   | ECS — Fargate / Managed Instances | 인스턴스 관리(Fargate: 전체, Managed Instances: 프로비저닝·패치)를 AWS가 대행 | 운영 부담 최소화 | Fargate는 vCPU/메모리 단위 과금이라 상시 워크로드에서 비용 불리 가능, Managed Instances는 EC2 비용 위에 별도 관리 수수료 추가 |
   | EKS(Kubernetes) | Kubernetes 기반 컨테이너 오케스트레이션 | 가장 유연하고 생태계가 넓어 향후 확장에 제약이 적음 | 러닝커브·운영 복잡도가 넷 중 가장 높음, 지금 서비스 규모·운영 성숙도에는 과잉일 가능성 |
 
-  목표 아키텍처는 문서 상단 "전체 아키텍처 개요" 다이어그램 참고(ECS EC2 launch type 후보 기준 — 다른 후보 선택 시 컴퓨트 계층만 대체, DB 구조는 19번 참고). CloudWatch가 ALB·ASG/ECS·DB(자체구축 EC2)·Redis·S3까지 이 아키텍처의 AWS 리소스 전체를 모니터링 대상으로 하며, 그중 ASG/ECS 지표는 오토스케일링 트리거와도 직결됨(20번 근거 참고). 리소스별 구체적인 지표·알림 임계치·대시보드 설계는 22-24번(운영/관측성)에서 이어서 다룸.
+  아키텍처는 문서 상단 "전체 아키텍처 개요" 다이어그램 참고(DB 구조는 19번 참고). 모니터링은 CloudWatch로 ALB 지표(5xx·응답 시간)와 액세스 로그(S3 저장, Athena로 SLO 조회), Container Insights(Task·컨테이너 CPU·메모리), backend 사이드카 CloudWatch Agent의 HikariCP 지표, AI 사이드카의 AI 지표를 모으고, 알람은 SNS → Lambda → Discord로 보냄. ECS 서비스 CPU 지표는 오토스케일링 트리거와도 직결됨(20번).
 
 - **이유·근거·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(18번) 참고.
 
 ### 19. DB 확장 방식 비교 및 아키텍처 설정
 
-- **상황**: 16번에서 DB의 읽기 트래픽을 Read Replica로 분산하기로 방향은 정했지만, 이를 관리형 서비스(RDS)로 전환할지 v1처럼 EC2에 직접 구축(자체구축)할지, 그리고 가용성(Multi-AZ)은 어떻게 확보할지는 아직 정하지 않음.
+- **상황**: 15번의 읽기:쓰기 비율(7:1-14:1)상 읽기 분산(Read Replica)이 우선 후보이고, v1 DB는 이중화가 없는 SPOF였음. DB를 관리형 서비스(RDS)로 전환할지 v1처럼 EC2에 직접 구축(자체구축)할지, 읽기 분산과 가용성(Multi-AZ)이 이 규모에서 실제로 필요한지 정해야 함.
 
-- **결론**: v1의 EC2 직접 구동 MySQL 구조를 유지하며 **Multi-AZ(자체구축 Standby) + Read Replica**로 확장(16번 결론과 연결, RDS는 비용 검토 후 배제) — 서울 리전 단가로 Orchestrator 인스턴스까지 포함해 비교해도 자체구축이 RDS보다 월 약 49-51% 저렴한데, 이 격차를 상쇄하려면 월 약 2,900-4,000GB 수준의 AZ 간 복제 트래픽이 필요한 반면 실제 예상 복제 트래픽은 월 약 0.8GB에 그쳐 RDS의 무료 복제 혜택이 사실상 작동하지 않음(상세 계산은 의사결정 근거 문서 19번 참고). 단, 클라우드 인프라팀의 DB 운영 부담이 과중해지면 RDS 도입을 다시 고려
-
-  설계는 Primary 1대 + Standby 1대 + Read Replica 2대(총 4대)였다. Replica는 AZ별 1대씩 배치하고 각각 Primary에서 직접 복제한다.
-
-  **구현**: 설계대로 Read Replica(1·2대)와 Standby(2c)를 만들어 부하·장애 테스트까지 마친 뒤 비용 때문에 내렸다. 지금 prod DB는 Primary 1대(t3.medium, MySQL 8.4, binlog·GTID 켬)이며, 다시 붙일 수 있도록 복제 계정·CLONE 준비와 고정 이름 `db.prod.dameokja.internal`은 남겼다(25번).
-
-  설계 당시 DB 구조는 25번의 목표 아키텍처 다이어그램 DB 서브그래프 참고(Primary — Write / Standby — Failover 대기 / Read Replica — Read, Primary→Standby 동기·준동기 복제, Primary→Replica 비동기 복제)
+- **결론**: v1처럼 **EC2에 MySQL 8.4를 직접 구축**하고(RDS는 비용 검토 후 배제), prod DB는 **Primary 1대**(t3.medium, AZ 2b 사설 서브넷)로 운영 — 서울 리전 단가로 비교하면 이중화 구성(Primary + Standby + Replica) 기준 자체구축이 RDS보다 월 약 49-51% 저렴하고, 이 격차를 RDS의 무료 AZ 간 복제 혜택으로 상쇄하려면 월 약 2,900-4,000GB의 복제 트래픽이 필요한데 예상 복제 트래픽은 월 약 0.8GB에 그침(상세 계산은 의사결정 근거 문서 19번 참고). 단, 클라우드 인프라팀의 DB 운영 부담이 과중해지면 RDS 도입을 다시 고려
+  - **Primary 1대로 둔 이유**: 한계 부하 측정에서 Primary 한 대가 약 190 iter/s에서 CPU가 막혀 설계 피크(약 95 RPS)의 약 2배 여유가 있었고, Standby·Orchestrator를 두면 월 약 $50이 더 듦. Read Replica(1·2대)·Standby(2c)·Orchestrator 자동 장애조치는 실제로 구현해 부하 측정과 장애 주입 5개를 통과한 뒤 비용으로 철거함(#173·#203, 결과는 `tests/DB HA/결과.md`)
+  - **인스턴스**: M7i 계열(x86)의 m7i.large로 시작했으나, prod 전환(10/19) 뒤 DB CPU 1시간 평균이 약 1~2%라 t3.medium으로 줄임(#134). 같은 EC2에서 AI용 PostgreSQL 16도 함께 돌림
+  - **다시 붙일 준비**: binlog·GTID를 켜 두고 복제 계정·CLONE 플러그인을 준비해 둠. BE는 고정 이름 `db.prod.dameokja.internal`(사설 DNS, TTL 5초)로 접속해, Replica·Standby를 다시 붙여도 앱 설정을 바꾸지 않음
 
 - **이유·근거·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(19번) 참고.
 
@@ -182,13 +166,13 @@ flowchart TB
 
 - **결론**:
   - **Target Tracking(Dynamic Scaling)을 하루 전체에 상시 적용되는 기본 정책**으로 채택 — CPU 사용률 또는 요청 수 기반 지표를 목표치로 두면 AWS가 자동으로 조정해주는 방식. Dynamic Scaling 중에서도 Step Scaling·Simple Scaling 대신 Target Tracking을 선택 — 별도 임계치·조정폭 설계 없이 목표치 하나로 AWS가 알아서 맞춰줘, 트래픽 가정이 아직 추정치뿐인 지금 단계에 더 맞음(비교는 내부 작업 문서 20번 참고)
-  - **RPS Peak(저녁 요리 준비 시간대)에는 Scheduled Scaling을 추가로 적용** — Target Tracking은 이 시간대에도 계속 동작하지만, 발생 시각을 미리 알 수 있는 패턴이라 Scheduled Scaling으로 그 시각 전에 desired/min capacity를 선제적으로 높여둬 Target Tracking의 반응 지연(1-3분)을 겪지 않도록 보완
-  - **CCU Peak(알림 발송 직후 아침 버스트)과 평시 시간대는 Target Tracking 단독으로 대응** — CCU Peak은 좁은 시간창과 검증되지 않은 변수(즉시반응 비율)에 좌우돼 변동성이 크고, 성장하는 서비스 특성상 앞으로 생길 수 있는 다른 CCU 스파이크에도 유연하게 대응해야 하므로, 정해둔 규모를 미리 늘려두는 사전 조정 없이 실제 부하에 반응하는 방식만 사용
-  - ASG 용량 범위: **min capacity는 평시 RPS(8-14)를, max capacity는 설계 목표 Peak RPS(약 95, 안전 측 범위 약 91-99)를 각각 여유 있게 감당할 수 있는 대수로 설정** — 이때 min capacity는 평시 트래픽 처리뿐 아니라 인스턴스 1대가 장애로 빠져도 남은 인스턴스로 평시 트래픽을 감당할 수 있는 여유(N+1)까지 함께 고려함. 정확한 인스턴스당 처리량은 실제 부하테스트 이후 산정 예정(트레이드오프 참고).
-  - **ALB는 1대**로 구성 — AWS가 자체적으로 여러 AZ에 걸쳐 관리형으로 운영하므로 EC2처럼 별도 이중화를 고려할 대상이 아님
-  - ASG는 **서로 다른 가용영역(AZ) 2곳 이상**에 걸쳐 인스턴스를 배치 — 단일 AZ 장애에도 서비스가 유지되도록 함
-  - 새 인스턴스 기동 시 애플리케이션이 이미 설치된 **AMI**를 Launch Template에 연결해 사용 — user-data 스크립트로 매번 처음부터 배포하는 방식보다 기동-트래픽 수신까지 걸리는 시간을 줄여, Scheduled Scaling으로 미리 대응하는 효과를 실질적으로 살림
-  - **구현**: backend·frontend 서비스마다 Target Tracking(CPU 60%, Task 2~4개), 노드는 Capacity Provider 관리형 확장(ASG 2~4대). Scheduled Scaling은 아직 없음. 앱 서버는 AZ 2b 한 곳에 두고 다중 AZ는 DB 이중화와 함께 적용할 항목으로 미룸. AMI는 앱 없는 ECS 최적화 AMI를 ID로 고정(25번)
+  - **정책 구성**: backend·frontend 서비스마다 Target Tracking(서비스 평균 CPU 60%, Task 최소 2·최대 4)을 두고, Task를 올릴 EC2는 Capacity Provider 관리형 확장(목표 용량 100%)이 ASG(m7i.large 최소 2·최대 4대)를 조정함. AI 서비스는 1개 고정
+  - **Scheduled Scaling은 적용하지 않음** — 저녁 RPS Peak처럼 시각을 아는 피크는 Scheduled Scaling 후보였지만, 실제 트래픽이 설계 가정보다 훨씬 작아 min 용량(Task 2개·서버 2대)으로 충분했고, 피크 시각·규모를 실측으로 다시 정하기 전에 스케줄을 박아 두면 과잉·과소 프로비저닝 위험만 생김. CCU Peak(아침 알림 버스트)과 앞으로 생길 다른 스파이크도 같은 Target Tracking으로 대응
+  - 용량 범위: **min은 평시 RPS(8-14)와 서버 1대 장애 여유(N+1)를, max는 설계 목표 Peak RPS(약 95, 안전 측 범위 약 91-99)를 감당하는 대수**로 잡아 서버 2~4대·Task 2~4개로 정함. backend는 CPU 1024를 예약해 Target Tracking의 CPU 지표가 Task 기준으로 계산되게 함(#171)
+  - **축소 보호**: 새 서버는 축소 보호 상태로 뜨고 Capacity Provider 종료 보호가 Task가 있는 서버를 축소 대상에서 빼며(#187), 배포가 끝나면 흩어진 Task를 한 서버로 모아 빈 서버를 줄임(#189)
+  - **ALB는 1대**로 구성 — AWS가 공개 서브넷 두 AZ(2b·2c)에 걸쳐 관리형으로 운영하므로 EC2처럼 별도 이중화를 고려할 대상이 아님
+  - 앱 서버는 **AZ 2b 한 곳**에 둠 — AZ 장애에 대한 가용성은 가장 약한 구성 요소가 정하는데, DB·Redis가 2b에 한 대씩인 동안 앱만 2c로 나누면 AZ 장애 가용성은 그대로이고 앱↔DB·Redis 요청의 AZ 간 전송 요금·지연과 2c NAT 비용만 늘어남. 앱 다중 AZ는 DB 이중화와 함께 적용할 항목(#57)
+  - **AMI**: 앱 이미지는 GHCR에서 받으므로 앱을 굽지 않은 ECS 최적화 AMI를 쓰고, ID로 고정함 — 최신 AMI 경로(SSM 파라미터)를 쓰면 AWS가 새 AMI를 낼 때마다 서버가 교체되기 때문
 
 - **이유·근거·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(20번) 참고.
 
@@ -208,17 +192,15 @@ flowchart TB
 
 ### 22. 장애 상황과 가용성 설계
 
-- **상황**: 16-20번에서 컴포넌트별로 각각 이중화 장치(Scale-out, Multi-AZ, ASG, Read Replica 등)를 마련했지만, 컴포넌트가 실제로 장애 났을 때 서비스 전체가 어떻게 동작하는지를 장애 시나리오 관점에서 한데 모아 정리한 적은 없음.
+- **상황**: 16-20번에서 컴포넌트별로 각각 이중화 장치(Scale-out, ALB, ASG, DB 이중화 검증 등)를 마련했지만, 컴포넌트가 실제로 장애 났을 때 서비스 전체가 어떻게 동작하는지를 장애 시나리오 관점에서 한데 모아 정리한 적은 없음.
 
 - **결론**: 컴포넌트별 장애 시나리오와 대응을 정리한 결과:
-  - **해결**: 앱서버 인스턴스 장애(ALB 헬스체크+ASG 대체 인스턴스 기동), 앱서버 AZ 분산(멀티 AZ 배치로 AZ 전체 장애에도 트래픽 지속 처리), ALB·S3 장애(AWS 관리형)
-    - 구현에서 앱서버 AZ 분산은 적용하지 않음(앱·DB·Redis 모두 AZ 2b). AZ 전체 장애는 지금 구성의 남은 위험(25번)
-  - **설계 개정·검증 필요**: AZ별 Read Replica 1대씩 총 2대로 배치한다. AZ-a 장애 시 Standby 승격과 AZ-b Replica로 읽기 전환을 목표로 한다. Orchestrator 가용성, 기존 Primary 쓰기 차단, 복제 소스 재연결, 클라이언트 재연결과 잔여 용량은 리허설로 검증한다.
-  - **신규 정의**: Refresh Token 탈취 감지 시 해당 유저의 모든 활성 세션을 로그아웃 처리하는 절차를 17번의 RTR 설계에 이어 추가함. 또한 18번의 ECS EC2 launch type에서 한 호스트에 여러 Task가 자원을 공유하는 구조로 인해 생기는 Noisy Neighbor 문제에 대응하기 위해, 컨테이너별 memory·memoryReservation 설정 계획을 추가함(수치는 부하테스트 이후 산정)
-  - **DB Primary 장애조치 자동화**: v2 가용성 목표 99.9%(월 오류 예산 약 43분)는 수동 failover로 맞추기 어려워 자동 failover 도구로 **Orchestrator**를 채택 — Replica의 복제 상태까지 확인하는 장애 판단으로 split-brain 위험을 줄일 수 있다는 근거를 바탕으로 함(후보 비교·근거는 22번 참고). Orchestrator 자체는 **단일 인스턴스**(ASG로 자동 복구, 운영 중 장애가 실제로 발생하면 2대로 확장), 장애 후 클라이언트 리다이렉션은 **VIP/DNS** 방식으로 결정(ProxySQL은 비용·운영 부담으로 v2에서 배제, v3 후보로 유지) — 후보 비교·근거는 22번 참고
-  - **Read Replica 장애 대응**: 정상 Replica로 읽기를 전환하며 Primary·Standby에 읽기를 집중시키지 않는다. 라우팅과 Replica 1대의 부하 처리 용량은 검증 전이다. Redis는 기존 결정대로 단일 인스턴스를 유지한다.
+  - **해결**: 앱서버 인스턴스·Task 장애(ALB 헬스체크로 제외, ECS가 Task를 다시 띄우고 ASG가 대체 인스턴스 기동, min 2대·2개로 N+1 여유), ALB·S3 장애(AWS 관리형)
+  - **남은 위험(수용)**: AZ 2b 전체 장애 — 앱·DB·Redis가 모두 2b에 있어 서비스가 멈춤(20번). DB·Redis가 단일 노드인 동안 앱만 나눠도 이 위험은 줄지 않아 수용함
+  - **DB Primary 장애**: Primary 1대라 자동 승격 없이 **수동 복구**. v2 가용성 목표 99.9%(월 오류 예산 약 43분)를 위해 자동 장애조치를 실제로 만들어 검증함 — Standby(2c, GTID 비동기 복제)와 **Orchestrator** 1대(Replica 복제 상태까지 보는 장애 판단으로 split-brain 위험을 줄임), 장애 후 **사설 DNS(TTL 5초) 갱신**으로 BE를 새 Primary로 보내고, 옛 Primary는 보안 그룹·`super_read_only`로 차단. 장애 주입 5개(계획 교체, Orchestrator 장애, mysqld 강제 종료, 네트워크 단절, EC2 중단)를 모두 통과함(유실 0, 사람 개입 없음, 장애 중 쓰기 지연 최대 약 30초). 다만 실제 트래픽이 설계 가정보다 훨씬 작아 월 약 $50을 들일 단계가 아니라고 보고 철거함(#203). 다시 켤 때 쓰도록 DB 고정 이름, BE 연결 3초·쿼리 10초 타임아웃, Hikari 연결 수명 2분, JVM DNS 캐시 5초는 유지. ProxySQL은 비용·운영 부담으로 배제(v3 후보)
+  - **Redis 장애**: 단일 EC2(AOF)를 유지 — 영향이 로그인 갱신·로그아웃·SSE 인앱 갱신으로 제한적이고 알림은 Push로 폴백됨
+  - **신규 정의**: Refresh Token 탈취 감지 시 해당 유저의 모든 활성 세션을 로그아웃 처리하는 절차를 17번의 RTR 설계에 이어 추가함. 또한 18번의 ECS EC2 launch type에서 한 호스트에 여러 Task가 자원을 공유하는 구조로 인해 생기는 Noisy Neighbor 문제는 **컨테이너 하드 리밋(memory)**으로 문제 컨테이너만 OOM Kill되게 하고(#7), backend는 **CPU 1024를 예약**함(#171). memoryReservation(소프트 리밋)은 쓰지 않고 하드 리밋 하나로 단순화함 — 예약이 없으면 ECS가 하드 리밋을 기준으로 Task를 배치해 과밀 배치도 함께 막힘
   - 신규 배포로 인한 장애 대응은 23번(CI/CD 변경사항 설계)에서 이어서 다룸
-  - **구현**: Standby(2c)·Orchestrator(1대) 자동 장애조치를 만들어 장애 주입 테스트 5개(계획 교체, Orchestrator 장애, mysqld 강제 종료, 네트워크 단절, EC2 중단)를 모두 통과(유실 0, 사람 개입 없음, 장애 중 쓰기 지연 최대 약 30초)한 뒤 비용 때문에 철거함. 철거 뒤 v2 종료까지는 Primary 장애 시 수동 복구. Noisy Neighbor는 컨테이너 하드 리밋(memory)과 backend CPU 1024 예약으로 대응하고 memoryReservation은 쓰지 않음. Redis는 단일 EC2 유지
 
 - **이유·트레이드오프**: 내부 작업 문서 `인프라 설계 의사결정 근거.md`(22번) 참고.
 
@@ -231,7 +213,8 @@ flowchart TB
 - **결론**:
   - **CI**: v1의 GitHub Actions를 그대로 유지 — GitLab CI/CD, Jenkins를 후보로 검토했으나 채택하지 않음
   - **CD(배포 실행)**: GitHub Actions가 직접 **ECS Native Blue/Green**(CodeDeploy 없이)을 호출해 배포 — CodeDeploy Blue/Green, 직접 스크립트, EventBridge 경유를 후보로 검토했으나 채택하지 않음
-    - **구현**: CLOUD의 `ecs-deploy.yml` 하나가 dev·stage·prod 배포를 맡고, prod는 GitHub Environments 승인 뒤 실행. backend·frontend는 Blue/Green(Bake 5분) + 회로 차단기 롤백, AI는 Rolling. CloudWatch 알람 연동 자동 롤백은 아직 없음. 이미지는 GHCR에서 Secrets Manager의 인증 정보로 받음 v3 전환 뒤에는 prod 승인 뒤 배포가 `v3-prod-image.yml`(Argo CD 동기화)로 옮겨졌다(#306).
+    - CLOUD의 `ecs-deploy.yml` 하나가 dev·stage·prod 배포를 맡고, prod는 GitHub Environments 승인 뒤 실행. backend·frontend는 Blue/Green(Bake 5분) + 회로 차단기 롤백, AI와 dev는 Rolling. CloudWatch 알람 연동 자동 롤백은 적용하지 않음(회로 차단기 롤백만 사용)
+  - **이미지 레지스트리**: GHCR을 쓰되 패키지는 **비공개**로 두고, ECS Task가 Secrets Manager에 저장한 GHCR 인증 정보(`repositoryCredentials`)로 받음
   - **CI 빌드 환경**: GitHub Actions의 Public 저장소 기본 제공 러너(4 vCPU/16GB, 무료·무제한)를 그대로 사용 — 빌드 시간이 10분을 넘거나 문제가 발생하면 그때 AWS CodeBuild 등 대안 전환을 재검토
   - **저장소 공개 범위**: BE/FE/AI 3개 저장소 모두 v1의 Public 상태를 유지 — Private 전환을 검토·결정했다가 재검토 후 폐기(폐기 경위는 근거 문서의 "폐기된 의사결정" 참고)
 
@@ -250,93 +233,3 @@ flowchart TB
   - **v1부터 이어진 6번 한계(Secret 관리 한계, 15번 한계 목록)**: "GitHub(Actions/Secrets)에 종속적으로 CI/CD를 구성하면서 발생하는 트레이드오프로 보고 수용"한 채 v2에서도 범위 제외로 남겨둠 — self-hosted 전환은 이 외부 종속성 자체를 줄이는 방향과 맞닿아 있음
 
 - **트레이드오프**: Kubernetes·self-hosted 전환은 18·23번에서 "지금 규모엔 과잉", "상시 운영 부담"이라는 이유로 명시적으로 배제했던 바로 그 복잡도·운영 부담을 다시 감수하겠다는 뜻 — 전환 시점은 그 부담(학습 곡선, 상시 서버·클러스터 운영, 전담 인력 확보)을 팀이 감당할 수 있다고 판단되는 시점이어야 함. 구체적인 전환 설계(Kubernetes 배포 방식, self-hosted CI 도구 선택, 마이그레이션 절차 등)는 v3 범위에서 별도로 다룸 — 이 섹션은 "왜 그 방향인지"에 대한 근거만 정리한 것이고 실제 설계는 후속 작업
-
-### 25. 설계와 달라진 점
-
-> 기준: CLOUD main `638e11f`, 2026-11-02 AWS 조회. 이슈·PR 번호는 CLOUD 저장소 기준. 환경별 상세 배치는 [v2 환경별 구축 아키텍처](../v2%20환경별%20구축%20아키텍처.md) 6절과 같다.
-
-**설계대로 구현해 검증한 뒤 내린 것**
-
-| 항목 | 설계 | 구현과 검증 | 지금 |
-|---|---|---|---|
-| Read Replica(16·19) | AZ별 2대, 읽기 분산 | 1대(#145)·2대(#169)로 만들어 DB 한계 부하를 측정. Primary만이면 약 190 iter/s에서 Primary CPU가 막히고, 조회를 Primary + Replica 2대에 나누면 약 213~226, 앱이 충분히 늘어난 상태에서는 300까지 처리(`tests/DB HA/결과.md`). 설계 피크(약 95 RPS)는 Primary만으로도 약 2배 여유 | 측정 뒤 제거(#173). 복제 계정·CLONE 준비는 남겼으나 v2 prod DB 삭제(#321)로 함께 사라짐 |
-| Standby + 자동 장애조치(19·22) | Standby(다른 AZ) + Orchestrator, VIP/DNS 전환 | Standby(2c, GTID 비동기 복제), Orchestrator, 사설 DNS(TTL 5초) 갱신, 옛 Primary 차단(보안 그룹·`super_read_only`)을 #179~#200으로 구현. 장애 주입 테스트 5개 모두 통과(유실 0, 사람 개입 없음, BE 쓰기 실패 최대 11초, 장애 중 쓰기 지연 최대 약 30초) | 비용(월 약 $50) 때문에 철거(#203). DB 고정 이름, BE 연결 3초·쿼리 10초 타임아웃, Hikari 연결 수명 2분, JVM DNS 캐시 5초는 다시 켤 때 쓰도록 남겼으나, DB 고정 이름은 v2 prod 자원 삭제(#321)로 함께 사라짐 |
-
-**설계와 다르게 구현한 것**
-
-| 항목 | 설계 | 구현 | 이유 |
-|---|---|---|---|
-| 앱 Task 구성(17·18) | nginx+FE+BE 한 Task | ALB 경로 규칙 + backend·frontend 서비스, stage·prod에서 nginx 제거 | 한 Task면 FE·BE가 함께 늘고 함께 배포되며 지표도 섞임. 서비스별로 따로 배포·확장·관찰(#147) |
-| 앱서버 AZ 배치(20·22) | ASG를 AZ 2곳 이상에 분산 | 앱·DB·Redis 모두 AZ 2b. ALB와 2c 서브넷만 두 AZ | AZ 장애 가용성은 가장 약한 구성 요소가 정함. DB·Redis가 2b 한 대뿐인 동안 앱만 나누면 AZ 장애 가용성은 그대로이고 앱↔DB·Redis 요청의 AZ 간 전송 요금·지연, 2c NAT 비용만 늘어남. 앱 분산은 DB 이중화와 함께 적용(#57) |
-| Orchestrator HA(22) | Semi HA(2대) → 개정 후 단일 인스턴스 | 1대(ASG로 자동 복구) | 개정안 그대로. 철거 전까지 운영 |
-| Standby 복제(19) | 동기·준동기 | 비동기(GTID) | 준동기는 후속 후보로 남김. 테스트에서는 유실 0 |
-| Redis(17·22) | 단일 인스턴스(형태 미정) | EC2 자체 구축 1대(AOF) | DB와 같은 자체 구축 방향(#57) |
-| Noisy Neighbor(22) | 컨테이너별 memory + memoryReservation | 컨테이너 하드 리밋(memory)만, backend CPU 1024 예약 | 예약 대신 한계로 단순화(#7), CPU 경합은 예약으로 대응(#171) |
-| 서버 축소(20) | 정의 없음 | ASG 축소 보호, 배포 뒤 흩어진 Task 모으기 | 축소 때 Task가 있는 서버가 종료되거나 빈 서버가 남는 문제(#187·#189) |
-| 프로필 사진(17) | 클라이언트 직접 접근 | 비공개 버킷 + Presigned URL | 공개 범위가 설계에 없어 비공개를 기본으로 함 |
-| 이미지 레지스트리(23) | GHCR Public, 인증 불필요 | Secrets Manager의 GHCR 인증 정보로 받음 | 패키지를 의도적으로 비공개로 둠. 배포 흐름(GitHub Actions 직접 호출)은 설계 그대로 |
-
-**아직 구현하지 않은 것**
-
-| 항목 | 설계 | 지금 |
-|---|---|---|
-| Scheduled Scaling(20) | 저녁 RPS Peak 전에 용량을 미리 높임 | 없음. Target Tracking만 동작 |
-| 앱이 설치된 AMI(20) | Launch Template에 앱 AMI | 앱 없는 ECS 최적화 AMI를 ID로 고정(최신 AMI 경로는 새 AMI가 나올 때 서버를 교체하므로 고정) |
-| 알람 기반 자동 롤백(23) | CloudWatch 알람과 연동 | 회로 차단기 롤백만 |
-| Read Replica 장애 대응, AZ 전체 장애(22) | 정상 Replica로 읽기 전환, Standby 승격 | Replica·Standby가 없어 해당 없음. AZ 2b 전체 장애는 남은 위험 |
-
-**설계 당시 목표 아키텍처**
-
-<details>
-<summary>설계 당시 목표 아키텍처(2026-10-12 개정안)</summary>
-
-```mermaid
-flowchart TB
-    Client(["사용자 Client"])
-    ALB["ALB (Application Load Balancer)"]
-
-    subgraph ASG["ECS Cluster — EC2 Capacity Provider (ASG, min/max는 20번 참고)"]
-        App1["EC2 #1<br/>ECS Task: nginx+FE+BE (Stateless, 17)"]
-        App2["EC2 #2<br/>ECS Task"]
-        AppN["EC2 #N<br/>ECS Task"]
-    end
-
-    Redis[("Redis<br/>Refresh Token Store(17)·SSE Pub/Sub(21)")]
-    S3[("S3<br/>프로필 사진(17)")]
-    Push["OS/브라우저 푸시<br/>FCM·APNs·Web Push(21)"]
-
-    subgraph DB["MySQL 자체구축 — Multi-AZ + Read Replica (19)"]
-        Primary[("Primary — Write (AZ-a)")]
-        Standby[("Standby — Failover 대기 (AZ-b)")]
-        Replica[("Read Replica A — Read (AZ-a)")]
-        ReplicaB[("Read Replica B — Read (AZ-b)")]
-        Primary -.동기/준동기 복제.-> Standby
-        Primary -.비동기 복제.-> Replica
-        Primary -.비동기 복제.-> ReplicaB
-    end
-
-    Orch["Orchestrator<br/>장애 감지·승격 자동화(22)"]
-
-    Client --> ALB --> ASG
-    Client -."프로필 사진 조회(직접 접근)".-> S3
-    Client -."백그라운드·종료 상태 수신".-> Push
-    App1 -."Refresh Token 발급/갱신 · SSE Pub/Sub".-> Redis
-    App2 -."Refresh Token 발급/갱신 · SSE Pub/Sub".-> Redis
-    AppN -."Refresh Token 발급/갱신 · SSE Pub/Sub".-> Redis
-    App1 -->|업로드| S3
-    App2 -->|업로드| S3
-    AppN -->|업로드| S3
-    App1 -."SSE 연결 없을 시 발송 요청".-> Push
-    ASG -->|Write| Primary
-    ASG -->|Read| Replica
-    ASG -->|Read| ReplicaB
-    Orch -.모니터링.-> Primary
-    Orch -.모니터링.-> Standby
-    Orch -.모니터링.-> Replica
-    Orch -.모니터링.-> ReplicaB
-    Orch =="장애 시 승격"==> Standby
-```
-
-*(다이어그램에는 표시하지 않지만) CloudWatch가 ALB·ASG/ECS·DB(자체구축 EC2)·Redis·S3까지 이 아키텍처의 AWS 리소스 전체를 모니터링 대상으로 함(18번 근거 참고). Orchestrator의 구체적인 클러스터 구성(HA 방식, ProxySQL 연동 여부)은 22번 참고.
-
-</details>

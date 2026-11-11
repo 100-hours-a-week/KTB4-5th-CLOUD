@@ -1,8 +1,9 @@
 # 다먹자 v1 인프라 위키 — 1단계: EC2 + Docker Compose 기반 초기 배포 설계
 
-> KTB 4조 다먹자 팀의 v1 인프라 설계 문서입니다. 이 문서는 **1단계(EC2 + Docker Compose 기반 초기 배포)** 만 다룹니다. 2단계(CI)는 별도 문서 `ktb4-cloud-wiki-ci.md`를 참고하세요.
-> 초기 v1 설계의 가정과 선택 근거를 기록합니다. 실제 운영 설정은 [v1 설정](../../../v1/)을, 서비스 품질 목표는 [SLI·SLO 설계](../../observability/SLI-SLO-design.md)를 기준으로 확인합니다. AWS에 적용된 상태를 검증한 문서는 아닙니다.
-> 검토일: 2026-10-04
+> 기준: v1 마지막 운영 구성(2026-10-19 v2 prod 전환 전, dev는 2026-10-09~11 v2 dev 전환 전). v1은 v2로 전환한 뒤 종료했다.
+
+> KTB 4조 다먹자 팀의 v1 인프라 설계 문서입니다. 이 문서는 **1단계(EC2 + Docker Compose 기반 초기 배포)** 만 다룹니다. 2단계(CI)는 [ktb4-cloud-wiki-ci.md](ktb4-cloud-wiki-ci.md), 3단계(CD)는 [ktb4-cloud-wiki-cd.md](ktb4-cloud-wiki-cd.md)를 참고하세요.
+> v1 운영 설정은 [v1 설정](../../../v1/)(prod Compose·nginx, 배포 스크립트)을, 서비스 품질 목표는 [SLI·SLO 설계](../../observability/SLI-SLO-design.md)를 기준으로 확인합니다. v1 dev Compose는 v2 dev 전환 때 삭제했습니다(커밋 `7c7940c`).
 
 ## 목차
 0. [클라우드 벤더 선택](#0-클라우드-벤더-선택)
@@ -10,7 +11,6 @@
 2. [Docker 컨테이너 구성 설계](#2-docker-컨테이너-구성-설계)
 3. [Docker Compose 기반 배포 구조 설계](#3-docker-compose-기반-배포-구조-설계)
 4. [현재 구조의 한계 정의](#4-현재-구조의-한계-정의)
-5. [설계와 달라진 점](#5-설계와-달라진-점)
 
 ---
 
@@ -82,8 +82,8 @@ Neurocloud의 공조·서버 모듈은 고객사 설치 형태의 한 예이며,
 [Docker Compose 운영 배포 동작](https://docs.docker.com/compose/how-tos/production/)을 기준으로 교체와 롤링 배포를 구분합니다.
 
 - **상황**: dev는 잦은 배포가 필요하고 prod는 배포 중 영향을 줄여야 합니다.
-- **결론**: 현재 v1 스크립트는 대상 서비스 컨테이너를 교체하고 헬스체크 후 실패 시 이전 이미지·설정으로 복구합니다. 단일 복제본이므로 짧은 중단이 발생할 수 있습니다.
-- **이유**: 서비스별 순차 교체는 무중단 롤링 배포와 다릅니다. 롤링 배포를 보장하려면 복수 인스턴스 또는 복제본, 트래픽 분산과 준비 상태 확인이 필요합니다. 상세 절차는 [CD 문서](ktb4-cloud-wiki-cd.md)와 [배포 스크립트](../../../v1/scripts/deploy-v1.sh)를 확인합니다.
+- **결론**: 배포 대상 서비스(FE 또는 BE) 컨테이너 하나를 새 이미지로 교체하고, 헬스체크에 실패하면 이전 이미지 digest와 서비스 설정으로 복구합니다([배포 스크립트](../../../v1/scripts/deploy-v1.sh)). dev는 `dev` 브랜치 병합마다, prod는 `main` 병합마다 배포합니다.
+- **이유**: 서비스마다 복제본이 하나라 Rolling Update가 성립하지 않습니다. 롤링 배포를 하려면 복수 인스턴스 또는 복제본, 트래픽 분산과 준비 상태 확인이 필요한데, v1은 비용 때문에 앱 서버 1대·nginx 진입점을 택했습니다. 그래서 교체 중 짧은 중단을 감수하고, 실패한 버전이 남지 않도록 자동 복구를 둡니다. 2026-10-04 부하 테스트에서는 BE 교체 시각과 겹쳐 502가 1건 관측됐습니다([부하테스트 결과](../../../tests/k6/V1-RESULTS.md)). 상세 절차는 [CD 문서](ktb4-cloud-wiki-cd.md)를 확인합니다.
 
 ### 서버 인스턴스 — 모델 계열
 - **상황**: MVP 인프라에 맞는 EC2 인스턴스 계열을 선택해야 함.
@@ -93,54 +93,63 @@ Neurocloud의 공조·서버 모듈은 고객사 설치 형태의 한 예이며,
 ### 서버 인스턴스 — ARM vs x86
 
 - **상황**: 비용과 이미지·라이브러리 호환성을 함께 확인해야 합니다.
-- **결론**: 초기 후보로 ARM 기반 t4g를 선택합니다.
-- **이유**: 팀의 사용 범위에서 ARM 지원을 검증해 비용 효율을 기대합니다. 동일 성능이나 저전력을 일괄 보장하지 않으며, 멀티아키텍처 이미지와 네이티브 의존성을 확인해야 합니다.
+- **결론**: ARM 기반 t4g를 사용합니다. FE·BE 이미지는 GitHub Actions ARM 러너에서 `linux/arm64` 단일 플랫폼으로 빌드합니다.
+- **이유**: 팀의 사용 범위에서 ARM 지원을 확인해 비용 효율을 얻습니다. 동일 성능이나 저전력을 일괄 보장하지 않으며, 이미지가 arm64 전용이므로 x86 서버로 옮기려면 빌드 플랫폼을 바꿔야 합니다.
 
 ### 서버 인스턴스 — 리소스 산정 및 결론
 
-- **상황**: 초기 인스턴스 크기는 부하 검증 전 추정입니다.
-- **결론**: dev t4g.small, prod 앱 t4g.small + DB t4g.micro를 초기 후보로 둡니다.
-- **이유**: 기존 서비스 운영 경험을 출발점으로 삼되 다음 메모리 예산으로 검증합니다.
+- **상황**: 인스턴스 크기는 부하 검증 전 메모리 예산으로 정했고, 운영 중 메모리 부족을 겪었습니다.
+- **결론**: dev는 서비스 서버 t4g.small(nginx·FE·BE)과 별도 DB EC2(t4g.small, MySQL)로 나눕니다. prod는 앱 EC2 t4g.small(nginx·FE·BE)과 DB EC2 t4g.micro입니다. 컨테이너별 CPU·메모리 제한은 두지 않습니다.
+- **이유**: dev를 한 대에 통합하면 메모리 예산이 2 GiB를 넘습니다. 2026-09-24 dev 서버(메모리 약 1.8 GiB, Swap 없음)에서 FE·BE·MySQL·nginx가 함께 실행되던 중 호스트 전체 메모리 부족으로 BE Java 프로세스가 OOM 종료됐습니다(컨테이너 메모리 제한 초과가 아님). 이후 2026-09-30 부하 테스트를 위해 dev를 prod와 같은 구조로 맞추며 MySQL을 dev Compose에서 빼고 별도 DB EC2로 옮겼습니다(커밋 `756534c`).
 
 | 대상 | 추정 메모리 | 판단 |
 |---|---|---|
-| Dev 통합 | nginx 100 + FE 100 + BE 1024 + OS 500 + MySQL 500 = 2224 MiB | 약 2.17 GiB로 2 GiB를 초과합니다. DB 분리·증설·사용량 조정이 필요합니다. |
-| Prod 앱 | 1724 MiB | 약 1.68 GiB이며 Agent·JVM 급증 여유가 적습니다. |
-| Prod DB | MySQL 500 + OS 500 = 1000 MiB | 1 GiB에 여유가 거의 없습니다. Agent와 캐시 사용량을 추가 검증합니다. |
+| Dev 통합(분리 전) | nginx 100 + FE 100 + BE 1024 + OS 500 + MySQL 500 = 2224 MiB | 약 2.17 GiB로 2 GiB를 초과합니다. 실제 OOM 종료로 확인돼 DB를 분리했습니다. |
+| Dev 서비스 서버·Prod 앱 | 1724 MiB | 약 1.68 GiB이며 Agent·JVM 급증 여유가 적습니다. |
+| Prod DB | MySQL 500 + OS 500 = 1000 MiB | 1 GiB에 여유가 거의 없습니다. |
 
-2 vCPU는 초기 가정이며 T 계열 CPU 크레딧·지속 부하도 점검합니다. 리소스 제한은 총 용량 부족을 해결하지 못합니다. 현재 dev Compose에는 MySQL 서비스가 없으므로 통합 DB 구성은 초기 설계와 구분합니다.
+2 vCPU는 가정이며 T 계열 CPU 크레딧·지속 부하는 CloudWatch 알람으로 확인합니다. 리소스 제한은 총 용량 부족을 해결하지 못합니다.
+
+### 서버 인스턴스 — 구매 방식
+
+- **결론**: prod 앱·DB는 On-Demand입니다. dev 서비스 서버는 Spot으로 시작했고, 2026-10-01 기존 서버로 만든 AMI로 On-Demand 인스턴스를 새로 실행해 바꿨습니다.
+- **운영 기준**: Spot 요청은 인스턴스와 별개의 자원입니다. 영구(persistent) 요청은 인스턴스를 종료해도 남아 대체 인스턴스를 다시 실행하므로, 서버를 교체할 때 요청도 취소합니다. AMI로 새로 실행한 인스턴스는 사설 IP가 바뀌므로 MySQL 계정의 호스트, 보안그룹, 설정 파일처럼 서버 IP가 등록된 곳을 함께 고칩니다. 2026-10-01 전환 때 두 문제를 모두 겪었습니다.
 
 ### 예상 비용
 
 - **상황**: 월 환산 기준이 섞이지 않도록 동일 시간으로 계산합니다.
-- **결론**: 기존 문서의 가정 단가(t4g.small $0.0208/h, t4g.micro $0.0104/h)에 월 730시간을 적용하면 전체 온디맨드는 **$37.96**, dev small만 65% 할인된다고 가정하면 **$28.09**입니다.
-- **계산**: 온디맨드 (0.0208 × 2 + 0.0104) × 730 = 37.96. 할인 가정은 (0.0208 × 0.35 + 0.0208 + 0.0104) × 730 = 28.0904입니다.
-- **범위**: 계산 검산을 위한 가정이며 최신 서울 리전 견적이 아닙니다. Spot 할인율은 고정되지 않습니다. EBS·공인 IPv4·전송량·CloudWatch·Secrets Manager·SNS·Lambda 등은 별도로 포함해야 합니다.
+- **결론**: 가정 단가(t4g.small $0.0208/h, t4g.micro $0.0104/h)에 월 730시간을 적용하면, 마지막 운영 구성(dev 서비스 서버·dev DB·prod 앱 t4g.small 3대 + prod DB t4g.micro, 모두 On-Demand)은 **$53.14**입니다.
+- **계산**: (0.0208 × 3 + 0.0104) × 730 = 53.144.
+- **범위**: 계산 검산을 위한 가정이며 서울 리전 견적이 아닙니다. EBS·스냅샷·공인 IPv4·전송량·CloudWatch·Secrets Manager·SNS·Lambda 등은 별도로 포함해야 합니다.
 
 ### 아키텍처 다이어그램
 ![아키텍처 다이어그램](../../assets/image-12.png)
 
-(이미지가 안 보이는 환경을 위한 Mermaid 버전 — AWS 인프라 구성만, CI/CD는 제외)
+(이미지가 안 보이는 환경을 위한 Mermaid 버전 — AWS 인프라 구성만, CI/CD는 제외. 위 이미지는 dev DB를 분리하기 전 배치이므로 아래 Mermaid를 기준으로 봅니다.)
 
 ```mermaid
 flowchart TB
     Client(["사용자 Client<br/>Web / Mobile"])
 
-    subgraph DEV["Dev EC2 — t4g.small (Spot)"]
-        DevInfo["SG In: 80,443 · SSH 출발지 제한 · Out: 80,443<br/>Restart Policy: no"]
-        DevNginx["nginx<br/>80/443 → HTTPS 리다이렉트"]
-        DevInfo -.- DevNginx
-        DevFE["FE :3000"]
-        DevBE["BE Spring/JVM :8080<br/>non-root · DB healthcheck 대기 후 기동"]
-        DevDB[("MySQL :3306<br/>초기 설계: 컨테이너 DB<br/>초기 설계: 영속성 미보장")]
-        DevNginx -->|"/  :3000"| DevFE
-        DevNginx -->|"/api  :8080"| DevBE
-        DevBE -->|":3306"| DevDB
+    subgraph DEVNET["Dev — ap-northeast-2"]
+        subgraph DEV["Dev 서비스 서버 EC2 — t4g.small (On-Demand, 2026-10-01부터)"]
+            DevInfo["SG In: 80,443 · 22(배포·관리)<br/>Restart Policy: no · CloudWatch Agent"]
+            DevNginx["nginx<br/>80/443 → HTTPS 리다이렉트"]
+            DevInfo -.- DevNginx
+            DevFE["FE :3000"]
+            DevBE["BE Spring/JVM :8080<br/>non-root · /actuator/health"]
+            DevNginx -->|"/  :3000"| DevFE
+            DevNginx -->|"/api  :8080"| DevBE
+        end
+        subgraph DEVDB["Dev DB EC2 — t4g.small"]
+            DevDB[("MySQL 8.4 :3306<br/>EC2에 직접 설치")]
+        end
+        DevBE -->|"3306, 사설 IP"| DevDB
     end
 
     subgraph PRODVPC["Prod VPC — ap-northeast-2"]
         subgraph PRODAPP["Prod 앱서버 EC2 — t4g.small (On-Demand)"]
-            ProdAppInfo["SG In: 80,443 · SSH 출발지 제한 · Out: 80,443,3306(→DB)<br/>리소스 제한 계획 · Restart: unless-stopped"]
+            ProdAppInfo["SG In: 80,443 · 22(배포·관리) · Out: 80,443,3306(→DB)<br/>Restart: unless-stopped · CloudWatch Agent"]
             ProdNginx["nginx<br/>80/443 → HTTPS 리다이렉트"]
             ProdAppInfo -.- ProdNginx
             ProdFE["FE :3000"]
@@ -148,28 +157,29 @@ flowchart TB
             ProdNginx -->|"/  :3000"| ProdFE
             ProdNginx -->|"/api  :8080"| ProdBE
         end
-        subgraph PRODDB["Prod DB서버 EC2 — t4g.micro (Private Subnet)"]
-            ProdDBInfo["SG In: 3306(출발지=앱서버 SG만),22<br/>Out: 수집·업데이트 경로 필요"]
-            ProdDB[("MySQL :3306<br/>EBS 영속 저장·백업 필요")]
+        subgraph PRODDB["Prod DB서버 EC2 — t4g.micro"]
+            ProdDBInfo["SG In: 3306(앱서버에서), 관리용 22"]
+            ProdDB[("MySQL :3306<br/>EBS 저장")]
             ProdDBInfo -.- ProdDB
         end
-        ProdBE -->|"3306, private"| ProdDB
+        ProdBE -->|"3306, 사설 IP"| ProdDB
     end
 
-    subgraph LOG["모니터링·장애 알림 계획"]
+    subgraph LOG["모니터링·장애 알림"]
         CW["CloudWatch<br/>지표·로그·대시보드·알람"]
+        Discord["Discord<br/>SNS → Lambda"]
+        CW --> Discord
     end
 
-    Client -->|"dev.example.com : 80/443"| DevNginx
-    Client -->|"example.com : 80/443"| ProdNginx
-    DEV -.로그 전송.-> CW
-    PRODAPP -.로그 전송.-> CW
-    PRODDB -.로그 전송.-> CW
+    Client -->|"dev.dameokja.com : 80/443"| DevNginx
+    Client -->|"dameokja.com : 80/443"| ProdNginx
+    DEV -.로그·지표 전송.-> CW
+    PRODAPP -.로그·지표 전송.-> CW
 ```
 
 **다이어그램 적용 범위**
 
-초기 후보 구성을 나타냅니다. dev DB 통합 여부와 실제 인스턴스 사양은 배포 설정에 따라 달라집니다. CloudWatch 전송에는 Agent·로그 수집 설정·IAM 권한·네트워크 경로가 필요합니다. 위 이미지는 초기 배치 참고용이며 세부 정책은 아래 본문을 따릅니다.
+v1 마지막 운영 배치를 나타냅니다. CloudWatch Agent는 dev 서비스 서버와 prod 앱 서버에 설치해 nginx·BE 로그와 OS·BE 지표를 보냅니다([Agent 설정](../../observability/cloudwatch-agent-setup.md)). 세부 정책은 아래 본문을 따릅니다.
 
 ## 2. Docker 컨테이너 구성 설계
 
@@ -203,50 +213,51 @@ flowchart TB
 ### 로깅
 
 - **상황**: 장애를 감지하고 원인을 추적할 중앙 관측 체계가 필요합니다.
-- **결론**: CloudWatch Metrics·Logs·Dashboards·Alarms를 사용한 모니터링과 장애 알림을 계획합니다.
+- **결론**: CloudWatch Metrics·Logs·Dashboards·Alarms로 모니터링하고, 장애 알림은 Discord로 받습니다.
 - **이유**: 별도 Loki/Promtail 서버 운영 부담을 줄이고 AWS 인프라와 연동합니다. 자동으로 수집되는 항목과 별도 설정이 필요한 항목을 구분합니다.
 
-| 대상 | 수집·알림 계획 |
+| 대상 | 수집·알림 방식 |
 |---|---|
-| CPU·상태 검사·T 계열 크레딧 | EC2 기본 지표를 조회하고 필요한 알람을 설정합니다. |
-| 메모리·파일시스템 사용률 | CloudWatch Agent로 수집합니다. EC2 기본 지표만으로는 확인할 수 없습니다. |
-| Nginx·BE 로그 | 호스트에 기록한 로그 파일을 Agent로 CloudWatch Logs에 전송합니다. Docker local 드라이버의 로그가 자동 전송되는 것은 아닙니다. |
-| 장애·복구 알림 | CloudWatch Alarm → SNS → Lambda → Discord로 전달합니다. 임계값·평가 주기·누락 데이터 처리와 수신 테스트가 필요합니다. |
-| Spot 중단 예고 | EventBridge → Lambda → Discord를 사용합니다. StatusCheckFailed는 Spot 중단 사전 예고가 아닙니다. |
+| CPU·상태 검사·T 계열 크레딧 | EC2 기본 지표를 조회하고 CPU·서버 중단 알람을 둡니다. |
+| 메모리·파일시스템 사용률 | dev 서비스 서버·prod 앱 서버의 CloudWatch Agent로 수집합니다. EC2 기본 지표만으로는 확인할 수 없습니다. |
+| Nginx·BE 로그, BE 앱 지표 | 컨테이너가 호스트에 기록한 로그 파일을 Agent가 CloudWatch Logs로 보냅니다. Docker local 드라이버의 로그가 자동 전송되는 것은 아닙니다. BE 지표는 Agent가 서버 내부의 `/actuator/prometheus`에서 읽습니다. |
+| SLO·5xx·메모리·디스크 알람 | 스택 `dameokja-v1-prod-monitoring`(prod)으로 지표 필터·알람·대시보드를 관리합니다. |
+| 장애·복구 알림 | CloudWatch Alarm → SNS → Lambda → Discord로 전달합니다(스택 `dameokja-v1-discord-alerts`). 2026-09-24 dev CPU 장애·복구 알림 수신을 확인했습니다. |
+| Spot 중단 예고 | dev 서버가 Spot이던 동안 EventBridge → Lambda → Discord로 받도록 구성했습니다. StatusCheckFailed는 Spot 중단 사전 예고가 아닙니다. |
+| CI/CD 실패·롤백 결과 | GitHub Actions 알림 워크플로가 파트별 Discord 채널로 보냅니다([CI 9번](ktb4-cloud-wiki-ci.md#9-실패-처리-정책)). |
 
-세부 구성은 [모니터링 설계](../../observability/monitoring-alerting-design.md), [Agent 설정](../../observability/cloudwatch-agent-setup.md), [Discord 알림](../../../infra/discord-alerts/aws/README.md)을 따릅니다. 이 계획만으로 실제 수집·전달 완료를 보장하지 않습니다. 로그 보존 기간과 민감정보 제외, 수집량 비용을 관리하고 알림 실패도 점검합니다. [CloudWatch 개요](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/), [Agent 지표](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/metrics-collected-by-CloudWatch-agent.html)
+세부 구성은 [모니터링 설계](../../observability/monitoring-alerting-design.md), [Agent 설정](../../observability/cloudwatch-agent-setup.md), [Discord 알림](../../../infra/discord-alerts/aws/README.md)을 따릅니다. Agent 자체가 멈추는 경우의 알람은 없어 로그 수신량으로만 판단합니다. 로그 보존 기간과 민감정보 제외, 수집량 비용을 관리하고 알림 실패도 점검합니다. [CloudWatch 개요](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/), [Agent 지표](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/metrics-collected-by-CloudWatch-agent.html)
 
 ### Dev 환경 구성
 
-초기 통합 구성의 근거입니다. 현재 dev Compose에는 MySQL과 depends_on이 없으므로 아래 구성을 현재 적용 상태로 해석하지 않습니다.
-- **상황**: dev는 다양한 개발/테스트를 지원해야 하고, BE가 DB 준비 상태에 의존적임.
-- **결론**: nginx, FE, BE, DB를 한 EC2에 배치, 리소스 제한 없음, BE는 healthcheck·depends_on으로 DB 준비 후 기동
-- **이유**: 개발 단계에서 다양한 테스트를 자유롭게 진행할 수 있도록 리소스를 제한하지 않기로 함. BE가 DB에 종속적이라 DB가 뜨기 전에 BE가 먼저 기동되는 것을 막기 위함.
+- **상황**: dev는 다양한 개발/테스트를 지원해야 하고, 부하 테스트는 prod와 같은 구조에서 해야 결과를 prod에 적용할 수 있음.
+- **결론**: nginx·FE·BE는 dev 서비스 서버에, MySQL은 별도 DB EC2에 배치. 리소스 제한 없음. Compose는 prod와 같은 서비스 구성이고, 재시작 정책(`no`)·도메인·인증서만 다름.
+- **이유**: 개발 단계에서 다양한 테스트를 자유롭게 진행할 수 있도록 리소스를 제한하지 않기로 함. 한 대에 DB까지 두면 메모리가 부족해 BE가 OOM 종료된 적이 있고(2026-09-24), 2026-09-30 부하 테스트를 앞두고 prod처럼 DB를 분리해 두 환경을 같은 구조로 맞춤. DB가 Compose 밖에 있으므로 BE 기동 순서를 `depends_on`으로 묶지 않음.
 
 ### Dev DB 데이터 유지 (Volume)
 
 - **상황**: 개발 DB를 초기화할지와 데이터를 보존할지는 별도 정책입니다.
-- **결론**: 초기 설계는 개발 DB의 영속성을 보장하지 않는 방향이었습니다. 현재 dev Compose에는 DB 서비스가 없으므로 실제 개발 DB의 저장 위치·백업은 별도로 확인합니다.
-- **이유**: 컨테이너 재시작은 일반적으로 쓰기 계층을 유지합니다. 컨테이너 삭제·재생성, tmpfs, 이미지의 익명 볼륨, 명시적 볼륨 구성에 따라 결과가 달라집니다. 초기화가 필요하면 명시적 초기화 절차로 수행하며 재배포마다 초기화된다고 단정하지 않습니다. [Docker 저장소](https://docs.docker.com/engine/storage/volumes/)
+- **결론**: dev MySQL은 별도 DB EC2에 직접 설치해 EBS에 저장하므로, 앱 서버 재배포나 컨테이너 교체와 관계없이 데이터가 유지됩니다. 초기화가 필요하면 명시적 절차로 수행합니다.
+- **이유**: 앱 서버를 교체해도 DB가 영향을 받지 않습니다. 대신 DB 계정이 앱 서버의 사설 IP로 등록돼 있어, 2026-10-01 서비스 서버를 AMI로 새로 실행했을 때 IP가 바뀌어 접속이 끊겼고 계정 호스트를 새 IP로 바꿔(`RENAME USER`) 복구했습니다.
 
 ### Prod 환경 구성
 
 - **상황**: 앱과 DB 장애의 영향을 줄여야 합니다.
-- **결론**: nginx·FE·BE는 앱 EC2에 두고 DB는 private subnet의 별도 EC2로 분리하는 초기 설계입니다. 리소스 제한은 실측 후 적용할 계획입니다.
-- **이유**: 현재 prod Compose에는 컨테이너별 CPU·메모리 제한이 명시되어 있지 않으므로 적용 완료로 표현하지 않습니다. DB 분리만으로 고가용성이나 데이터 백업이 제공되지는 않습니다.
+- **결론**: nginx·FE·BE는 앱 EC2에 두고 DB는 prod VPC 안의 별도 EC2로 분리합니다. 컨테이너별 CPU·메모리 제한은 두지 않습니다.
+- **이유**: 앱 서버의 메모리 압박이 DB로 번지지 않게 합니다. 리소스 제한은 총 용량 부족을 해결하지 못하므로, 메모리 사용률은 알람(`dameokja-prod-memory-ticket`)으로 감시합니다. DB 분리만으로 고가용성이나 데이터 백업이 제공되지는 않습니다.
 
 ## 3. Docker Compose 기반 배포 구조 설계
 
 ### EC2 구성
 - **상황**: 1번에서 정한 인스턴스 구성을 배포 구조에도 반영해야 함.
-- **결론**: dev는 t4g.small, prod는 t4g.small + t4g.micro
-- **이유**: ARM(t4g)이 성능 대비 비용이 저렴하고 저전력임. x86보다 라이브러리 호환성은 떨어지지만, MVP에서 사용하는 라이브러리 중 ARM에 호환 안 되는 것이 없어 ARM을 선택.
+- **결론**: dev는 서비스 서버 t4g.small + DB EC2 t4g.small, prod는 앱 EC2 t4g.small + DB EC2 t4g.micro. 앱 서버는 각각 한 대이며 Compose 프로젝트 하나(`/home/ubuntu/app`)로 nginx·FE·BE를 실행.
+- **이유**: ARM(t4g)이 성능 대비 비용이 저렴함. x86보다 라이브러리 호환성은 떨어지지만, MVP에서 사용하는 라이브러리 중 ARM에 호환 안 되는 것이 없어 ARM을 선택.
 
 ### Docker Network
 
 - **상황**: 컨테이너 통신과 DB 접근 범위를 제한해야 합니다.
-- **결론**: 초기 v1은 환경 내 공통 네트워크를 사용하고 별도 계층 분리를 미룹니다.
-- **이유**: 구성을 단순화하지만 같은 네트워크의 컨테이너 간 접근이 가능해집니다. prod DB가 별도 EC2에 있어도 앱 EC2의 FE에서 접근할 가능성이 있으므로 DB 분리와 컨테이너 격리는 별개입니다. DB 인증과 보안그룹을 함께 적용해야 합니다.
+- **결론**: 환경마다 Compose 네트워크 하나(prod `web`, dev `default`)에 nginx·FE·BE를 함께 두고 별도 계층 분리를 하지 않습니다.
+- **이유**: 구성을 단순화하지만 같은 네트워크의 컨테이너 간 접근이 가능해집니다. DB가 별도 EC2에 있어도 앱 EC2의 FE 컨테이너에서 DB로 나가는 경로가 막히는 것은 아니므로 DB 분리와 컨테이너 격리는 별개입니다. DB 인증과 보안그룹을 함께 적용해야 합니다.
 
 ### Container간 통신 포트
 
@@ -255,45 +266,47 @@ flowchart TB
 | 사용자 → nginx | HTTP 80 → HTTPS 443 리다이렉트 |
 | nginx → FE | HTTP 3000 |
 | nginx → BE | HTTP 8080 |
-| BE → DB (dev·prod) | MySQL/TCP 3306 |
+| BE → DB (dev·prod) | MySQL/TCP 3306, DB EC2의 사설 IP |
+| CloudWatch Agent → BE | HTTP 8080, 서버 내부(`127.0.0.1`)에만 공개 |
 
-외부 공개는 nginx를 중심으로 하고 내부 API 포트는 불필요하게 공개하지 않습니다. 내부 HTTP도 침해 시 위험이 있으므로 신뢰 경계와 전송 암호화 요구를 별도로 판단합니다.
+외부 공개는 nginx 80·443만 하고 FE·BE 포트는 호스트 외부에 열지 않습니다. 내부 HTTP도 침해 시 위험이 있으므로 신뢰 경계와 전송 암호화 요구를 별도로 판단합니다.
 
 ### 서버 관리 접근 방식 — SSH vs SSM
 
 - **상황**: 서버 관리와 배포 접근이 필요합니다.
-- **결론**: v1은 익숙한 SSH를 사용합니다.
-- **이유**: SSM은 인바운드 SSH 포트 없이 IAM으로 접근을 통제할 수 있지만 Agent·역할·서비스 연결 경로가 필요합니다. VPC 엔드포인트는 유일한 연결 방식이 아닙니다. SSH를 선택하면 출발지 제한과 키·호스트 신원 검증을 운영해야 합니다.
+- **결론**: v1은 익숙한 SSH를 사용합니다. 관리 접속과 GitHub Actions 배포 모두 SSH(사용자 `ubuntu`, 22번)입니다.
+- **이유**: SSM은 인바운드 SSH 포트 없이 IAM으로 접근을 통제할 수 있지만 Agent·역할·서비스 연결 경로가 필요합니다. SSH를 선택하면 출발지 제한과 키·호스트 신원 검증을 운영해야 합니다.
 
 ### 외부 진입 경로 / SSH
 
-- **결론**: SSH 22는 승인된 관리·배포 경로로 제한하는 정책을 적용해야 합니다. 실제 보안그룹 적용 여부는 별도 확인합니다.
-- **이유**: nginx·FE·BE 통합 배치 때문에 SSH 전체 공개가 필수인 것은 아닙니다. Git ignore는 실수로 키를 커밋하는 것을 줄일 뿐, 포트 접근 제한이나 유출된 키의 폐기를 대신하지 않습니다. 서버 교체 시 새 호스트 키의 지문을 검증하고 known_hosts를 갱신합니다.
+- **결론**: 배포는 GitHub 호스팅 러너에서 SSH로 접속하며, 환경별로 저장한 known_hosts로 호스트 키를 엄격히 검증합니다(`StrictHostKeyChecking=yes`).
+- **이유**: GitHub 호스팅 러너는 출발지 IP가 고정되지 않아 22번을 러너 주소로만 좁히기 어렵습니다. 그래서 키 보호와 호스트 신원 검증에 기댑니다. Git ignore는 실수로 키를 커밋하는 것을 줄일 뿐, 포트 접근 제한이나 유출된 키의 폐기를 대신하지 않습니다. 서버를 교체하면 새 호스트 키의 지문을 검증하고 known_hosts Secret을 갱신합니다.
 
 ### 보안그룹 / 포트
 
 | 대상 | Inbound 정책 | 필요한 Outbound |
 |---|---|---|
-| Dev 앱 EC2 | 80·443, 승인된 출발지의 22 | 이미지·패키지·CloudWatch·외부 API 접근, 외부 DB 사용 시 해당 DB 포트 |
-| Prod 앱 EC2 | 80·443, 승인된 출발지의 22 | 위 항목과 Prod DB의 TCP 3306 |
-| Prod DB EC2 | 앱 SG에서 TCP 3306, 승인된 관리 경로의 22 | CloudWatch 수집·백업·업데이트에 필요한 목적지 |
+| Dev 서비스 서버 EC2 | 80·443, 배포·관리용 22 | 이미지·패키지·CloudWatch·외부 API 접근, Dev DB의 TCP 3306 |
+| Dev DB EC2 | 서비스 서버에서 TCP 3306, 관리용 22 | 업데이트에 필요한 목적지 |
+| Prod 앱 EC2 | 80·443, 배포·관리용 22 | 위 항목과 Prod DB의 TCP 3306 |
+| Prod DB EC2 | 앱 서버에서 TCP 3306, 관리용 22 | 백업·업데이트에 필요한 목적지 |
 
-DB는 private subnet에 배치하되 CloudWatch 등으로 나가는 NAT 또는 VPC 엔드포인트 등의 경로를 설계해야 합니다. Outbound 전체 차단은 DB 응답 자체보다 신규 로그 전송·업데이트 요청을 막습니다. 보안그룹은 상태를 추적해 허용된 연결의 응답을 허용합니다. [AWS 보안그룹](https://docs.aws.amazon.com/en_en/vpc/latest/userguide/vpc-security-groups.html)
+Outbound 전체 차단은 DB 응답 자체보다 신규 로그 전송·업데이트 요청을 막습니다. 보안그룹은 상태를 추적해 허용된 연결의 응답을 허용합니다. [AWS 보안그룹](https://docs.aws.amazon.com/en_en/vpc/latest/userguide/vpc-security-groups.html)
 
 ### Volume
 
 - **결론**: 운영 DB는 EC2 분리 여부와 관계없이 영속 저장소와 복구 가능한 백업이 필요합니다.
-- **이유**: EBS 저장 위치, DeleteOnTermination, 컨테이너 사용 시 마운트, 백업·복원 절차를 확인해야 합니다. Docker 볼륨만으로 인스턴스 종료나 디스크 손실에서 복구할 수는 없습니다. 초기 설계의 개발 DB 영속성 미보장 정책과 운영 DB 보존 요구를 구분합니다.
+- **이유**: dev·prod 모두 MySQL이 앱 서버 밖의 DB EC2에 있어 앱 컨테이너 교체와 데이터가 분리됩니다. 그래도 EBS 저장 위치, DeleteOnTermination, 백업·복원 절차를 확인해야 합니다. 앱 서버의 Docker 볼륨은 로그·인증서처럼 호스트 경로를 마운트하는 용도로만 씁니다.
 
 ### Environment Variable
 
-- **결론**: 이미지 설정은 서버 .env, 서비스별 실행 설정은 env/*.env로 관리합니다.
-- **이유**: 배포 스크립트가 필요한 서비스 설정을 갱신합니다. DB 주소·계정도 운영 정보이므로 불필요하게 공개하지 않으며 파일 접근 권한을 제한합니다.
+- **결론**: 서버 `.env`에는 배포할 이미지 digest(`FE_IMAGE`, `BE_IMAGE`)를, 서비스별 실행 설정은 `env/backend.env`·`env/frontend.env`에 둡니다. 서비스별 설정은 배포마다 GitHub Secret 값으로 다시 씁니다.
+- **이유**: 배포 스크립트는 `.env`에서 배포 대상 이미지 한 줄만 바꾸고, 서비스 설정은 KEY=VALUE 형식·중복·필수 키(BE의 DB 접속 정보 등)를 검사한 뒤 반영합니다. FE는 실행 시점 환경변수가 없어 빈 설정을 허용합니다. DB 주소·계정도 운영 정보이므로 파일 권한을 `600`으로 제한합니다.
 
 ### Secret 관리
 
-- **결론**: 배포용 애플리케이션 시크릿은 GitHub Secrets, AWS 알림의 Discord 웹훅은 Secrets Manager로 관리합니다.
-- **이유**: 각각 배포 파이프라인과 Lambda 실행 중 조회라는 사용 목적에 맞춘 선택입니다. Compose secrets는 컨테이너에 파일로 전달하는 기능이며 외부 시크릿 저장소와 역할이 다릅니다. GitHub Secrets도 실행 서버에 전달된 값의 노출·자동 로테이션을 해결하지 못합니다.
+- **결론**: 배포용 애플리케이션 시크릿은 앱 저장소의 GitHub Secrets(BE `DEV_APP_ENV`·`PROD_APP_ENV`, FE `APP_ENV`), AWS 알림의 Discord 웹훅은 Secrets Manager(`damuckja/v1/discord-webhook`)로 관리합니다.
+- **이유**: 각각 배포 파이프라인과 Lambda 실행 중 조회라는 사용 목적에 맞춘 선택입니다. 환경별 Secret 이름을 따로 골라 운영 값이 없을 때 개발 값으로 대체되지 않게 합니다. Compose secrets는 컨테이너에 파일로 전달하는 기능이며 외부 시크릿 저장소와 역할이 다릅니다. GitHub Secrets도 실행 서버에 전달된 값의 노출·자동 로테이션을 해결하지 못합니다.
 - **운영 기준**: 최소 권한, 출력 로그 마스킹, 서버 파일 권한, 키 교체를 별도로 관리합니다. 클라우드 이전 시 Secrets Manager 연동을 변경해야 하지만 시크릿 자체가 무용지물이 되는 것은 아닙니다.
 
 ### Container Restart 정책
@@ -304,35 +317,24 @@ DB는 private subnet에 배치하되 CloudWatch 등으로 나가는 NAT 또는 V
 
 ### Image Registry
 - **상황**: Docker 이미지를 어디에 보관하고 배포할지 결정해야 함.
-- **결론**: **GHCR**
-- **이유**: 프로젝트가 GitHub를 주로 사용할 것이 확정적이라, GitHub Actions를 잘 활용할 수 있는 GHCR을 선택.
+- **결론**: **GHCR** 비공개 패키지(`ghcr.io/100-hours-a-week/ktb4-5th-be`, `ktb4-5th-fe`). 서버는 배포할 때 GitHub Actions의 단기 토큰(`GITHUB_TOKEN`, `packages: read`)으로 로그인해 이미지를 받고, 배포가 끝나면 임시 인증 정보를 지웁니다.
+- **이유**: 프로젝트가 GitHub를 주로 사용할 것이 확정적이라, GitHub Actions를 잘 활용할 수 있는 GHCR을 선택. 앱 저장소는 Public이지만 패키지는 비공개로 두고 받는 쪽이 인증합니다. 서버에 장기 인증 정보를 남기지 않으려고 배포마다 임시 Docker 설정 폴더에 로그인합니다.
 
 ### Image Tag 정책
 
 - **결론**: Git SHA 태그로 빌드 출처를 식별하고 실제 배포는 이미지 digest로 고정합니다.
-- **이유**: 태그는 다시 지정될 수 있으므로 동일 이미지 보장을 위해 digest를 사용합니다. 현재 배포 스크립트도 digest 형식을 검증합니다.
+- **이유**: 태그는 다시 지정될 수 있으므로 동일 이미지 보장을 위해 digest를 사용합니다. 배포 스크립트는 `ghcr.io/...@sha256:<64자리>` 형식이 아니면 거부하고, 복구도 이전 컨테이너의 digest로 합니다.
 
 ## 4. 현재 구조의 한계 정의
 
-1. **가용성**: 앱 서버·nginx·DB에 단일 장애점이 있으며 단일 컨테이너 교체 중 중단이 발생할 수 있습니다.
-2. **확장성**: 현재 Compose와 고정 인스턴스 구성에는 자동 수평 확장이 없습니다.
-3. **리소스**: 초기 dev 통합 메모리 예산은 2 GiB를 초과하고 prod도 여유가 작습니다. 크레딧·메모리·부하를 측정해 사양을 결정해야 합니다.
-4. **데이터**: Spot 종료 시 복구는 EBS 보존과 백업에 달려 있습니다. 별도 DB EC2나 Docker 볼륨만으로 데이터 안전이 보장되지는 않습니다.
-5. **보안**: SSH 출발지 제한과 컨테이너 간 접근 통제가 필요하며 Git ignore만으로 보호할 수 없습니다.
+1. **가용성**: 앱 서버·nginx·DB에 단일 장애점이 있으며 단일 컨테이너 교체 중 중단이 발생합니다(2026-10-04 부하 테스트에서 BE 교체 중 502 1건).
+2. **확장성**: Compose와 고정 인스턴스 구성에는 자동 수평 확장이 없습니다.
+3. **리소스**: 2 GiB 서버 한 대에 DB까지 두면 메모리가 부족해 BE가 OOM 종료됐고(2026-09-24), DB를 분리한 뒤에도 앱 서버 여유가 작습니다. 크레딧·메모리·부하를 측정해 사양을 결정해야 합니다.
+4. **데이터**: DB EC2 장애·종료 시 복구는 EBS 보존과 백업에 달려 있습니다. 별도 DB EC2만으로 데이터 안전이 보장되지는 않습니다.
+5. **보안**: SSH 22번을 배포에 쓰므로 키 관리와 호스트 검증에 기대고, 컨테이너 간 접근 통제가 없습니다. Git ignore만으로 보호할 수 없습니다.
 6. **시크릿**: 서버에 전달된 설정의 권한 관리와 로테이션은 별도 운영 과제입니다.
-7. **관측성**: CloudWatch 모니터링·장애 알림을 계획하지만 임계값, 수집 누락, 알림 전달 실패와 실제 사용자 장애 감지 범위는 검증해야 합니다. 알림 자체가 자동 복구를 의미하지 않습니다.
+7. **관측성**: CloudWatch 모니터링과 Discord 장애 알림은 동작하지만, Agent 중단 알람이 없고 실제 사용자 장애 감지 범위는 SLO 알람에 한정됩니다. 알림 자체가 자동 복구를 의미하지 않습니다.
 8. **결합도**: 알림 배치와 API가 BE 자원을 공유하므로 부하 증가 시 분리가 필요합니다.
+9. **서버 교체**: 서버 설정(Compose·nginx 파일, 인증서, 로그 폴더 권한, Agent)과 IP에 묶인 설정(DB 계정 호스트, known_hosts)을 서버마다 손으로 맞춰야 합니다.
 
-초기 설계는 빠른 구축을 우선한 가정입니다. 변경된 환경 구성은 v1 설정을, 서비스 품질 목표는 SLI·SLO 문서를 기준으로 관리합니다.
-
-## 5. 설계와 달라진 점
-
-> 기준: 2026-11-02. v1은 2026-10-19 v2 prod로 전환한 뒤 운영하지 않는다.
-
-| 항목 | 설계 | 실제 | 이유·경과 |
-|---|---|---|---|
-| 운영 상태 | EC2 + Docker Compose로 dev·prod 운영 | dev는 2026-10-09~11 v2 dev(ECS 한 대)로, prod는 2026-10-19 v2 prod로 전환. v1 앱·DB EC2는 종료하고 스냅샷만 보관 | v2 전환([v2 위키](ktb4-cloud-wiki-v2.md), `docs/implementation/v2 prod 전환 결과.md`) |
-| Dev 환경 구성 | nginx·FE·BE·DB를 한 EC2에 | v1 dev Compose·DNS 레코드는 v2 dev 전환 때 삭제. 저장소에는 `v1/prod`만 남음 | v2 dev가 대신함 |
-| Dev 서버 구매 방식·DB 배치 | t4g.small **Spot** 한 대에 nginx·FE·BE·DB | 2026-10-01 서비스 서버를 On-Demand로 바꿈(기존 서버 AMI로 새로 실행). MySQL은 별도 DB EC2로 분리해 운영 | 전환 이유는 기록 없음. 전환 중 영구 Spot 요청이 종료한 인스턴스를 다시 만드는 문제와, DB 계정 호스트가 옛 서버 IP로 묶여 접속이 끊기는 문제를 겪음(트러블슈팅 기록, 저장소 밖 `기술 문서`) |
-| 배포 전략 | Rolling Update | 대상 서비스 컨테이너를 교체하고 헬스체크 실패 시 이전 이미지·설정으로 복구(`v1/scripts/deploy-v1.sh`). 단일 복제본이라 짧은 중단이 있음 | 복제본이 하나라 롤링이 성립하지 않음 |
-| Image Registry 인증 | GHCR Public이라 pull 인증 불필요 | 배포 스크립트가 GitHub Actions 토큰으로 GHCR에 로그인한 뒤 받고, 임시 인증 정보를 지움 | GHCR 패키지를 의도적으로 비공개로 둠(익명 pull 403, 2026-11-02 확인). 앱 저장소는 Public |
+이 한계를 바탕으로 [Compose 한계 분석 및 ECS 전환 검토](../v1%20Compose%20한계%20분석%20및%20ECS%20전환%20검토.md)를 거쳐 v2(ECS)로 옮겼습니다. dev는 2026-10-09~11, prod는 2026-10-19에 전환했습니다. v1 앱 서버와 prod DB EC2는 지우고 스냅샷만 남겼고, dev DB EC2는 v2 dev가 이어서 사용했습니다. v2 설계는 [4단계 문서](ktb4-cloud-wiki-v2.md)를 따릅니다.
