@@ -5,7 +5,9 @@
 # v2 prod BE의 SPRING_DATASOURCE_URL은 SSM이 아니라 Task 환경 변수(infra/v2/ecs/prod/backend.json)라 여기서 주소만 바꿔 만듭니다.
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
-PY=$(command -v python3 || command -v python)
+# Windows의 python3는 Microsoft Store 안내용 빈 실행 파일일 수 있어, 실제로 실행되는 것을 고릅니다.
+PY=$(for c in python3 python; do command -v "$c" >/dev/null && "$c" -c '' 2>/dev/null && { echo "$c"; break; }; done)
+[[ -n $PY ]] || { echo "실행되는 Python이 없습니다" >&2; exit 1; }
 cd "$(git rev-parse --show-toplevel)"
 K=(--kubeconfig infra/v3/private/kubeconfig)
 DB_HOST=$(aws cloudformation describe-stacks --stack-name dameokja-v3-prod-db --query "Stacks[0].Outputs[?OutputKey=='DbPrivateIp'].OutputValue" --output text)
@@ -14,9 +16,14 @@ tmp=$(mktemp -d -p infra/v3/private); chmod 700 "$tmp"; trap 'rm -rf "$tmp"' EXI
 mkdir -p v3/environments/prod/secrets
 
 # ssm <secret> <SSM 경로> <키...>: 키마다 파일 하나(값 끝 줄바꿈 없음)
+# 값을 변수에 먼저 받아 조회가 실패하면 set -e로 멈추고, 빈 값도 봉인하지 않습니다.
 ssm() {
-  local dir=$tmp/$1 path=$2; shift 2; mkdir -p "$dir"
-  for k; do printf %s "$(aws ssm get-parameter --with-decryption --name "$path/$k" --query Parameter.Value --output text)" > "$dir/$k"; done
+  local dir=$tmp/$1 path=$2 v; shift 2; mkdir -p "$dir"
+  for k; do
+    v=$(aws ssm get-parameter --with-decryption --name "$path/$k" --query Parameter.Value --output text)
+    [[ -n $v ]] || { echo "SSM 값이 비어 있습니다: $path/$k" >&2; exit 1; }
+    printf %s "$v" > "$dir/$k"
+  done
 }
 seal() {
   local name=$1; shift
@@ -52,6 +59,8 @@ cmp -s "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY" 
   || { echo "v2 prod SSM의 AI_INTERNAL_API_KEY·INTERNAL_API_KEY·CALLBACK_API_KEY가 서로 다릅니다" >&2; exit 1; }
 # v2 prod에 없던 키는 stage와 같이 dev 값을 씁니다.
 ssm ai-secrets /dameokja-v3-dev-ai TAVILY_API_KEY
+# 레시피 외부 API 키(식품안전나라·한국 레시피 아카이브·기상청)는 prod SSM 한 곳에만 두고 세 환경이 같은 값을 씁니다(#340).
+ssm ai-secrets /dameokja-v2-prod-ai RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
