@@ -1,0 +1,203 @@
+{
+  "scope": "T1 GitHub 게시 선별본",
+  "file_count": 38,
+  "total_bytes": 718027,
+  "credential_scan_pass": true,
+  "excluded": [
+    "private/",
+    "results/",
+    "__pycache__/"
+  ],
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 116,
+      "sha256": "cceabad6f36b4272584c890b3baf71bf689a7a93fc0bac0696a12cb9d20bf087"
+    },
+    {
+      "path": "analyze.py",
+      "bytes": 4848,
+      "sha256": "bc401d440e7271dda1618c9d371bd9bc4891cba2eae0c81982b9ecfcd501959d"
+    },
+    {
+      "path": "audit.py",
+      "bytes": 6171,
+      "sha256": "d0a2a80fb1f7405254040ae4f8cfe1ab609b927560e7380d4e27aedf07dd9bf3"
+    },
+    {
+      "path": "check_artifacts.py",
+      "bytes": 1756,
+      "sha256": "e5a0778d068e7fbf8fbbc8b38eed05ac705ccb66c8dc413c7e8fee7755a5e046"
+    },
+    {
+      "path": "cleanup.py",
+      "bytes": 8535,
+      "sha256": "3f6d275947097332aa2cd702519ea54baeb17e0ff9aaa045f1efed0a53e32c88"
+    },
+    {
+      "path": "cleanup_when_done.py",
+      "bytes": 699,
+      "sha256": "92b3eec33eed804aa0220a8b324f1427b2720160e2d88cf8cef82922eeb82e5e"
+    },
+    {
+      "path": "db-observe.sh",
+      "bytes": 1502,
+      "sha256": "2dc88083e4086ce95c65b3219f26536d2fb96889149b3e11cb0af4405f4b4708"
+    },
+    {
+      "path": "finalize_report.py",
+      "bytes": 3802,
+      "sha256": "d3fa6a21a0adb3a0e3c48859686ee3d98dcc9e68c1a4cb8eb4934dc847ce59e2"
+    },
+    {
+      "path": "github/results/artifact-safety.json",
+      "bytes": 160,
+      "sha256": "2d6ba6e0a1f6cdca4b2c68affc514375ef8ef848a5e78a7c02366cd85b3bcfcc"
+    },
+    {
+      "path": "github/results/audit.json",
+      "bytes": 5975,
+      "sha256": "9d5a054fa65b3f20e4ab088d09e37fa7f88d4d6a3bcf8a3ce6221d6bbeab4744"
+    },
+    {
+      "path": "github/results/cleanup-status.json",
+      "bytes": 2508,
+      "sha256": "65a9f7193eaf78e88954773f70842182a69bf19046eabf429fa6c156c9eeed28"
+    },
+    {
+      "path": "github/results/cleanup-verification.json",
+      "bytes": 674,
+      "sha256": "6ee49abd3b28bc0016aecedb01b983bebeb88b81c6ac853505ed5a470be34b58"
+    },
+    {
+      "path": "github/results/final-resource-cleanup.json",
+      "bytes": 544,
+      "sha256": "3d2fef10ecb6409f3784d92df9f7fbd0c3090774172f25edc82b6d6b703f7f4e"
+    },
+    {
+      "path": "github/results/final-review.json",
+      "bytes": 340,
+      "sha256": "018a0ae06af09ab833162b6e6a3aeeebda5149715757b03e9b2bac7801aaa82f"
+    },
+    {
+      "path": "github/results/resource-summary.json",
+      "bytes": 6707,
+      "sha256": "f37f82c32e478cef6799a44bb86d55e303bae9935a01e857d7c8a9157492c231"
+    },
+    {
+      "path": "github/results/resource-summary.png",
+      "bytes": 584348,
+      "sha256": "819a9874088c562c969c09cddeb46036fff674b4b16ab91dc0fe4bbb5f76486f"
+    },
+    {
+      "path": "github/results/round-1/analysis.json",
+      "bytes": 2053,
+      "sha256": "e17ec51bfe96a5f6533500f5ace7fe0c912d29980b009c5b0f117dd0ff4df9a9"
+    },
+    {
+      "path": "github/results/round-1/round-1-credits-after.json",
+      "bytes": 1918,
+      "sha256": "72c0270a333873458cf9819700079856c894dbfc34dec04671d564d4285220e8"
+    },
+    {
+      "path": "github/results/round-1/round-1-credits-before.json",
+      "bytes": 1933,
+      "sha256": "fcdfb2bc8085eb9b50ce2ce2da8021bf76c4ac6806c3c86faff189700011f95b"
+    },
+    {
+      "path": "github/results/round-2/analysis.json",
+      "bytes": 2038,
+      "sha256": "7654e7efd3058451e3979ea25a7bcb6a106d6bb3ff6597951a35f988c88ee39c"
+    },
+    {
+      "path": "github/results/round-2/round-2-credits-after.json",
+      "bytes": 1914,
+      "sha256": "1e3e02ee2ac6dd091cd3b63f8eace1c2846a19f1133de5c8d577198037aa246d"
+    },
+    {
+      "path": "github/results/round-2/round-2-credits-before.json",
+      "bytes": 1859,
+      "sha256": "7f80fa3e713f77d959c48847e8a76b33b6b73cf8385a9d1e7e87cb386267961e"
+    },
+    {
+      "path": "github/results/round-3/analysis.json",
+      "bytes": 2050,
+      "sha256": "0c3b2a218f5f9f5a9f74e184e434b5b09e52a554b4711a9aecaeacbdb9d0b9a0"
+    },
+    {
+      "path": "github/results/round-3/round-3-credits-after.json",
+      "bytes": 1929,
+      "sha256": "32d570ebc5d47a95d8b14a56a7c94c726c8dbb505208fbdd83e053dba5dde146"
+    },
+    {
+      "path": "github/results/round-3/round-3-credits-before.json",
+      "bytes": 1914,
+      "sha256": "2dafefd70e2e22e7bfe2538d2edb22a343b42f00a53bca351ac8f1eb0bf55a06"
+    },
+    {
+      "path": "github/results/transfer-verification.json",
+      "bytes": 211,
+      "sha256": "fbf9774ba5a9c75a8ee5ccb6db35b3760f8c34e67d00f0e76476f0ac2522ab81"
+    },
+    {
+      "path": "github/results/결과.md",
+      "bytes": 8675,
+      "sha256": "315ac6408cf5cb002e0a9db5f7b54a4ef097b6684c28dc3054db6bec2546e048"
+    },
+    {
+      "path": "GITHUB_UPLOAD.md",
+      "bytes": 2740,
+      "sha256": "83211d7ca45d6f2c52a0c6bbfaacf88bafa63f19ad8c65af61b937ba44080472"
+    },
+    {
+      "path": "load.js",
+      "bytes": 6845,
+      "sha256": "3e73a052bd376f286c81d2d0a06bab0490a270e9087f6e86bb07c849a219ff18"
+    },
+    {
+      "path": "prepare.js",
+      "bytes": 3200,
+      "sha256": "e2fcafefbfc54155ecfd1bb0313a363fc241d3e641bde6bfd3b3fde13b546d9b"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8740,
+      "sha256": "36ec721c173e796ce2bb4ebe4b7ee9d45c298086f05539d1f921f04b3c812662"
+    },
+    {
+      "path": "remote.py",
+      "bytes": 2349,
+      "sha256": "3ca2b8702af5d12833e4ca8827a002d14d22e70aa45eac66824e8a1b62f6aab9"
+    },
+    {
+      "path": "report.py",
+      "bytes": 19046,
+      "sha256": "23bc119cf4c30448100f7ea27e107160adc545fcd20e7ce4730866dea8e901be"
+    },
+    {
+      "path": "run.py",
+      "bytes": 9862,
+      "sha256": "bc8db4ef43bd65fdb0ba87eca5b7f31250cceee59b85db21adfc0091ace5a34a"
+    },
+    {
+      "path": "suite.py",
+      "bytes": 3767,
+      "sha256": "5ee4f8d17f9d8cc09df5099d5830693c590c15a0b5fab32e136d9d904674f363"
+    },
+    {
+      "path": "supervise.sh",
+      "bytes": 768,
+      "sha256": "54565f9c673d4f578a45a3df586e3a8cf8909ebbc7267787e3d387a0f4ad7555"
+    },
+    {
+      "path": "test_analyze.py",
+      "bytes": 2921,
+      "sha256": "eb700a68c5634d7ae51b1673abe17c9cfe4f2c0a4828180e59bffeba4f3e82f2"
+    },
+    {
+      "path": "verify_cleanup.py",
+      "bytes": 2610,
+      "sha256": "d2ecc8bb7495f8fcea29d5d7cf5a01551d6d9f17fae3fe2663babc1663707c02"
+    }
+  ]
+}
