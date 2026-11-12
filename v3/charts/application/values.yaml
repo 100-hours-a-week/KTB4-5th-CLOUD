@@ -29,3 +29,25 @@ route:
   # ALB Target Group 헬스 체크(Pod IP 대상)
   healthCheckPath: ''
   healthCheckCodes: '200'
+# BE DB 마이그레이션(Flyway) Argo CD PreSync Job(#310). BE 이미지의 db/migration SQL을 앱 교체 전에 적용합니다.
+# BE에 Flyway SQL이 들어간 뒤 환경별로 켭니다. 켜면 sync마다 Job이 돌고, 실패하면 BE가 교체되지 않습니다.
+migration:
+  enabled: false
+  # 마이그레이션할 BE 색상. 비우면 activeColor. blue·green 모두 이미지가 있으면 새 버전 색상을 직접 적습니다.
+  color: ''
+  # flyway/flyway 13.12.1 (Ubuntu·Temurin JRE). MySQL 드라이버는 들어 있지 않습니다.
+  flywayImage: docker.io/flyway/flyway@sha256:3b4fae57858ee25735230e42f426fd200144fedbe692ea7789aa3e50a7c11657
+  # busybox 1.37.0. BE·Flyway 이미지에 unzip이 없어 jar를 풀 때만 씁니다.
+  unzipImage: docker.io/library/busybox@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+  # BE Spring Boot jar 안 경로(spring.flyway 기본 위치 classpath:db/migration)
+  sqlPath: BOOT-INF/classes/db/migration
+  # BE가 쓰는 MySQL 드라이버를 그대로 Flyway에 넘깁니다.
+  driverGlob: BOOT-INF/lib/mysql-connector-j-*.jar
+  # 이력 테이블 없는 기존 DB를 baselineVersion(1)으로 표시하고 V2부터 적용합니다. 가능하면 baseline을 한 번 직접 실행하고 false로 둡니다.
+  baselineOnMigrate: false
+  # DB가 막 켜졌을 때(stage 켜기) 접속을 다시 시도하는 횟수. 간격은 1초부터 두 배씩 늘어납니다.
+  connectRetries: 5
+  timeoutSeconds: 600
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
