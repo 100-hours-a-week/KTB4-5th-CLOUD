@@ -56,7 +56,7 @@ cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY"
 cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/CALLBACK_API_KEY"
 ssm ai-secrets /dameokja-v3-dev-ai TAVILY_API_KEY
 # 레시피 외부 API 키(식품안전나라·한국 레시피 아카이브·기상청)는 prod SSM 한 곳에만 두고 세 환경이 같은 값을 씁니다(#340).
-ssm ai-secrets /dameokja-v2-prod RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
+ssm ai-secrets /dameokja-v2-prod-ai RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 

@@ -49,7 +49,7 @@ ssm ai-secrets /dameokja-v3-dev-ai \
 sed -i 's#@127.0.0.1:5432/#@172.31.4.192:5432/#' "$tmp/ai-secrets/DATABASE_URL"
 grep -q '@172.31.4.192:5432/' "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 # 레시피 외부 API 키(식품안전나라·한국 레시피 아카이브·기상청)는 prod SSM 한 곳에만 두고 세 환경이 같은 값을 씁니다(#340).
-ssm ai-secrets /dameokja-v2-prod RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
+ssm ai-secrets /dameokja-v2-prod-ai RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
 # FE: v2에서 String 타입이지만 Webhook 주소라 Secret으로 둡니다.
 ssm fe-secrets /dameokja-v3-dev-fe DISCORD_BUG_REPORT_WEBHOOK_URL
 # Redis 비밀번호는 3단계에서 클러스터에 직접 만든 값을 그대로 옮깁니다.
