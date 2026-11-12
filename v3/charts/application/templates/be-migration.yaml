@@ -1,0 +1,112 @@
+{{- /*
+BE DB 마이그레이션 Job (#310)
+Argo CD PreSync hook으로 앱 매니페스트보다 먼저 실행합니다. Job이 실패하면 sync가 멈춰 BE가 교체되지 않습니다.
+1) BE 이미지(배포할 digest)에서 app.jar를 복사합니다.
+2) busybox로 jar를 풀어 db/migration SQL과 MySQL 드라이버만 따로 꺼냅니다(Flyway CLI에는 MySQL 드라이버가 없습니다).
+3) 공식 Flyway 이미지가 migrate를 실행하고 종료합니다.
+*/}}
+{{- with .Values.migration }}{{- if .enabled }}
+{{- if ne $.Values.name "be" }}{{ fail "DB 마이그레이션 Job은 BE에서만 켭니다." }}{{ end }}
+{{- if not (regexMatch "^docker.io/flyway/flyway@sha256:[a-f0-9]{64}$" .flywayImage) }}{{ fail "migration.flywayImage는 docker.io/flyway/flyway digest 형식이어야 합니다." }}{{ end }}
+{{- if not (regexMatch "^docker.io/library/busybox@sha256:[a-f0-9]{64}$" .unzipImage) }}{{ fail "migration.unzipImage는 docker.io/library/busybox digest 형식이어야 합니다." }}{{ end }}
+{{- /* 두 색상에 이미지가 모두 있으면 어느 버전 SQL을 적용할지 모호하므로 색상을 직접 고르게 합니다. */}}
+{{- $both := and $.Values.colors.blue.image $.Values.colors.green.image }}
+{{- if and $both (not .color) }}{{ fail "blue·green 모두 이미지가 있으면 migration.color로 마이그레이션할 색상을 정합니다(새 버전 색상)." }}{{ end }}
+{{- $color := .color | default $.Values.activeColor }}
+{{- $image := (index $.Values.colors $color).image }}
+{{- if not $image }}{{ fail (printf "migration.color(%s)에 BE 이미지가 없습니다." $color) }}{{ end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $.Values.name }}-migrate
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    # 다음 sync 직전에 지워 실패·성공 로그를 그때까지 남깁니다(Argo 기본값과 같음). ttlSecondsAfterFinished는 hook에 쓰지 않습니다.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  # MySQL DDL은 롤백되지 않아 실패 뒤 재시도해도 Flyway가 failed 기록으로 멈춥니다. 수동 정리·repair 후 다시 sync합니다.
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .timeoutSeconds }}
+  template:
+    metadata:
+      labels:
+        # BE와 같은 Pod SG·be-egress NetworkPolicy로 환경 MySQL에 닿습니다. color 라벨이 없어 BE Service에는 묶이지 않습니다.
+        app.kubernetes.io/name: {{ $.Values.name }}
+        dameokja.com/role: migration
+    spec:
+      restartPolicy: Never
+      # PreSync는 ServiceAccount be보다 먼저 만들어지므로 기본 계정을 쓰고 토큰은 넣지 않습니다.
+      automountServiceAccountToken: false
+      nodeSelector:
+        {{- toYaml $.Values.nodeSelector | nindent 8 }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ $.Values.imagePullSecret }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $.Values.runAsUser }}
+        fsGroup: {{ $.Values.runAsUser }}
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: copy-jar
+          image: {{ $image | quote }}
+          command: [cp, /app/app.jar, /work/app.jar]
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+        - name: extract
+          image: {{ .unzipImage | quote }}
+          command:
+            - sh
+            - -ec
+            - |
+              unzip -q /work/app.jar -d /work/jar
+              # 앱 라이브러리 전체를 Flyway에 올리면 BE의 flyway-core 등과 충돌하므로 드라이버만 둡니다.
+              mkdir -p /work/drivers
+              cp /work/jar/{{ .driverGlob }} /work/drivers/
+              test -d /work/jar/{{ .sqlPath }} || { echo "BE 이미지에 {{ .sqlPath }}가 없습니다."; exit 1; }
+              cp -r /work/jar/{{ .sqlPath }} /work/sql
+              rm -rf /work/jar /work/app.jar
+              ls /work/drivers /work/sql
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+      containers:
+        - name: flyway
+          image: {{ .flywayImage | quote }}
+          args: [migrate]
+          env:
+            # BE와 같은 접속 정보(be-secrets)를 씁니다.
+            - name: FLYWAY_URL
+              valueFrom: {secretKeyRef: {name: {{ $.Values.secretName }}, key: SPRING_DATASOURCE_URL}}
+            - name: FLYWAY_USER
+              valueFrom: {secretKeyRef: {name: {{ $.Values.secretName }}, key: SPRING_DATASOURCE_USERNAME}}
+            - name: FLYWAY_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $.Values.secretName }}, key: SPRING_DATASOURCE_PASSWORD}}
+            - {name: FLYWAY_LOCATIONS, value: filesystem:/work/sql}
+            - {name: FLYWAY_JAR_DIRS, value: /work/drivers}
+            # 기존 스키마에 이력 테이블이 없을 때만 의미가 있습니다. 켜면 잘못된 DB에 migrate하는 안전장치가 꺼집니다.
+            - {name: FLYWAY_BASELINE_ON_MIGRATE, value: {{ .baselineOnMigrate | quote }}}
+            - {name: FLYWAY_CONNECT_RETRIES, value: {{ .connectRetries | quote }}}
+            # 이미지에 사용자가 정해져 있지 않아 홈 디렉터리를 쓰기 가능한 /tmp로 둡니다.
+            - {name: HOME, value: /tmp}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: work
+          emptyDir: {sizeLimit: 1Gi}
+        - {name: tmp, emptyDir: {}}
+{{- end }}{{- end }}

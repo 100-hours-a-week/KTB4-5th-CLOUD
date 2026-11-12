@@ -12,6 +12,23 @@
     "runAsUser": {"type": "integer", "minimum": 1},
     "nodeSelector": {"type": "object"},
     "tolerations": {"type": "array"},
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "flywayImage", "unzipImage", "sqlPath", "driverGlob", "baselineOnMigrate", "connectRetries", "timeoutSeconds"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "color": {"enum": ["", "blue", "green"]},
+        "flywayImage": {"type": "string"},
+        "unzipImage": {"type": "string"},
+        "sqlPath": {"type": "string", "minLength": 1},
+        "driverGlob": {"type": "string", "minLength": 1},
+        "baselineOnMigrate": {"type": "boolean"},
+        "connectRetries": {"type": "integer", "minimum": 0},
+        "timeoutSeconds": {"type": "integer", "minimum": 60},
+        "resources": {"type": "object"}
+      }
+    },
     "colors": {
       "type": "object",
       "additionalProperties": false,

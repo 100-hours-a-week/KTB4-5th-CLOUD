@@ -16,6 +16,8 @@ spec:
   - {group: '', kind: Service}
   - {group: '', kind: ConfigMap}
   - {group: '', kind: ServiceAccount}
+  # BE DB 마이그레이션 PreSync Job(#310)
+  - {group: batch, kind: Job}
   - {group: bitnami.com, kind: SealedSecret}
   - {group: gateway.networking.k8s.io, kind: HTTPRoute}
   - {group: gateway.k8s.aws, kind: TargetGroupConfiguration}
