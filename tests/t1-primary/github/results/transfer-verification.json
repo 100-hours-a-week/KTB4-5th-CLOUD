@@ -1,0 +1,7 @@
+{
+  "bytes": 33554432,
+  "seconds": 100.77313800016418,
+  "sha256": "ff95a4269ae578dd43a71146c1b2aadfce116e1e04028f483473f024fc4049e8",
+  "matched": true,
+  "method": "1MiB chunks with SHA256 validation"
+}

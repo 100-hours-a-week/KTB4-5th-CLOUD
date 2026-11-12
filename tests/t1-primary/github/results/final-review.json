@@ -1,0 +1,10 @@
+{
+  "completed_utc": "2026-11-12T06:10:24.284291+00:00",
+  "verdict": "PASS",
+  "scope": "v3 stage Primary 단독, 재고 목록·수정, 업무 HTTP 95 RPS, 30분 3회",
+  "business_requests": 512998,
+  "independent_audit_pass": true,
+  "cleanup_verified": true,
+  "artifact_safety_pass": true,
+  "chart_visually_reviewed": true
+}

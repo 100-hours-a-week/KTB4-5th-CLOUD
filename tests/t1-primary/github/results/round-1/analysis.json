@@ -1,0 +1,103 @@
+{
+  "duration_seconds": 1800,
+  "sent": 170999,
+  "completed": 170999,
+  "rps": 94.99944444444445,
+  "target_rps": 95,
+  "statuses": {
+    "200": 170999
+  },
+  "window_start_utc": "2026-11-11T08:58:16.602000+00:00",
+  "window_start_spread_ms": 0.0,
+  "completion_count_within_window": 170997,
+  "dropped_iterations": 0,
+  "errors": 0,
+  "auth_errors": 0,
+  "integrity_errors": 0,
+  "api": {
+    "list-next": {
+      "count": 69954,
+      "p95_ms": 32,
+      "p99_ms": 165,
+      "max_ms": 1218
+    },
+    "list": {
+      "count": 69954,
+      "p95_ms": 31,
+      "p99_ms": 198,
+      "max_ms": 1522
+    },
+    "write-pick": {
+      "count": 7773,
+      "p95_ms": 33,
+      "p99_ms": 206,
+      "max_ms": 1204
+    },
+    "detail": {
+      "count": 7773,
+      "p95_ms": 19,
+      "p99_ms": 63,
+      "max_ms": 1263
+    },
+    "update": {
+      "count": 7773,
+      "p95_ms": 25,
+      "p99_ms": 77,
+      "max_ms": 829
+    },
+    "verify": {
+      "count": 7772,
+      "p95_ms": 19,
+      "p99_ms": 59,
+      "max_ms": 665
+    }
+  },
+  "minute_counts": {
+    "0": 5699,
+    "1": 5700,
+    "2": 5699,
+    "3": 5700,
+    "4": 5700,
+    "5": 5699,
+    "6": 5700,
+    "7": 5701,
+    "8": 5702,
+    "9": 5700,
+    "10": 5700,
+    "11": 5699,
+    "12": 5700,
+    "13": 5699,
+    "14": 5700,
+    "15": 5700,
+    "16": 5699,
+    "17": 5702,
+    "18": 5700,
+    "19": 5701,
+    "20": 5700,
+    "21": 5700,
+    "22": 5699,
+    "23": 5699,
+    "24": 5700,
+    "25": 5700,
+    "26": 5700,
+    "27": 5699,
+    "28": 5702,
+    "29": 5700
+  },
+  "other_phase_requests": {
+    "warmup": 28503,
+    "drain": 2
+  },
+  "checks": {
+    "rate": true,
+    "dropped_zero": true,
+    "errors_zero": true,
+    "integrity": true,
+    "api_p95": true,
+    "completed": true,
+    "minute_rate": true,
+    "api_mix": true
+  },
+  "preliminary_pass": true,
+  "note": "환경 불변·관측 완전성·정확한 시간 경계·요청별 누락 대조 후에만 최종 판정한다."
+}

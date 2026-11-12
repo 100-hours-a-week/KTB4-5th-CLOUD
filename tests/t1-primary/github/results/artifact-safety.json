@@ -1,0 +1,8 @@
+{
+  "files_scanned": 75,
+  "findings": [],
+  "known_truncated_archives": [
+    "preflight\\invalid-round-1\\truncated.json.gz.part"
+  ],
+  "pass": true
+}

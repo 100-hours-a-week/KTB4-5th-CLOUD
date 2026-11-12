@@ -1,0 +1,4 @@
+private/
+__pycache__/
+# 전체 원본은 로컬에 보존하고 선별한 github/ 결과만 게시한다.
+/results/

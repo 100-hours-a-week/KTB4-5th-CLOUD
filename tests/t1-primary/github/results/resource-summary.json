@@ -1,0 +1,227 @@
+[
+  {
+    "name": "round-1",
+    "auth_requests": {
+      "csrf": 150,
+      "login": 150,
+      "renew": 450
+    },
+    "max_be_cpu_millicores": 268.0,
+    "credits_latest": {
+      "before": {
+        "CPUUtilization": {
+          "Timestamp": "2026-11-11T17:47:00+09:00",
+          "Average": 21.421482853981942,
+          "Minimum": 13.006574020138137,
+          "Maximum": 28.919558622528914,
+          "Unit": "Percent"
+        },
+        "CPUCreditBalance": {
+          "Timestamp": "2026-11-11T17:47:00+09:00",
+          "Average": 530.9751785666666,
+          "Minimum": 530.9751785666666,
+          "Maximum": 530.9751785666666,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditBalance": {
+          "Timestamp": "2026-11-11T17:47:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditsCharged": {
+          "Timestamp": "2026-11-11T17:47:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      },
+      "after": {
+        "CPUUtilization": {
+          "Timestamp": "2026-11-11T18:25:00+09:00",
+          "Average": 32.84608723606751,
+          "Minimum": 11.168299020587648,
+          "Maximum": 39.84921018832046,
+          "Unit": "Percent"
+        },
+        "CPUCreditBalance": {
+          "Timestamp": "2026-11-11T18:25:00+09:00",
+          "Average": 519.70961535,
+          "Minimum": 519.70961535,
+          "Maximum": 519.70961535,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditBalance": {
+          "Timestamp": "2026-11-11T18:25:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditsCharged": {
+          "Timestamp": "2026-11-11T18:25:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      }
+    },
+    "max_runner_cpu_millicores": 106.0,
+    "max_pool_pending": 55.0,
+    "max_db_cpu_percent": 48.828945243094815,
+    "min_db_available_memory_mib": 2834.015625
+  },
+  {
+    "name": "round-2",
+    "auth_requests": {
+      "csrf": 150,
+      "login": 150,
+      "renew": 450
+    },
+    "max_be_cpu_millicores": 234.0,
+    "credits_latest": {
+      "before": {
+        "CPUUtilization": {
+          "Timestamp": "2026-11-12T08:54:00+09:00",
+          "Average": 2.549359746228081,
+          "Minimum": 2.1333333333333333,
+          "Maximum": 3.282440197781639,
+          "Unit": "Percent"
+        },
+        "CPUCreditBalance": {
+          "Timestamp": "2026-11-12T08:54:00+09:00",
+          "Average": 576.0,
+          "Minimum": 576.0,
+          "Maximum": 576.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditBalance": {
+          "Timestamp": "2026-11-12T08:54:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditsCharged": {
+          "Timestamp": "2026-11-12T08:54:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      },
+      "after": {
+        "CPUUtilization": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 15.078281681414229,
+          "Minimum": 2.6667555585186173,
+          "Maximum": 27.48980780430984,
+          "Unit": "Percent"
+        },
+        "CPUCreditBalance": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 564.2576130333333,
+          "Minimum": 564.2576130333333,
+          "Maximum": 564.2576130333333,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditBalance": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditsCharged": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      }
+    },
+    "max_runner_cpu_millicores": 101.0,
+    "max_pool_pending": 15.0,
+    "max_db_cpu_percent": 43.398058252427184,
+    "min_db_available_memory_mib": 2800.9296875
+  },
+  {
+    "name": "round-3",
+    "auth_requests": {
+      "csrf": 150,
+      "login": 150,
+      "renew": 450
+    },
+    "max_be_cpu_millicores": 303.0,
+    "credits_latest": {
+      "before": {
+        "CPUUtilization": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 10.818279885202957,
+          "Minimum": 2.2982762927804146,
+          "Maximum": 27.48980780430984,
+          "Unit": "Percent"
+        },
+        "CPUCreditBalance": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 564.2576130333333,
+          "Minimum": 564.2576130333333,
+          "Maximum": 564.2576130333333,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditBalance": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditsCharged": {
+          "Timestamp": "2026-11-12T09:32:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      },
+      "after": {
+        "CPUUtilization": {
+          "Timestamp": "2026-11-12T10:10:00+09:00",
+          "Average": 28.19238880896021,
+          "Minimum": 2.883525568371225,
+          "Maximum": 38.14023209202836,
+          "Unit": "Percent"
+        },
+        "CPUCreditBalance": {
+          "Timestamp": "2026-11-12T10:10:00+09:00",
+          "Average": 553.5693967333333,
+          "Minimum": 553.5693967333333,
+          "Maximum": 553.5693967333333,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditBalance": {
+          "Timestamp": "2026-11-12T10:10:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        "CPUSurplusCreditsCharged": {
+          "Timestamp": "2026-11-12T10:10:00+09:00",
+          "Average": 0.0,
+          "Minimum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      }
+    },
+    "max_runner_cpu_millicores": 106.0,
+    "max_pool_pending": 4.0,
+    "max_db_cpu_percent": 41.936359687228496,
+    "min_db_available_memory_mib": 2797.90625
+  }
+]

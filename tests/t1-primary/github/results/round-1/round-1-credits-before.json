@@ -1,0 +1,78 @@
+{
+  "CPUUtilization": {
+    "Label": "CPUUtilization",
+    "Datapoints": [
+      {
+        "Timestamp": "2026-11-11T17:47:00+09:00",
+        "Average": 21.421482853981942,
+        "Minimum": 13.006574020138137,
+        "Maximum": 28.919558622528914,
+        "Unit": "Percent"
+      },
+      {
+        "Timestamp": "2026-11-11T17:42:00+09:00",
+        "Average": 40.615818439222245,
+        "Minimum": 39.27892789278928,
+        "Maximum": 41.81979152746224,
+        "Unit": "Percent"
+      }
+    ]
+  },
+  "CPUCreditBalance": {
+    "Label": "CPUCreditBalance",
+    "Datapoints": [
+      {
+        "Timestamp": "2026-11-11T17:42:00+09:00",
+        "Average": 532.1548244166667,
+        "Minimum": 532.1548244166667,
+        "Maximum": 532.1548244166667,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-11T17:47:00+09:00",
+        "Average": 530.9751785666666,
+        "Minimum": 530.9751785666666,
+        "Maximum": 530.9751785666666,
+        "Unit": "Count"
+      }
+    ]
+  },
+  "CPUSurplusCreditBalance": {
+    "Label": "CPUSurplusCreditBalance",
+    "Datapoints": [
+      {
+        "Timestamp": "2026-11-11T17:42:00+09:00",
+        "Average": 0.0,
+        "Minimum": 0.0,
+        "Maximum": 0.0,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-11T17:47:00+09:00",
+        "Average": 0.0,
+        "Minimum": 0.0,
+        "Maximum": 0.0,
+        "Unit": "Count"
+      }
+    ]
+  },
+  "CPUSurplusCreditsCharged": {
+    "Label": "CPUSurplusCreditsCharged",
+    "Datapoints": [
+      {
+        "Timestamp": "2026-11-11T17:42:00+09:00",
+        "Average": 0.0,
+        "Minimum": 0.0,
+        "Maximum": 0.0,
+        "Unit": "Count"
+      },
+      {
+        "Timestamp": "2026-11-11T17:47:00+09:00",
+        "Average": 0.0,
+        "Minimum": 0.0,
+        "Maximum": 0.0,
+        "Unit": "Count"
+      }
+    ]
+  }
+}

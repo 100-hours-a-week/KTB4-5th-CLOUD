@@ -1,0 +1,94 @@
+{
+  "started_utc": "2026-11-12T01:15:15.429808+00:00",
+  "steps": [
+    {
+      "name": "restore_be",
+      "ok": true,
+      "result": "deployment.apps/be-blue patched\n"
+    },
+    {
+      "name": "wait_be_stopped",
+      "ok": true,
+      "result": "pod/be-blue-6fc575cff-2ftmm condition met\npod/be-blue-6fc575cff-5wmff condition met\n"
+    },
+    {
+      "name": "capture_db_observations",
+      "ok": true,
+      "result": {
+        "bytes": 449352,
+        "samples": 1486
+      }
+    },
+    {
+      "name": "remove_test_data",
+      "ok": true,
+      "result": "SSM command: fc5ef331-18e5-4bb1-a0ab-25d53e3323c7\nSuccess\nremaining_test_users\n0\nremaining_test_ingredients\n0\n\n\n"
+    },
+    {
+      "name": "pause_kafka",
+      "ok": true,
+      "result": "kafka.kafka.strimzi.io/stage-kafka annotated\n"
+    },
+    {
+      "name": "stop_kafka_operator",
+      "ok": true,
+      "result": "deployment.apps/stage-kafka-entity-operator scaled\n"
+    },
+    {
+      "name": "stop_kafka_brokers",
+      "ok": true,
+      "result": "strimzipodset.core.strimzi.io \"stage-kafka-dual-role\" deleted from stage namespace\n"
+    },
+    {
+      "name": "stop_redis",
+      "ok": true,
+      "result": "statefulset.apps/redis scaled\n"
+    },
+    {
+      "name": "remove_runner",
+      "ok": true,
+      "result": "pod \"t1-runner\" deleted from stage namespace\n"
+    },
+    {
+      "name": "remove_secret",
+      "ok": true,
+      "result": "secret \"t1-accounts\" deleted from stage namespace\n"
+    },
+    {
+      "name": "remove_configmap",
+      "ok": true,
+      "result": "configmap \"t1-scripts\" deleted from stage namespace\n"
+    },
+    {
+      "name": "remove_networkpolicy",
+      "ok": true,
+      "result": "networkpolicy.networking.k8s.io \"t1-runner\" deleted from stage namespace\n"
+    },
+    {
+      "name": "restore_nodepool",
+      "ok": true,
+      "result": "nodepool.karpenter.sh/stage-app patched\n"
+    },
+    {
+      "name": "stop_stage_db",
+      "ok": true,
+      "result": {
+        "StoppingInstances": [
+          {
+            "InstanceId": "i-081d444e5e162a1c2",
+            "CurrentState": {
+              "Code": 64,
+              "Name": "stopping"
+            },
+            "PreviousState": {
+              "Code": 16,
+              "Name": "running"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [],
+  "ended_utc": "2026-11-12T01:17:17.048696+00:00"
+}

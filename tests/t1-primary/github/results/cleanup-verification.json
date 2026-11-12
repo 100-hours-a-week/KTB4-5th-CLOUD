@@ -1,0 +1,24 @@
+{
+  "verified_utc": "2026-11-12T01:19:36.261100+00:00",
+  "checks": {
+    "be_replicas_restored": true,
+    "be_affinity_restored": true,
+    "nodepool_spec_restored": true,
+    "prod_deployment_specs_preserved": true,
+    "stage_pods_zero": true,
+    "stage_nodes_zero": true,
+    "database_stopped": true,
+    "redis_zero": true,
+    "kafka_paused": true,
+    "kafka_operator_zero": true,
+    "kafka_podsets_zero": true
+  },
+  "remaining_stage_pvcs": [
+    "data-0-stage-kafka-dual-role-0",
+    "data-0-stage-kafka-dual-role-1",
+    "data-0-stage-kafka-dual-role-2",
+    "data-redis-0"
+  ],
+  "remaining_stage_pods": [],
+  "all_checked_pass": true
+}
