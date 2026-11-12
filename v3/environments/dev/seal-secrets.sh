@@ -11,9 +11,14 @@ tmp=$(mktemp -d -p infra/v3/private); chmod 700 "$tmp"; trap 'rm -rf "$tmp"' EXI
 mkdir -p v3/environments/dev/secrets
 
 # ssm <secret> <SSM 경로> <키...>: 키마다 파일 하나(값 끝 줄바꿈 없음)
+# 값을 변수에 먼저 받아 조회가 실패하면 set -e로 멈추고, 빈 값도 봉인하지 않습니다.
 ssm() {
-  local dir=$tmp/$1 path=$2; shift 2; mkdir -p "$dir"
-  for k; do printf %s "$(aws ssm get-parameter --with-decryption --name "$path/$k" --query Parameter.Value --output text)" > "$dir/$k"; done
+  local dir=$tmp/$1 path=$2 v; shift 2; mkdir -p "$dir"
+  for k; do
+    v=$(aws ssm get-parameter --with-decryption --name "$path/$k" --query Parameter.Value --output text)
+    [[ -n $v ]] || { echo "SSM 값이 비어 있습니다: $path/$k" >&2; exit 1; }
+    printf %s "$v" > "$dir/$k"
+  done
 }
 # seal <secret> <kubectl create secret 인자...>: 클러스터에 만들지 않고 암호화만 합니다.
 seal() {
@@ -44,7 +49,7 @@ ssm ai-secrets /dameokja-v3-dev-ai \
 sed -i 's#@127.0.0.1:5432/#@172.31.4.192:5432/#' "$tmp/ai-secrets/DATABASE_URL"
 grep -q '@172.31.4.192:5432/' "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 # 레시피 외부 API 키(식품안전나라·한국 레시피 아카이브·기상청)는 prod SSM 한 곳에만 두고 세 환경이 같은 값을 씁니다(#340).
-ssm ai-secrets /dameokja-v2-prod-ai RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
+ssm ai-secrets /dameokja-v2-prod RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
 # FE: v2에서 String 타입이지만 Webhook 주소라 Secret으로 둡니다.
 ssm fe-secrets /dameokja-v3-dev-fe DISCORD_BUG_REPORT_WEBHOOK_URL
 # Redis 비밀번호는 3단계에서 클러스터에 직접 만든 값을 그대로 옮깁니다.

@@ -11,9 +11,14 @@ tmp=$(mktemp -d -p infra/v3/private); chmod 700 "$tmp"; trap 'rm -rf "$tmp"' EXI
 mkdir -p v3/environments/stage/secrets
 
 # ssm <secret> <SSM 경로> <키...>: 키마다 파일 하나(값 끝 줄바꿈 없음)
+# 값을 변수에 먼저 받아 조회가 실패하면 set -e로 멈추고, 빈 값도 봉인하지 않습니다.
 ssm() {
-  local dir=$tmp/$1 path=$2; shift 2; mkdir -p "$dir"
-  for k; do printf %s "$(aws ssm get-parameter --with-decryption --name "$path/$k" --query Parameter.Value --output text)" > "$dir/$k"; done
+  local dir=$tmp/$1 path=$2 v; shift 2; mkdir -p "$dir"
+  for k; do
+    v=$(aws ssm get-parameter --with-decryption --name "$path/$k" --query Parameter.Value --output text)
+    [[ -n $v ]] || { echo "SSM 값이 비어 있습니다: $path/$k" >&2; exit 1; }
+    printf %s "$v" > "$dir/$k"
+  done
 }
 seal() {
   local name=$1; shift
@@ -51,7 +56,7 @@ cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY"
 cp "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/CALLBACK_API_KEY"
 ssm ai-secrets /dameokja-v3-dev-ai TAVILY_API_KEY
 # 레시피 외부 API 키(식품안전나라·한국 레시피 아카이브·기상청)는 prod SSM 한 곳에만 두고 세 환경이 같은 값을 씁니다(#340).
-ssm ai-secrets /dameokja-v2-prod-ai RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
+ssm ai-secrets /dameokja-v2-prod RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
