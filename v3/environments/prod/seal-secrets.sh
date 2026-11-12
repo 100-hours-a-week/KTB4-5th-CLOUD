@@ -52,6 +52,8 @@ cmp -s "$tmp/be-secrets/AI_INTERNAL_API_KEY" "$tmp/ai-secrets/INTERNAL_API_KEY" 
   || { echo "v2 prod SSM의 AI_INTERNAL_API_KEY·INTERNAL_API_KEY·CALLBACK_API_KEY가 서로 다릅니다" >&2; exit 1; }
 # v2 prod에 없던 키는 stage와 같이 dev 값을 씁니다.
 ssm ai-secrets /dameokja-v3-dev-ai TAVILY_API_KEY
+# 레시피 외부 API 키(식품안전나라·한국 레시피 아카이브·기상청)는 prod SSM에만 있습니다(#340).
+ssm ai-secrets /dameokja-v2-prod-ai RECIPE_FOOD_SAFETY_API_KEY RECIPE_KOREAN_ARCHIVE_API_KEY RECIPE_KMA_API_KEY
 sed -i -E "s#@[^:/@]+:5432/#@$DB_HOST:5432/#" "$tmp/ai-secrets/DATABASE_URL"
 grep -q "@$DB_HOST:5432/" "$tmp/ai-secrets/DATABASE_URL" || { echo "DATABASE_URL 호스트를 바꾸지 못했습니다" >&2; exit 1; }
 
