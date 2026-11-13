@@ -2,7 +2,7 @@
 name: be
 port: 8080
 colors:
-  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:c243ecf455e3348b88063f017ebf480a21aa59ef9340a5576f871d58b8125dc7, replicas: 2}
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:7b4194440add6528e120337e128548a7de418b0aeacc84bbc8eea6c39d87f1be, replicas: 2}
   green: {image: '', replicas: 0}
 # v2 stage SSM 값(be-secrets)과 Redis 비밀번호(cloud-secrets의 REDIS_PASSWORD)
 secretName: be-secrets
