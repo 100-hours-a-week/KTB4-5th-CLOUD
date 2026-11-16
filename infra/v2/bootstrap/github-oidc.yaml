@@ -62,6 +62,20 @@ Resources:
               - Effect: Allow
                 Action: iam:PassRole
                 Resource: !GetAtt CfnExecutionRole.Arn
+        # ReadOnlyAccess의 ssm:Get*은 파라미터 값까지 돌려준다. 이 계정의 SecureString은 기본 키(alias/aws/ssm)라
+        # kms:Decrypt 권한 없이도 평문이 나오므로, PR 토큰이 받는 이 역할에서는 값 조회를 막는다 (#344).
+        # AWS 공개 파라미터(/aws/service/...)는 계정 ID가 없는 ARN이라 이 거부에 걸리지 않는다.
+        - PolicyName: deny-ssm-parameter-values
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Deny
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:GetParameterHistory
+                Resource: !Sub "arn:aws:ssm:*:${AWS::AccountId}:parameter/*"
 
   # main 머지: change set 만들고 실행
   GitHubDeployRole:
