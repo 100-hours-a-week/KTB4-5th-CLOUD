@@ -4,6 +4,8 @@ port: 3000
 colors:
   blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-fe@sha256:fdc6f5b1e5e85cde63077b5e5e3ac33c36b7478cc479a6d8a8cf1155fcc7d101, replicas: 2}
   green: {image: '', replicas: 0}
+# 최소 2대(현재 고정 대수)에서 CPU 70%를 넘으면 최대 4대까지 늘립니다. colors.blue.replicas는 HPA를 끄면 다시 쓰입니다.
+autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 70}
 secretName: fe-secrets
 # 이미지 USER node
 runAsUser: 1000

@@ -35,7 +35,11 @@ metadata:
   name: {{ $.Values.name }}-{{ $color }}
   namespace: {{ $.Release.Namespace }}
 spec:
+  {{- if and $.Values.autoscaling.enabled (eq $color $.Values.activeColor) }}
+  # HPA가 대수를 정합니다(hpa.yaml). replicas를 두면 Argo 동기화마다 HPA가 정한 대수를 되돌립니다.
+  {{- else }}
   replicas: {{ $settings.replicas }}
+  {{- end }}
   # 색상 안에서 이미지를 바꾸는 동안 같은 Consumer가 둘 뜨지 않게 합니다.
   strategy:
     type: Recreate

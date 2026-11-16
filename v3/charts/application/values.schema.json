@@ -12,6 +12,17 @@
     "runAsUser": {"type": "integer", "minimum": 1},
     "nodeSelector": {"type": "object"},
     "tolerations": {"type": "array"},
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minReplicas", "maxReplicas", "targetCPUUtilizationPercentage"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minReplicas": {"type": "integer", "minimum": 1},
+        "maxReplicas": {"type": "integer", "minimum": 1, "maximum": 10},
+        "targetCPUUtilizationPercentage": {"type": "integer", "minimum": 10, "maximum": 95}
+      }
+    },
     "migration": {
       "type": "object",
       "additionalProperties": false,

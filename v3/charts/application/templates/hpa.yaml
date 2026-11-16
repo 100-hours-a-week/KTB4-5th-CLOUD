@@ -1,0 +1,33 @@
+{{- with .Values.autoscaling }}{{- if .enabled }}
+{{- if eq $.Values.name "ai-api" }}{{ fail "AI는 분석 작업·결과를 메모리에 두어 HPA를 쓰지 않습니다(1대 고정)." }}{{ end }}
+{{- if not (dig "requests" "cpu" "" $.Values.resources) }}{{ fail "HPA의 CPU 사용률 계산에 resources.requests.cpu가 필요합니다." }}{{ end }}
+{{- if gt (int .minReplicas) (int .maxReplicas) }}{{ fail "autoscaling.minReplicas가 maxReplicas보다 큽니다." }}{{ end }}
+---
+# 활성 색상 Deployment만 늘리고 줄입니다. 다른 색상은 colors.<색상>.replicas를 그대로 씁니다.
+# Deployment를 0대로 줄이면 HPA는 다시 늘리지 않습니다(대상 0이면 자동 조정이 멈춤). 켤 때 scale로 되돌립니다.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $.Values.name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $.Values.name }}-{{ $.Values.activeColor }}
+  minReplicas: {{ .minReplicas }}
+  maxReplicas: {{ .maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: {{ .targetCPUUtilizationPercentage }}}
+  behavior:
+    # 늘릴 때는 바로, 줄일 때는 5분간 낮은 사용률이 이어질 때만 한 대씩 줄입니다(BE 기동 약 40초).
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies: [{type: Pods, value: 2, periodSeconds: 60}]
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies: [{type: Pods, value: 1, periodSeconds: 120}]
+{{- end }}{{- end }}

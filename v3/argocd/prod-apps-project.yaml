@@ -13,6 +13,7 @@ spec:
   clusterResourceWhitelist: []
   namespaceResourceWhitelist:
   - {group: apps, kind: Deployment}
+  - {group: autoscaling, kind: HorizontalPodAutoscaler}
   - {group: '', kind: Service}
   - {group: '', kind: ConfigMap}
   - {group: '', kind: ServiceAccount}
