@@ -26,6 +26,7 @@ PR은 cfn-lint만 실행합니다. AWS 자원은 main에서 수동 Workflow를 p
 | 16 | dameokja-v3-prod-pod-sg | cloudformation/prod-pod-sg.yaml | prod FE·BE·AI·Redis·Kafka Pod SG(stage-pod-sg와 같은 규칙), Gateway ALB→prod FE·BE |
 | 17 | dameokja-v3-prod-db | cloudformation/prod-db.yaml | prod DB EC2(t3.medium) MySQL·PostgreSQL, 두 Association 성공. 이전 동안 SourceDbSecurityGroupId로 v2 DB 접근 |
 | 18 | dameokja-v3-prod-app-iam | cloudformation/prod-app-iam.yaml | prod BE·AI IRSA 역할(S3 image/prod/ 접두사, v2 prod와 같은 객체) |
+| 19 | dameokja-v3-prod-power | cloudformation/prod-power.yaml | prod 켜기·끄기용 GitHub OIDC 역할·kubectl 역할(Access Entry, 그룹 dameokja:prod-power) |
 
 EKS는 서울 1.35, 시스템 Node는 self-managed m7i.large·AL2023 1대이며 ASG를 생성하지 않습니다. AL2023 nodeadm MIME UserData, IMDSv2, 암호화 gp3를 사용합니다. 시스템 라벨은 dameokja.com/node-role=system, taint는 dameokja.com/system=true:NoSchedule입니다. CoreDNS는 해당 라벨·toleration으로 배치합니다.
 
@@ -237,6 +238,16 @@ Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실�
 - start: DB 시작 → Redis 1 → Kafka 조정 재개 → Argo stage 앱 sync(꺼진 동안 반영된 이미지) → 앱 FE 2·BE 2·AI 1.
 - 꺼진 동안 Argo의 stage 앱은 OutOfSync로 보입니다(수동 sync라 되돌리지 않음). 켜진 상태에서만 sync합니다.
 
+## prod 켜기·끄기
+
+Actions의 "v3 prod 켜기·끄기"가 매일 12:35 KST(UTC 03:35)에 켜고 18:00 KST(UTC 09:00)에 끕니다. main에서 start·stop으로 수동 실행도 됩니다. 구조는 stage와 같고(시스템 Node에서 `v3/environments/prod/power.sh`, kubectl 역할은 prod·tool Namespace의 `prod-power` Role만), 차이는 아래와 같습니다.
+
+- stop: Argo prod-fe·prod-be·prod-ai-api 자동 동기화 끔 → 활성 색상 앱 0 → Kafka 조정 일시정지·StrimziPodSet 삭제 → Redis 0 → DB 중지. 자동 동기화를 끄지 않으면 꺼진 동안 main 커밋 때 Argo가 AI를 1대로 되살립니다(BE·FE는 HPA라 replicas가 매니페스트에 없음).
+- start: DB 시작 → Redis 1 → Kafka 조정 재개 → 앱 FE 2·BE 2·AI 1(이후 BE·FE는 HPA) → 자동 동기화 되돌림(꺼진 동안 반영된 이미지가 이때 sync) → https://dameokja.com 200 확인.
+- 대상 Deployment는 Service `fe`·`be`·`ai-api`의 selector(활성 색상)로 고릅니다. 켤 때 대수는 `power.sh`의 `APPS`에 있으므로 HPA 최소값이나 AI replicas를 바꾸면 함께 고칩니다.
+- 꺼진 동안 dameokja.com은 503입니다. 비용은 켜진 시간만큼 m7i.large 3대·t3.medium 1대가 듭니다(꺼진 동안은 EBS만).
+- schedule은 GitHub 부하에 따라 늦게 시작될 수 있습니다. 시간을 바꾸려면 `v3-prod-power.yml`의 cron 두 줄과 `ACTION`의 cron 문자열을 함께 고칩니다.
+
 ## stage 이미지와 prod 승인
 
 FE·BE·AI main CI는 이미지를 빌드한 뒤 "v3 stage 이미지 반영"(`v3-stage-image.yml`)을 실행합니다. 이 Workflow가 `v3/environments/stage/<앱>.yaml`의 활성 색상 이미지를 main에 커밋하고, 실행 이름은 `v3 stage <저장소> <실행ID>.<재시도> <이미지>`입니다. `prod-approval.yml`은 같은 이름의 성공 실행이 있어야 prod 배포를 진행합니다. 승인 뒤 배포는 v3 prod(`v3-prod-image.yml`)로 갑니다(아래 "prod"). stage가 꺼져 있으면 다음 켜기 때 그 이미지로 뜹니다.
@@ -282,7 +293,7 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
 | DB | stage-db, 빈 스키마로 시작 | prod-db, v2 prod DB 데이터를 한 번 옮긴 뒤(`migrate-db.sh`) BE 스키마로 올림(`migrate-schema.sh`) |
 | Secret | v2 stage SSM | v2 prod SSM(`v3/environments/prod/seal-secrets.sh`), BE DB URL은 v2 Task 환경 변수에서 호스트만 바꿈 |
 | Kafka·Redis | stage-data(브로커 3) | prod-data(브로커 3), 토픽 prod.dameokja.* |
-| 켜기·끄기 | v3-stage-power | 없음(항상 켬) |
+| 켜기·끄기 | v3-stage-power(수동) | v3-prod-power(매일 13~18시 KST 자동, 수동도 됨) |
 | Argo 동기화 | 수동 | secrets 수동, 앱 자동(prune·selfHeal 끔) |
 | 이미지 | v3-stage-image.yml | prod-approval.yml → v3-prod-image.yml(Environment "prod" 승인 뒤 커밋) |
 

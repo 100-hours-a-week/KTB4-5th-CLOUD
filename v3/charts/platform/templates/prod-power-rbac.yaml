@@ -1,0 +1,54 @@
+# prod 켜기·끄기(v3/environments/prod/power.sh)가 쓰는 권한입니다. prod-power 스택의 KubectlRole이 dameokja:prod-power 그룹으로 들어옵니다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prod-power
+  namespace: prod
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs: [get, patch, update]
+  # Kafka 조정 일시정지 annotation과 상태 확인
+  - apiGroups: [kafka.strimzi.io]
+    resources: [kafkas]
+    verbs: [get, list, patch]
+  - apiGroups: [core.strimzi.io]
+    resources: [strimzipodsets]
+    verbs: [get, list, delete]
+  # 상태 확인용(켜기·끄기 결과 출력)과 활성 색상(Service selector) 조회
+  - apiGroups: ['']
+    resources: [pods, services]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prod-power
+  namespace: prod
+subjects:
+  - {kind: Group, name: 'dameokja:prod-power', apiGroup: rbac.authorization.k8s.io}
+roleRef: {kind: Role, name: prod-power, apiGroup: rbac.authorization.k8s.io}
+---
+# 끌 때 Argo prod 앱의 자동 동기화를 끄고, 켤 때 되돌립니다(이름으로 제한).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prod-power
+  namespace: tool
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [prod-fe, prod-be, prod-ai-api]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prod-power
+  namespace: tool
+subjects:
+  - {kind: Group, name: 'dameokja:prod-power', apiGroup: rbac.authorization.k8s.io}
+roleRef: {kind: Role, name: prod-power, apiGroup: rbac.authorization.k8s.io}
