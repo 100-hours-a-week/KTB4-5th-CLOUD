@@ -2,7 +2,7 @@
 name: be
 port: 8080
 colors:
-  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:c243ecf455e3348b88063f017ebf480a21aa59ef9340a5576f871d58b8125dc7, replicas: 2}
+  blue: {image: ghcr.io/100-hours-a-week/ktb4-5th-be@sha256:1be933da591eefae4c16ecf871b852c3e395128f95858462d36f8f8b6b928fa5, replicas: 2}
   green: {image: '', replicas: 0}
 # 최소 2대(현재 고정 대수)에서 CPU 70%를 넘으면 최대 4대까지 늘립니다. colors.blue.replicas는 HPA를 끄면 다시 쓰입니다.
 autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 70}
