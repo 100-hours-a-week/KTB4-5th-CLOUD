@@ -92,5 +92,3 @@ jobs:
           role-arn: ${{ vars.AWS_CFN_EXEC_ROLE_ARN }}
           capabilities: CAPABILITY_IAM
           fail-on-empty-changeset: false
-
-  # v2 prod 모니터링은 GitHub Environments "prod" 승인 후. Discord 알림 스택(위 deploy)이 먼저 있어야 함
