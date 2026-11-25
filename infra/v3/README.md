@@ -240,13 +240,12 @@ Actions의 "v3 stage 켜기·끄기"를 main에서 start 또는 stop으로 실�
 
 ## prod 켜기·끄기
 
-Actions의 "v3 prod 켜기·끄기"가 매일 12:35 KST(UTC 03:35)에 켜고 18:00 KST(UTC 09:00)에 끕니다. main에서 start·stop으로 수동 실행도 됩니다. 구조는 stage와 같고(시스템 Node에서 `v3/environments/prod/power.sh`, kubectl 역할은 prod·tool Namespace의 `prod-power` Role만), 차이는 아래와 같습니다.
+prod는 당분간 쓰지 않아 꺼 두고, 켜기·끄기 Workflow(`v3-prod-power.yml`)는 지웠습니다(#347). 다시 켤 때는 Git 기록에서 되살립니다. 아래는 그 Workflow와 `power.sh`의 동작입니다. 구조는 stage와 같고(시스템 Node에서 `v3/environments/prod/power.sh`, kubectl 역할은 prod·tool Namespace의 `prod-power` Role만), 차이는 아래와 같습니다.
 
 - stop: Argo prod-fe·prod-be·prod-ai-api 자동 동기화 끔 → 활성 색상 앱 0 → Kafka 조정 일시정지·StrimziPodSet 삭제 → Redis 0 → DB 중지. 자동 동기화를 끄지 않으면 꺼진 동안 main 커밋 때 Argo가 AI를 1대로 되살립니다(BE·FE는 HPA라 replicas가 매니페스트에 없음).
 - start: DB 시작 → Redis 1 → Kafka 조정 재개 → 앱 FE 2·BE 2·AI 1(이후 BE·FE는 HPA) → 자동 동기화 되돌림(꺼진 동안 반영된 이미지가 이때 sync) → https://dameokja.com 200 확인.
 - 대상 Deployment는 Service `fe`·`be`·`ai-api`의 selector(활성 색상)로 고릅니다. 켤 때 대수는 `power.sh`의 `APPS`에 있으므로 HPA 최소값이나 AI replicas를 바꾸면 함께 고칩니다.
 - 꺼진 동안 dameokja.com은 503입니다. 비용은 켜진 시간만큼 m7i.large 3대·t3.medium 1대가 듭니다(꺼진 동안은 EBS만).
-- schedule은 GitHub 부하에 따라 늦게 시작될 수 있습니다. 시간을 바꾸려면 `v3-prod-power.yml`의 cron 두 줄과 `ACTION`의 cron 문자열을 함께 고칩니다.
 
 ## stage 이미지와 prod 승인
 
@@ -293,7 +292,7 @@ stage와 같은 차트·규칙으로 prod Namespace를 구성합니다. 차이�
 | DB | stage-db, 빈 스키마로 시작 | prod-db, v2 prod DB 데이터를 한 번 옮긴 뒤(`migrate-db.sh`) BE 스키마로 올림(`migrate-schema.sh`) |
 | Secret | v2 stage SSM | v2 prod SSM(`v3/environments/prod/seal-secrets.sh`), BE DB URL은 v2 Task 환경 변수에서 호스트만 바꿈 |
 | Kafka·Redis | stage-data(브로커 3) | prod-data(브로커 3), 토픽 prod.dameokja.* |
-| 켜기·끄기 | v3-stage-power(수동) | v3-prod-power(매일 13~18시 KST 자동, 수동도 됨) |
+| 켜기·끄기 | v3-stage-power(수동) | 꺼 둠(Workflow 삭제 #347, `power.sh`는 남김) |
 | Argo 동기화 | 수동 | secrets 수동, 앱 자동(prune·selfHeal 끔) |
 | 이미지 | v3-stage-image.yml | prod-approval.yml → v3-prod-image.yml(Environment "prod" 승인 뒤 커밋) |
 

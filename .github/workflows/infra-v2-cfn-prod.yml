@@ -1,6 +1,6 @@
 name: v2 인프라 CloudFormation (prod)
 
-# stage(infra-v2-cfn-stage.yml)와 같은 흐름. main 머지 후 GitHub Environments "prod" 승인이 있어야 적용
+# dameokja-prod 스택은 v2 앱을 지운 뒤 v3가 쓰는 VPC·NAT를 관리합니다(#321). main 머지 후 GitHub Environments "prod" 승인이 있어야 적용
 on:
   pull_request:
     paths:
